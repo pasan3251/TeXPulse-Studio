@@ -2,8 +2,8 @@
 
 ## Current state
 
-Sprint 5 connects manual compilation and completed PDF output to the desktop
-application:
+Sprint 6 connects editing bursts to serialized autosave, newest-only live
+compilation, bounded project watching, and validated workspace restoration:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
@@ -15,19 +15,20 @@ application:
   metadata.
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
-  project metadata, and recent-project storage.
+  project metadata, recent-project storage, and filtered Chokidar events.
 - `ipc/`: strict Zod request/response schemas and stable project, build, and PDF
   channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, a session owning project/build state, and
-  a frozen eight-method preload bridge.
+  a frozen nine-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
-  CodeMirror 6 LaTeX editor, build controls, raw log panel, lazy PDF.js viewer,
-  retained-output status, error boundary, and desktop layout.
+  CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
+  persistence, resizable panes, build controls, raw log panel, lazy PDF.js
+  viewer, retained-output status, error boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no diagnostics parser, live file watcher, autosave/auto-build,
-SyncTeX navigation UI, or settings UI.
+There is still no diagnostics parser, SyncTeX navigation UI, full settings UI,
+recovery workflow, or production packaging.
 
 ## System boundaries
 
@@ -92,6 +93,38 @@ last-successful. Source edits also mark the displayed PDF as retained. PDF page,
 zoom mode, custom zoom, and approximate scroll position survive replacement by a
 newer successful artifact.
 
+## Sprint 6 live feedback flow
+
+```text
+CodeMirror edit
+  -> reducer records a new source revision
+  -> pure coordinator resets the configured debounce
+  -> serialized version-token save of every dirty buffer
+  -> session-owned newest-only BuildController request
+  -> visible debouncing / saving / queued / compiling phase
+  -> main current-result disposition
+  -> renderer source-revision and buffer-content revalidation
+  -> artifact load with a second revision check
+  -> current PDF replacement or stale result rejection
+```
+
+Manual compile uses the same save and validation path and remains available when
+automatic build is disabled. A queued request moves to compiling as the active
+request completes; no second compiler process overlaps the first.
+
+The project session starts one Chokidar watcher after opening a project. It does
+not follow links and ignores `.git`, `.texpulse`, `node_modules`, `dist`,
+`coverage`, and the configured build directory. Internal writes are associated
+with the resulting version token so matching watcher events are suppressed.
+Other events cross a single validated event channel as an opaque project ID,
+relative path, and event kind. The renderer warns without automatically saving,
+reloading, or compiling.
+
+Workspace persistence is keyed by the opaque project ID and contains only
+relative open paths, active path, cursor and scroll views, pane ratio, and
+live-build preferences. Source text, PDF bytes, logs, canonical paths, and build
+state are not stored.
+
 ## Project flow
 
 ```text
@@ -150,6 +183,11 @@ after the self-test, so it does not modify user projects.
 - Source files remain local and are not silently rewritten.
 - Project-internal links and junctions are visible but not traversed.
 - File replacement requires a matching content version token.
+- Autosaves are serialized before a compile request.
+- Watcher events are informational, project-scoped, and never trigger direct
+  filesystem writes or builds.
+- Stale renderer revisions cannot accept build or PDF results even when the
+  main-process generation is current.
 - The renderer never receives unrestricted IPC or filesystem primitives.
 - The renderer receives no canonical PDF path capability; artifact actions
   require a current opaque build token. Raw compiler logs may contain path text.
@@ -164,5 +202,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0005-project-filesystem-boundary.md`
 - `adr/ADR-0006-secure-electron-shell-and-ipc.md`
 - `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`
+- `adr/ADR-0008-live-build-and-project-watching.md`
 
 Packaging requires a later ADR before implementation.

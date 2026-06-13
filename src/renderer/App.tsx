@@ -1,14 +1,31 @@
-import { lazy, Suspense, useMemo, useReducer, useRef } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  type CSSProperties,
+} from "react";
 
 import type { TeXPulseApi } from "../ipc/api-contract.js";
 import { BuildLog } from "./components/BuildLog.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
 import {
+  LiveBuildCoordinator,
+  type LiveBuildSettings,
+} from "./live-build-coordinator.js";
+import {
   initialWorkspaceState,
   isBufferModified,
   workspaceReducer,
   type EditorBuffer,
+  type WorkspaceState,
 } from "./workspace-state.js";
+import {
+  loadWorkspacePreferences,
+  saveWorkspacePreferences,
+} from "./workspace-persistence.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -24,10 +41,39 @@ interface AppProps {
   api?: TeXPulseApi;
 }
 
+function persistWorkspaceState(
+  storage: Pick<Storage, "setItem">,
+  state: WorkspaceState,
+): boolean {
+  if (state.project === null) {
+    return false;
+  }
+  const bufferViews = Object.fromEntries(
+    Object.values(state.buffers).map((buffer) => [
+      buffer.path,
+      { cursor: buffer.cursor, scrollTop: buffer.scrollTop },
+    ]),
+  );
+  return saveWorkspacePreferences(storage, state.project.projectId, {
+    openPaths: Object.keys(state.buffers),
+    activePath: state.activePath,
+    bufferViews,
+    paneRatio: state.paneRatio,
+    settings: state.settings,
+  });
+}
+
 export function App({ api = window.texpulse }: AppProps) {
   const [state, dispatch] = useReducer(workspaceReducer, initialWorkspaceState);
   const stateRef = useRef(state);
+  const coordinatorRef = useRef<LiveBuildCoordinator | null>(null);
+  const saveTailRef = useRef<Promise<void>>(Promise.resolve());
+  const restoredProjectIdRef = useRef<string | null>(null);
+  const openRequestRef = useRef(0);
+  const splitRef = useRef<HTMLDivElement>(null);
+  const draggingSplitRef = useRef(false);
   stateRef.current = state;
+
   const activeBuffer =
     state.activePath === null ? undefined : state.buffers[state.activePath];
   const modifiedPaths = useMemo(
@@ -41,7 +87,7 @@ export function App({ api = window.texpulse }: AppProps) {
   );
 
   const openFile = async (path: string): Promise<void> => {
-    if (state.buffers[path] !== undefined) {
+    if (stateRef.current.buffers[path] !== undefined) {
       dispatch({ type: "file-selected", path });
       return;
     }
@@ -59,8 +105,89 @@ export function App({ api = window.texpulse }: AppProps) {
     }
   };
 
+  const performSave = async (
+    requestedPaths: string[] | null,
+    announce: boolean,
+  ): Promise<boolean> => {
+    const selected =
+      requestedPaths === null
+        ? Object.values(stateRef.current.buffers)
+        : requestedPaths
+            .map((path) => stateRef.current.buffers[path])
+            .filter((buffer): buffer is EditorBuffer => buffer !== undefined);
+    const buffers = selected.filter(isBufferModified);
+    if (buffers.length === 0) {
+      return true;
+    }
+
+    dispatch({
+      type: "save-started",
+      paths: buffers.map((buffer) => buffer.path),
+    });
+    const results = await Promise.all(
+      buffers.map(async (buffer) => {
+        const result = await api.writeTextFile({
+          path: buffer.path,
+          content: buffer.content,
+          expectedVersion: buffer.version,
+        });
+        if (result.ok) {
+          dispatch({
+            type: "save-succeeded",
+            file: result.value,
+            announce,
+          });
+          return {
+            ok: true as const,
+            path: buffer.path,
+            savedContent: result.value.content,
+          };
+        }
+        dispatch({
+          type: "operation-failed",
+          message: result.error.message,
+          path: buffer.path,
+        });
+        return { ok: false as const, path: buffer.path };
+      }),
+    );
+
+    return results.every(
+      (result) =>
+        result.ok &&
+        stateRef.current.buffers[result.path]?.content === result.savedContent,
+    );
+  };
+
+  const savePaths = (
+    requestedPaths: string[] | null,
+    announce: boolean,
+  ): Promise<boolean> => {
+    const operation = saveTailRef.current.then(() =>
+      performSave(requestedPaths, announce),
+    );
+    saveTailRef.current = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  };
+
   const openProject = async (): Promise<void> => {
+    coordinatorRef.current?.cancelPending();
+    if (!(await savePaths(null, false))) {
+      dispatch({
+        type: "operation-failed",
+        message: "Open project stopped because current changes could not save.",
+      });
+      return;
+    }
+
+    const requestId = ++openRequestRef.current;
     const result = await api.openProject();
+    if (requestId !== openRequestRef.current) {
+      return;
+    }
     if (!result.ok) {
       if (result.error.code !== "cancelled") {
         dispatch({
@@ -71,73 +198,63 @@ export function App({ api = window.texpulse }: AppProps) {
       return;
     }
 
-    dispatch({ type: "project-opened", project: result.value });
-    const firstPath =
-      result.value.rootCandidates[0]?.path ??
-      result.value.entries.find((entry) => entry.kind === "file")?.path;
-    if (firstPath !== undefined) {
-      dispatch({ type: "file-loading", path: firstPath });
-      const fileResult = await api.readTextFile({ path: firstPath });
-      if (fileResult.ok) {
-        dispatch({ type: "file-opened", file: fileResult.value });
-      } else {
-        dispatch({
-          type: "operation-failed",
-          message: fileResult.error.message,
-          path: firstPath,
-        });
-      }
-    }
-  };
-
-  const saveBuffers = async (buffers: EditorBuffer[]): Promise<boolean> => {
-    if (buffers.length === 0) {
-      return true;
-    }
-    dispatch({
-      type: "save-started",
-      paths: buffers.map((buffer) => buffer.path),
-    });
-
-    const results = await Promise.all(
-      buffers.map(async (buffer) => {
-        const result = await api.writeTextFile({
-          path: buffer.path,
-          content: buffer.content,
-          expectedVersion: buffer.version,
-        });
-        if (result.ok) {
-          dispatch({ type: "save-succeeded", file: result.value });
-          return {
-            ok: true as const,
-            path: buffer.path,
-            savedContent: result.value.content,
-          };
-        } else {
-          dispatch({
-            type: "operation-failed",
-            message: result.error.message,
-            path: buffer.path,
-          });
-          return { ok: false as const };
-        }
-      }),
+    const preferences = loadWorkspacePreferences(
+      window.localStorage,
+      result.value.projectId,
+      result.value.autoBuild,
     );
-    if (results.some((result) => !result.ok)) {
-      return false;
-    }
-    return results.every((result) => {
-      if (!result.ok) {
-        return false;
+    const availableFiles = new Set(
+      result.value.entries
+        .filter((entry) => entry.kind === "file")
+        .map((entry) => entry.path),
+    );
+    const restoredPaths = [
+      ...new Set(
+        preferences.openPaths.filter((path) => availableFiles.has(path)),
+      ),
+    ].slice(0, 20);
+    if (restoredPaths.length === 0) {
+      const firstPath =
+        result.value.rootFile ??
+        result.value.rootCandidates[0]?.path ??
+        result.value.entries.find((entry) => entry.kind === "file")?.path;
+      if (firstPath !== undefined) {
+        restoredPaths.push(firstPath);
       }
-      return (
-        stateRef.current.buffers[result.path]?.content === result.savedContent
-      );
+    }
+
+    const fileResults = await Promise.all(
+      restoredPaths.map((path) => api.readTextFile({ path })),
+    );
+    if (requestId !== openRequestRef.current) {
+      return;
+    }
+    const files = fileResults.flatMap((fileResult) =>
+      fileResult.ok ? [fileResult.value] : [],
+    );
+    const activePath =
+      preferences.activePath !== null &&
+      files.some((file) => file.path === preferences.activePath)
+        ? preferences.activePath
+        : (files[0]?.path ?? null);
+
+    restoredProjectIdRef.current = result.value.projectId;
+    dispatch({
+      type: "project-opened",
+      project: result.value,
+      paneRatio: preferences.paneRatio,
+      settings: preferences.settings,
+    });
+    dispatch({
+      type: "files-restored",
+      files,
+      activePath,
+      views: preferences.bufferViews,
     });
   };
 
-  const compileProject = async (): Promise<void> => {
-    const rootFile = state.project?.rootFile;
+  const requestCompile = async (revision: number): Promise<void> => {
+    const rootFile = stateRef.current.project?.rootFile;
     if (rootFile === null || rootFile === undefined) {
       dispatch({
         type: "build-operation-failed",
@@ -146,21 +263,6 @@ export function App({ api = window.texpulse }: AppProps) {
       return;
     }
 
-    dispatch({ type: "build-started" });
-    const buffersToSave = Object.values(stateRef.current.buffers).filter(
-      isBufferModified,
-    );
-    const saved = await saveBuffers(buffersToSave);
-    if (!saved) {
-      dispatch({
-        type: "build-operation-failed",
-        message:
-          "Compile stopped because a save failed or the file changed while saving.",
-      });
-      return;
-    }
-
-    dispatch({ type: "build-compiling" });
     const compiledContents = new Map(
       Object.values(stateRef.current.buffers).map((buffer) => [
         buffer.path,
@@ -168,6 +270,10 @@ export function App({ api = window.texpulse }: AppProps) {
       ]),
     );
     const result = await api.compileProject({ rootFile });
+    const coordinator = coordinatorRef.current;
+    if (coordinator === null || !coordinator.isCurrentRevision(revision)) {
+      return;
+    }
     if (!result.ok) {
       dispatch({
         type: "build-operation-failed",
@@ -175,19 +281,18 @@ export function App({ api = window.texpulse }: AppProps) {
       });
       return;
     }
-
+    if (result.value.disposition !== "current") {
+      return;
+    }
     const sourceChanged = Object.values(stateRef.current.buffers).some(
       (buffer) => compiledContents.get(buffer.path) !== buffer.content,
     );
-    const build =
-      sourceChanged && result.value.visiblePdf !== null
-        ? {
-            ...result.value,
-            visiblePdf: { ...result.value.visiblePdf, isCurrent: false },
-          }
-        : result.value;
-    dispatch({ type: "build-finished", build });
-    const artifact = build.visiblePdf;
+    if (sourceChanged) {
+      return;
+    }
+
+    dispatch({ type: "build-finished", build: result.value });
+    const artifact = result.value.visiblePdf;
     if (artifact === null) {
       return;
     }
@@ -205,10 +310,13 @@ export function App({ api = window.texpulse }: AppProps) {
       buildId: artifact.buildId,
       generation: artifact.generation,
     });
+    if (!coordinator.isCurrentRevision(revision)) {
+      return;
+    }
     if (pdfResult.ok) {
       dispatch({
         type: "pdf-loaded",
-        artifact,
+        artifact: pdfResult.value.artifact,
         data: pdfResult.value.data,
       });
     } else {
@@ -220,7 +328,7 @@ export function App({ api = window.texpulse }: AppProps) {
   };
 
   const performPdfAction = async (action: "open" | "reveal"): Promise<void> => {
-    const artifact = state.pdf?.artifact;
+    const artifact = stateRef.current.pdf?.artifact;
     if (artifact === undefined) {
       return;
     }
@@ -240,19 +348,157 @@ export function App({ api = window.texpulse }: AppProps) {
     }
   };
 
+  useEffect(() => {
+    const coordinator = new LiveBuildCoordinator({
+      save: () => savePaths(null, false),
+      build: requestCompile,
+      onPhaseChange: (phase) => {
+        dispatch({ type: "build-phase-changed", phase });
+      },
+      onBuildBlocked: () => {
+        dispatch({
+          type: "build-operation-failed",
+          message: "Compile stopped because the newest source could not save.",
+        });
+      },
+      onUnexpectedError: (error) => {
+        dispatch({
+          type: "build-operation-failed",
+          message:
+            error instanceof Error
+              ? error.message
+              : "The live build workflow failed unexpectedly.",
+        });
+      },
+    });
+    coordinator.configure(stateRef.current.settings);
+    coordinatorRef.current = coordinator;
+    return () => {
+      coordinator.dispose();
+      coordinatorRef.current = null;
+    };
+  }, [api]);
+
+  useEffect(() => {
+    coordinatorRef.current?.configure(state.settings);
+  }, [state.settings]);
+
+  useEffect(
+    () =>
+      api.onProjectFileChanged((change) => {
+        if (stateRef.current.project?.projectId !== change.projectId) {
+          return;
+        }
+        const buffer = stateRef.current.buffers[change.path];
+        const detail =
+          change.kind === "deleted"
+            ? "was deleted outside TeXPulse Studio"
+            : "changed outside TeXPulse Studio";
+        dispatch({
+          type: "external-change-detected",
+          message:
+            buffer !== undefined && isBufferModified(buffer)
+              ? `${change.path} ${detail}. Your unsaved editor content was preserved.`
+              : `${change.path} ${detail}. Reopen the project to reload it.`,
+        });
+      }),
+    [api],
+  );
+
+  useEffect(() => {
+    const project = state.project;
+    if (
+      project === null ||
+      restoredProjectIdRef.current !== project.projectId
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      persistWorkspaceState(window.localStorage, stateRef.current);
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    state.activePath,
+    state.buffers,
+    state.paneRatio,
+    state.project,
+    state.settings,
+  ]);
+
+  useEffect(() => {
+    const persistBeforePageHide = () => {
+      const current = stateRef.current;
+      if (
+        current.project !== null &&
+        restoredProjectIdRef.current === current.project.projectId
+      ) {
+        persistWorkspaceState(window.localStorage, current);
+      }
+    };
+    window.addEventListener("pagehide", persistBeforePageHide);
+    window.addEventListener("beforeunload", persistBeforePageHide);
+    return () => {
+      window.removeEventListener("pagehide", persistBeforePageHide);
+      window.removeEventListener("beforeunload", persistBeforePageHide);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const split = splitRef.current;
+      if (!draggingSplitRef.current || split === null) {
+        return;
+      }
+      const bounds = split.getBoundingClientRect();
+      const paneRatio = Math.min(
+        Math.max((event.clientX - bounds.left) / bounds.width, 0.3),
+        0.75,
+      );
+      dispatch({ type: "pane-ratio-changed", paneRatio });
+    };
+    const handlePointerUp = () => {
+      draggingSplitRef.current = false;
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
+
+  const updateSettings = (settings: Partial<LiveBuildSettings>): void => {
+    dispatch({
+      type: "settings-changed",
+      settings: { ...stateRef.current.settings, ...settings },
+    });
+  };
+
   const projectTitle = state.project?.name ?? "No project open";
   const isAnyFileSaving = state.savingPaths.length > 0;
   const isSaving =
     activeBuffer !== undefined && state.savingPaths.includes(activeBuffer.path);
-  const buildBusy = state.buildPhase !== "idle";
+  const buildBusy = ["saving", "queued", "compiling", "loading-pdf"].includes(
+    state.buildPhase,
+  );
   const buildStatus =
-    state.buildPhase === "saving"
-      ? "Saving before build"
-      : state.buildPhase === "compiling"
-        ? "Compiling"
-        : state.buildPhase === "loading-pdf"
-          ? "Loading PDF"
-          : (state.build?.status ?? "Idle");
+    state.buildPhase === "debouncing"
+      ? "Debouncing"
+      : state.buildPhase === "saving"
+        ? "Saving"
+        : state.buildPhase === "queued"
+          ? "Queued"
+          : state.buildPhase === "compiling"
+            ? "Compiling"
+            : state.buildPhase === "loading-pdf"
+              ? "Loading PDF"
+              : (state.build?.status ?? "Idle");
+  const statusClass =
+    state.buildPhase === "idle"
+      ? (state.build?.status ?? "idle")
+      : state.buildPhase;
 
   return (
     <div className="app-shell">
@@ -270,7 +516,7 @@ export function App({ api = window.texpulse }: AppProps) {
           <button
             type="button"
             className="button secondary"
-            disabled={buildBusy}
+            disabled={buildBusy || isAnyFileSaving}
             onClick={openProject}
           >
             Open project
@@ -285,7 +531,7 @@ export function App({ api = window.texpulse }: AppProps) {
             }
             onClick={() => {
               if (activeBuffer !== undefined) {
-                void saveBuffers([activeBuffer]);
+                void savePaths([activeBuffer.path], true);
               }
             }}
           >
@@ -296,13 +542,49 @@ export function App({ api = window.texpulse }: AppProps) {
             className="button secondary"
             disabled={modifiedPaths.size === 0 || isAnyFileSaving}
             onClick={() => {
-              void saveBuffers(
-                Object.values(state.buffers).filter(isBufferModified),
-              );
+              void savePaths(null, true);
             }}
           >
             Save all
           </button>
+          <span className="toolbar-divider" aria-hidden="true" />
+          <label className="setting-toggle">
+            <input
+              type="checkbox"
+              checked={state.settings.autosave}
+              onChange={(event) => {
+                updateSettings({ autosave: event.currentTarget.checked });
+              }}
+            />
+            Autosave
+          </label>
+          <label className="setting-toggle">
+            <input
+              type="checkbox"
+              checked={state.settings.autoBuild}
+              onChange={(event) => {
+                updateSettings({ autoBuild: event.currentTarget.checked });
+              }}
+            />
+            Auto build
+          </label>
+          <label className="debounce-setting">
+            <span>Delay</span>
+            <select
+              aria-label="Automatic build delay"
+              value={state.settings.debounceMs}
+              onChange={(event) => {
+                updateSettings({
+                  debounceMs: Number(event.currentTarget.value),
+                });
+              }}
+            >
+              <option value={400}>400 ms</option>
+              <option value={800}>800 ms</option>
+              <option value={1200}>1.2 s</option>
+              <option value={2000}>2 s</option>
+            </select>
+          </label>
           <span className="toolbar-divider" aria-hidden="true" />
           <button
             type="button"
@@ -313,7 +595,7 @@ export function App({ api = window.texpulse }: AppProps) {
               buildBusy
             }
             onClick={() => {
-              void compileProject();
+              void coordinatorRef.current?.manualBuild();
             }}
           >
             {buildBusy ? `${buildStatus}...` : "Compile"}
@@ -321,7 +603,9 @@ export function App({ api = window.texpulse }: AppProps) {
           <button
             type="button"
             className="button secondary"
-            disabled={state.buildPhase !== "compiling"}
+            disabled={
+              state.buildPhase !== "compiling" && state.buildPhase !== "queued"
+            }
             onClick={() => {
               void api.cancelBuild().then((result) => {
                 if (!result.ok) {
@@ -367,7 +651,15 @@ export function App({ api = window.texpulse }: AppProps) {
         )}
 
         <div className={`main-workspace ${state.logOpen ? "with-log" : ""}`}>
-          <div className="content-split">
+          <div
+            className="content-split"
+            ref={splitRef}
+            style={
+              {
+                "--editor-pane-percent": `${String(state.paneRatio * 100)}%`,
+              } as CSSProperties
+            }
+          >
             <main className="editor-panel">
               {activeBuffer === undefined ? (
                 <section className="welcome">
@@ -410,6 +702,7 @@ export function App({ api = window.texpulse }: AppProps) {
                       buffer={activeBuffer}
                       onChange={(path, content) => {
                         dispatch({ type: "content-changed", path, content });
+                        coordinatorRef.current?.noteEdit();
                       }}
                       onViewStateChange={(path, cursor, scrollTop) => {
                         dispatch({
@@ -425,6 +718,35 @@ export function App({ api = window.texpulse }: AppProps) {
               )}
             </main>
 
+            <div
+              className="pane-divider"
+              role="separator"
+              aria-label="Resize editor and PDF panes"
+              aria-orientation="vertical"
+              aria-valuemin={30}
+              aria-valuemax={75}
+              aria-valuenow={Math.round(state.paneRatio * 100)}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+                  return;
+                }
+                event.preventDefault();
+                const direction = event.key === "ArrowLeft" ? -0.02 : 0.02;
+                dispatch({
+                  type: "pane-ratio-changed",
+                  paneRatio: Math.min(
+                    Math.max(stateRef.current.paneRatio + direction, 0.3),
+                    0.75,
+                  ),
+                });
+              }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                draggingSplitRef.current = true;
+              }}
+            />
+
             {state.pdf === null ? (
               <section className="preview-empty" aria-label="PDF preview">
                 <div className="preview-mark" aria-hidden="true">
@@ -434,7 +756,7 @@ export function App({ api = window.texpulse }: AppProps) {
                 <span>
                   {state.project?.rootFile === null
                     ? "No LaTeX root file was detected."
-                    : "Compile the selected root to create the preview."}
+                    : "Stop typing to save and refresh the preview."}
                 </span>
               </section>
             ) : (
@@ -469,9 +791,7 @@ export function App({ api = window.texpulse }: AppProps) {
 
       <footer className="statusbar">
         <span>{state.activePath ?? "Ready"}</span>
-        <span
-          className={`build-status status-${state.build?.status ?? "idle"}`}
-        >
+        <span className={`build-status status-${statusClass}`}>
           Build: {buildStatus}
         </span>
         <span>

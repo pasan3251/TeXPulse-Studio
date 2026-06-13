@@ -4,6 +4,10 @@ export const PROJECT_CHANNELS = {
   writeTextFile: "project:write-text-file",
 } as const;
 
+export const PROJECT_EVENTS = {
+  fileChanged: "project:file-changed",
+} as const;
+
 export const BUILD_CHANNELS = {
   cancel: "build:cancel",
   compile: "build:compile",

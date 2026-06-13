@@ -8,6 +8,7 @@ import type {
 } from "./build-contracts.js";
 import type {
   OpenProjectResult,
+  ProjectFileChange,
   ProjectPathRequest,
   ProjectWriteRequest,
   ReadTextFileResult,
@@ -23,4 +24,7 @@ export interface TeXPulseApi {
   loadPdf(request: PdfArtifactRequest): Promise<LoadPdfResult>;
   openPdf(request: PdfArtifactRequest): Promise<PdfActionResult>;
   revealPdf(request: PdfArtifactRequest): Promise<PdfActionResult>;
+  onProjectFileChanged(
+    listener: (change: ProjectFileChange) => void,
+  ): () => void;
 }

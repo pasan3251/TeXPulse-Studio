@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { createMinimalPdf } from "./minimal-pdf.mjs";
 
@@ -10,6 +11,11 @@ const source =
   rootFile === undefined
     ? ""
     : await readFile(rootFile, "utf8").catch(() => "");
+const startedAt = Date.now();
+const delayMs = Number(process.env.TEXPULSE_FAKE_DELAY_MS ?? "0");
+if (Number.isFinite(delayMs) && delayMs > 0) {
+  await delay(delayMs);
+}
 
 if (args.includes("--fake-exit") || source.includes("TEXPULSE_FAKE_FAIL")) {
   process.stderr.write("Fake compiler failure.\n");
@@ -24,7 +30,7 @@ if (args.includes("--fake-exit") || source.includes("TEXPULSE_FAKE_FAIL")) {
   if (!args.includes("--fake-no-pdf")) {
     await writeFile(
       join(outputDirectory, `${baseName}.pdf`),
-      createMinimalPdf("TeXPulse Sprint 5"),
+      createMinimalPdf("TeXPulse Sprint 6"),
     );
   }
   await writeFile(
@@ -37,5 +43,18 @@ if (args.includes("--fake-exit") || source.includes("TEXPULSE_FAKE_FAIL")) {
   );
   process.stdout.write(
     JSON.stringify({ args, cwd: process.cwd(), path: process.env.PATH }),
+  );
+}
+
+const tracePath = process.env.TEXPULSE_FAKE_TRACE;
+if (tracePath !== undefined) {
+  await appendFile(
+    tracePath,
+    `${JSON.stringify({
+      source,
+      startedAt,
+      endedAt: Date.now(),
+      status: process.exitCode === undefined ? "succeeded" : "failed",
+    })}\n`,
   );
 }

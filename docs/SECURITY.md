@@ -1,11 +1,11 @@
 # Security
 
-## Sprint 5 posture
+## Sprint 6 posture
 
-Sprint 5 keeps the Electron renderer outside the trusted computing boundary
-while adding manual compiler control and completed PDF preview. It adds no
-network service, telemetry, remote content, arbitrary filesystem access, or
-general process capability.
+Sprint 6 keeps the Electron renderer outside the trusted computing boundary
+while adding autosave, live compilation, project watching, and workspace
+restoration. It adds no network service, telemetry, remote content, arbitrary
+filesystem access, or general process capability.
 
 The application:
 
@@ -16,14 +16,14 @@ The application:
   project;
 - writes output under `.texpulse/build` by default;
 - passes `-norc` and `-no-shell-escape`;
-- reports only output paths that exist.
+- reports only output paths that exist;
 - enforces a default 120-second compiler timeout;
 - cancels by build ID through `AbortController`;
 - terminates Windows compiler descendants with direct, shell-free
   `taskkill.exe /T /F`;
 - isolates outputs by generation so stale or failed builds cannot overwrite the
   retained successful PDF;
-- rejects adapter results with mismatched build identity.
+- rejects adapter results with mismatched build identity;
 - canonicalizes the selected project directory;
 - accepts only relative project entry paths and verifies resolved paths remain
   below the canonical root;
@@ -34,19 +34,20 @@ The application:
 - requires a SHA-256 version token before replacing a file;
 - reports changed or deleted external files explicitly;
 - validates project metadata and safely falls back with issues; and
-- ignores generated and dependency directories during project enumeration.
+- ignores generated and dependency directories during project enumeration;
 - enables the Electron sandbox before app readiness;
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes eight frozen project/build/PDF preload methods, never `ipcRenderer`;
+- exposes nine frozen project/build/PDF/event preload methods, never
+  `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
 - denies permission requests, popups, webviews, and unexpected navigation;
 - disables DevTools for production and packaged windows; and
 - applies a local-only Content Security Policy with no network connections,
-  objects, forms, external bases, inline scripts, or evaluated scripts.
+  objects, forms, external bases, inline scripts, or evaluated scripts;
 - permits only a same-origin PDF.js worker through `worker-src 'self'`;
 - returns build metadata and opaque artifact tokens without structured canonical
   paths;
@@ -55,7 +56,20 @@ The application:
 - limits PDF preview input to 100 MiB and renderer raw-log display to 2 MiB;
 - loads only completed compiler output into PDF.js;
 - keeps the last successful PDF visible after failure; and
-- uses Electron shell open/reveal only for a revalidated generated PDF.
+- uses Electron shell open/reveal only for a revalidated generated PDF;
+- starts the project watcher in the main process, never the renderer;
+- prevents watcher traversal through symbolic links and junctions;
+- excludes generated, metadata, dependency, coverage, and distribution
+  directories from watcher traversal;
+- suppresses editor-originated watcher events by matching resulting file
+  versions;
+- sends only an opaque project ID, relative path, and validated event kind to
+  the renderer;
+- treats watcher events as informational rather than direct save/build triggers;
+- serializes saves and retains version-token checks before automatic builds;
+- rejects build and PDF results when the renderer source revision changed; and
+- persists only validated relative workspace state and preferences, never source
+  text, PDF bytes, logs, canonical paths, or credentials.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
@@ -64,6 +78,12 @@ ADR-0006 and must not be widened to scripts.
 PDF.js 6.0.227 is pinned as a production dependency because the SRS requires a
 local PDF.js viewer. It is lazy-loaded with its local worker and is covered by
 the frozen lockfile and dependency audit.
+
+Chokidar 5.0.0 is pinned as a production dependency because recursive native
+Windows project watching, event normalization, atomic-write handling, and
+link-following controls are required for live external-change detection. It runs
+only in the main process and is covered by the same lockfile, audit, path
+boundary, and integration tests.
 
 The raw user-visible compiler log may contain local absolute paths and
 environment details emitted by MiKTeX or `latexmk`. These strings do not become
@@ -105,7 +125,8 @@ scheduled for Sprint 10.
 
 A detailed threat model, trusted-project policy, bounded total compiler output,
 generation cleanup, and TeX execution review remain required before release.
-Live file watching, external URL handling, and any new preload capability
-require their own validated contracts and tests. ADR-0005 defines the path/link
-policy; ADR-0006 defines the Electron boundary; ADR-0007 defines completed PDF
-loading and artifact actions.
+Automatic external-file reload/merge, external URL handling, and any new preload
+capability require their own validated contracts and tests. ADR-0005 defines the
+path/link policy; ADR-0006 defines the Electron boundary; ADR-0007 defines
+completed PDF loading and artifact actions; ADR-0008 defines live build and
+project watching.

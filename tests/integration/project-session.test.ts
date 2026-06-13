@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MiktexCompilerAdapter } from "../../src/compiler/compiler-adapter.js";
 import type { CompilerAdapter } from "../../src/compiler/compiler-adapter.js";
@@ -83,6 +83,24 @@ class RecordingAdapter implements CompilerAdapter {
 }
 
 describe("ProjectSession", () => {
+  it("describes an opaque project identity and closes an active watcher", async () => {
+    const project = await createProject();
+    const changes = vi.fn();
+    const session = await ProjectSession.open(project, adapter(), changes);
+    const snapshot = await session.readTextFile("main.tex");
+
+    expect(session.describe()).toMatchObject({
+      projectId: expect.stringMatching(/^[a-f0-9]{16}$/u),
+      autoBuild: true,
+    });
+    await session.writeTextFile(
+      "main.tex",
+      `${snapshot.content}\nUpdated`,
+      snapshot.version,
+    );
+    await session.dispose();
+  });
+
   it("loads only a completed PDF and retains it when the next build fails", async () => {
     const project = await createProject();
     const session = await ProjectSession.open(project, adapter());

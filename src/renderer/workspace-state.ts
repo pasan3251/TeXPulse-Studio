@@ -3,6 +3,12 @@ import type {
   ReadTextFileResult,
 } from "../ipc/project-contracts.js";
 import type { BuildView, PdfArtifact } from "../ipc/build-contracts.js";
+import {
+  defaultLiveBuildSettings,
+  type LiveBuildPhase,
+  type LiveBuildSettings,
+} from "./live-build-coordinator.js";
+import { DEFAULT_PANE_RATIO } from "./workspace-persistence.js";
 
 export type OpenedProject = Extract<OpenProjectResult, { ok: true }>["value"];
 export type OpenedTextFile = Extract<ReadTextFileResult, { ok: true }>["value"];
@@ -23,14 +29,27 @@ export interface WorkspaceState {
   loadingPath: string | null;
   savingPaths: string[];
   notice: string | null;
-  buildPhase: "idle" | "saving" | "compiling" | "loading-pdf";
+  buildPhase: LiveBuildPhase | "loading-pdf";
   build: BuildView | null;
   pdf: { artifact: PdfArtifact; data: Uint8Array } | null;
   logOpen: boolean;
+  paneRatio: number;
+  settings: LiveBuildSettings;
 }
 
 export type WorkspaceAction =
-  | { type: "project-opened"; project: OpenedProject }
+  | {
+      type: "project-opened";
+      project: OpenedProject;
+      paneRatio?: number;
+      settings?: LiveBuildSettings;
+    }
+  | {
+      type: "files-restored";
+      files: OpenedTextFile[];
+      activePath: string | null;
+      views: Record<string, { cursor: number; scrollTop: number }>;
+    }
   | { type: "file-loading"; path: string }
   | { type: "file-opened"; file: OpenedTextFile }
   | { type: "file-selected"; path: string }
@@ -42,14 +61,16 @@ export type WorkspaceAction =
       scrollTop: number;
     }
   | { type: "save-started"; paths: string[] }
-  | { type: "save-succeeded"; file: OpenedTextFile }
-  | { type: "build-started" }
-  | { type: "build-compiling" }
+  | { type: "save-succeeded"; file: OpenedTextFile; announce?: boolean }
+  | { type: "build-phase-changed"; phase: LiveBuildPhase }
   | { type: "build-finished"; build: BuildView }
   | { type: "pdf-loading" }
   | { type: "pdf-loaded"; artifact: PdfArtifact; data: Uint8Array }
   | { type: "build-operation-failed"; message: string }
   | { type: "log-toggled" }
+  | { type: "pane-ratio-changed"; paneRatio: number }
+  | { type: "settings-changed"; settings: LiveBuildSettings }
+  | { type: "external-change-detected"; message: string }
   | { type: "operation-failed"; message: string; path?: string }
   | { type: "notice-dismissed" };
 
@@ -64,6 +85,8 @@ export const initialWorkspaceState: WorkspaceState = {
   build: null,
   pdf: null,
   logOpen: false,
+  paneRatio: DEFAULT_PANE_RATIO,
+  settings: defaultLiveBuildSettings(),
 };
 
 export function workspaceReducer(
@@ -75,7 +98,33 @@ export function workspaceReducer(
       return {
         ...initialWorkspaceState,
         project: action.project,
+        paneRatio: action.paneRatio ?? DEFAULT_PANE_RATIO,
+        settings:
+          action.settings ?? defaultLiveBuildSettings(action.project.autoBuild),
       };
+    case "files-restored": {
+      const buffers = { ...state.buffers };
+      for (const file of action.files) {
+        const view = action.views[file.path];
+        buffers[file.path] = {
+          path: file.path,
+          content: file.content,
+          savedContent: file.content,
+          version: file.version,
+          cursor: view?.cursor ?? 0,
+          scrollTop: view?.scrollTop ?? 0,
+        };
+      }
+      return {
+        ...state,
+        buffers,
+        activePath:
+          action.activePath !== null && buffers[action.activePath] !== undefined
+            ? action.activePath
+            : (action.files[0]?.path ?? null),
+        loadingPath: null,
+      };
+    }
     case "file-loading":
       return {
         ...state,
@@ -181,17 +230,18 @@ export function workspaceReducer(
         savingPaths: state.savingPaths.filter(
           (path) => path !== action.file.path,
         ),
-        notice: `Saved ${action.file.path}`,
+        notice:
+          action.announce === false
+            ? state.notice
+            : `Saved ${action.file.path}`,
       };
     }
-    case "build-started":
+    case "build-phase-changed":
       return {
         ...state,
-        buildPhase: "saving",
-        notice: null,
+        buildPhase: action.phase,
+        notice: action.phase === "saving" ? null : state.notice,
       };
-    case "build-compiling":
-      return { ...state, buildPhase: "compiling" };
     case "build-finished": {
       if (
         state.build !== null &&
@@ -245,6 +295,12 @@ export function workspaceReducer(
       };
     case "log-toggled":
       return { ...state, logOpen: !state.logOpen };
+    case "pane-ratio-changed":
+      return { ...state, paneRatio: action.paneRatio };
+    case "settings-changed":
+      return { ...state, settings: action.settings };
+    case "external-change-detected":
+      return { ...state, notice: action.message };
     case "operation-failed":
       return {
         ...state,

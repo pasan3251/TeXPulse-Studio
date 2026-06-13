@@ -51,9 +51,17 @@ internal links and junctions, and use read-version tokens for destructive file
 replacement. Add integration coverage for Windows path behavior, Unicode,
 external modifications, and read-only failures.
 
+For project-watcher work, keep Chokidar in the main process, do not follow
+links, preserve generated/dependency ignore rules, and send only validated
+project-relative events through the fixed preload channel. Watcher events are
+informational and must not directly save or compile. Preserve internal-write
+version suppression and add deterministic loop-prevention coverage.
+
 For React changes, preserve keyboard access, accessible names, visible
 non-color-only states, and the CodeMirror cursor/scroll contract. Add component
-or Electron E2E coverage for user-visible workflows.
+or Electron E2E coverage for user-visible workflows. Live-build changes must
+preserve serialized saves, newest-only compile behavior, and source-revision
+revalidation before accepting build or PDF results.
 
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to

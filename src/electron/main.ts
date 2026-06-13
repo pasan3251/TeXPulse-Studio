@@ -12,6 +12,7 @@ import {
 import { shell } from "electron";
 
 import { MiktexCompilerAdapter } from "../compiler/compiler-adapter.js";
+import { PROJECT_EVENTS } from "../ipc/channels.js";
 import { registerProjectIpc } from "./project-ipc.js";
 import { createSecureWindowOptions } from "./window-options.js";
 
@@ -38,6 +39,9 @@ void app.whenReady().then(async () => {
     createCompilerAdapter,
     ipcMain,
     openPath: (path) => shell.openPath(path),
+    notifyProjectFileChange: (change) => {
+      mainWindow?.webContents.send(PROJECT_EVENTS.fileChanged, change);
+    },
     showItemInFolder: (path) => {
       shell.showItemInFolder(path);
     },

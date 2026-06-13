@@ -8,7 +8,8 @@
 | Sprint 3     | Complete on 2026-06-13 | Project model and safe filesystem service               |
 | Sprint 4     | Complete on 2026-06-13 | Secure Electron shell and editor                        |
 | Sprint 5     | Complete on 2026-06-13 | Manual compilation and PDF preview                      |
-| Sprints 6-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 6     | Complete on 2026-06-14 | Autosave, live compilation, watching, restoration       |
+| Sprints 7-14 | Not started            | See `docs/SRS.md`                                       |
 
 ## Completed scope
 
@@ -41,12 +42,19 @@ page/zoom/fit controls, reload-state preservation, raw logs, retained
 last-successful output, and validated open/reveal actions. See
 `reports/SPRINT-5.md`.
 
+Sprint 6 adds configurable autosave and debounced auto-build, serialized saves,
+newest-only live compilation, stale editor-revision rejection, bounded
+main-process project watching, external-change notices, workspace restoration,
+responsive pane resizing, and rapid-workflow E2E coverage. See
+`reports/SPRINT-6.md`.
+
 ## Current environment limitation
 
 MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
 does not report a parseable version. Compiler output remains unbounded until
 security hardening, and old generation directories do not yet have a cleanup
 policy. The renderer log copy is bounded to 2 MiB and PDF preview to 100 MiB,
-but total compiler output capture remains pending Sprint 10. The editor detects
-external changes during versioned save attempts; live filesystem watching,
-autosave, and reload/compare actions remain future work.
+but total compiler output capture remains pending Sprint 10. The editor now
+detects external changes through a bounded project watcher and still rejects
+stale version tokens. Automatic reload, side-by-side comparison, and merge
+actions remain future work.

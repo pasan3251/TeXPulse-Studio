@@ -1,10 +1,11 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 5 provides a secure Electron editor with manual compilation,
-raw build logs, and a PDF.js preview that retains the last successful output
-when a later build fails. Project files and generated artifact paths remain
-behind a validated main-process IPC boundary.
+development. Sprint 6 provides a secure Electron editor with autosave, debounced
+live compilation, project change detection, workspace restoration, raw build
+logs, and a PDF.js preview that retains the last successful output when a later
+build fails. Project files and generated artifact paths remain behind a
+validated main-process IPC boundary.
 
 ## Requirements
 
@@ -71,7 +72,7 @@ bounding and the complete threat model remain later hardening work.
 
 ## Desktop editor
 
-The Sprint 5 application:
+The Sprint 6 application:
 
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
@@ -79,6 +80,12 @@ The Sprint 5 application:
   replace;
 - tracks modified files and preserves cursor/scroll state across switches;
 - saves one file or all modified files through version-checked atomic writes;
+- autosaves editing bursts and automatically compiles after a configurable
+  200-5,000 ms debounce, defaulting to 800 ms;
+- serializes saves before builds and shows debouncing, saving, queued, and
+  compiling phases;
+- keeps one compiler process active and only the newest pending build;
+- supports disabling automatic build while retaining manual compile;
 - saves modified buffers before a manual compile and stops on save conflict;
 - displays build status and supports cancellation;
 - renders only completed PDFs through PDF.js with page, zoom, fit-width, and
@@ -87,16 +94,18 @@ The Sprint 5 application:
 - preserves and labels the last successful PDF after a failed build;
 - shows a bounded raw build log while retaining the complete log on disk;
 - opens or reveals only a main-process-revalidated generated PDF;
-- reports external-change conflicts without replacing either local unsaved
-  content or the external file; and
+- watches the project without following links or generated output and reports
+  external changes without replacing local unsaved content;
+- restores open files, active file, cursor/scroll views, pane ratio, and
+  live-build preferences for the same project; and
 - denies renderer Node access, arbitrary filesystem access, navigation, popups,
   webviews, and permissions.
 
 The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
-renderer cannot access the filesystem or compiler except through the
-eight-method typed preload bridge.
+renderer cannot access the filesystem or compiler except through the nine-method
+typed preload bridge.
 
 ## Project service
 
@@ -126,3 +135,4 @@ The typed modules under `src/project/`:
 - Sprint 3 report: `docs/reports/SPRINT-3.md`
 - Sprint 4 report: `docs/reports/SPRINT-4.md`
 - Sprint 5 report: `docs/reports/SPRINT-5.md`
+- Sprint 6 report: `docs/reports/SPRINT-6.md`

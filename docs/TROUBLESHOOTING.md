@@ -115,12 +115,42 @@ Press `Ctrl+C` while `texpulse-compile` is running. A cancelled build exits with
 code 130. On Windows the service invokes `taskkill.exe /T /F` directly without a
 shell so descendant Perl and TeX processes are terminated with the launcher.
 
+## Autosave or live build did not run
+
+Autosave and automatic build are enabled by default with an 800 ms debounce.
+Confirm that both toolbar checkboxes are enabled and that editing has paused for
+the selected delay. The visible phase progresses through `Debouncing`, `Saving`,
+`Queued` when another build is active, and `Compiling`.
+
+An automatic build does not start when a version-token save fails. Resolve the
+visible conflict first. Turning off automatic build does not disable the manual
+`Compile` action.
+
+Generated files under `.texpulse`, the configured build directory,
+`node_modules`, `dist`, and `coverage` do not trigger live builds.
+
 ## Project file changed externally
 
-Every text read returns a content version token. If another program changes the
-file before TeXPulse saves, the write fails with a `conflict` error and leaves
-the external content and unsaved editor buffer intact. Reopen or reconcile the
-content before retrying.
+The main process watches the open project and reports added, changed, or deleted
+files. Editor-originated saves and generated output are filtered to prevent
+rebuild loops. An external-change notice never overwrites the editor buffer or
+starts a save/build by itself.
+
+Every text read also returns a content version token. If another program changes
+the file before TeXPulse saves, the write fails with a `conflict` error and
+leaves the external content and unsaved editor buffer intact. Reopen or
+reconcile the content before retrying.
+
+## Workspace state did not restore
+
+After reopening the same project in the same app profile, TeXPulse restores
+available open files, the active file, cursor and scroll views, pane ratio, and
+live-build settings. Missing or renamed files are skipped.
+
+Workspace state is stored in validated application-local browser storage keyed
+by an opaque project ID. Source content, PDFs, logs, and build state are not
+stored, so a restored editor may show no preview until the next successful
+build.
 
 ## Project path is rejected
 

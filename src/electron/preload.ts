@@ -1,15 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import { BUILD_CHANNELS, PROJECT_CHANNELS } from "../ipc/channels.js";
+import {
+  BUILD_CHANNELS,
+  PROJECT_CHANNELS,
+  PROJECT_EVENTS,
+} from "../ipc/channels.js";
 import type { TeXPulseApi } from "../ipc/api-contract.js";
 import type {
   CompileProjectRequest,
   PdfArtifactRequest,
 } from "../ipc/build-contracts.js";
 import type {
+  ProjectFileChange,
   ProjectPathRequest,
   ProjectWriteRequest,
 } from "../ipc/project-contracts.js";
+import { projectFileChangeSchema } from "../ipc/project-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
@@ -26,6 +32,21 @@ const api: TeXPulseApi = Object.freeze({
     ipcRenderer.invoke(BUILD_CHANNELS.openPdf, request),
   revealPdf: (request: PdfArtifactRequest) =>
     ipcRenderer.invoke(BUILD_CHANNELS.revealPdf, request),
+  onProjectFileChanged: (listener: (change: ProjectFileChange) => void) => {
+    const handleChange = (
+      _event: Electron.IpcRendererEvent,
+      value: unknown,
+    ) => {
+      const parsed = projectFileChangeSchema.safeParse(value);
+      if (parsed.success) {
+        listener(parsed.data);
+      }
+    };
+    ipcRenderer.on(PROJECT_EVENTS.fileChanged, handleChange);
+    return () => {
+      ipcRenderer.removeListener(PROJECT_EVENTS.fileChanged, handleChange);
+    };
+  },
 });
 
 contextBridge.exposeInMainWorld("texpulse", api);

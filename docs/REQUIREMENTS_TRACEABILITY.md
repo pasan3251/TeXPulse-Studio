@@ -236,3 +236,52 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - PDF.js viewer and workspace state: `../src/renderer/`
 - Unit, component, integration, and Electron E2E tests: `../tests/`
 - PDF/artifact decision: `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`
+
+## Sprint 6
+
+| Requirement    | Sprint 6 evidence                                                 | Status                    |
+| -------------- | ----------------------------------------------------------------- | ------------------------- |
+| `FR-EDIT-007`  | Open files, active file, cursor, scroll, and pane ratio restore   | Complete                  |
+| `FR-EDIT-010`  | Editing remains responsive during save and delayed compilation    | Complete                  |
+| `FR-SAVE-001`  | Configurable autosave follows each debounced editing burst        | Complete                  |
+| `FR-SAVE-002`  | Autosave retains the atomic versioned project write service       | Complete                  |
+| `FR-SAVE-003`  | Autosave failures remain dirty and produce visible notices        | Complete                  |
+| `FR-SAVE-004`  | Watcher and version tokens distinguish external file changes      | Complete                  |
+| `FR-SAVE-005`  | Conflict E2E preserves both unsaved and externally written text   | Complete                  |
+| `FR-SAVE-006`  | Internal write versions suppress self-generated watcher events    | Complete                  |
+| `FR-BUILD-002` | Source edits schedule automatic compilation when enabled          | Complete                  |
+| `FR-BUILD-003` | 800 ms default and bounded selectable debounce are verified       | Complete                  |
+| `FR-BUILD-004` | E2E trace proves no overlapping compiler processes                | Complete                  |
+| `FR-BUILD-005` | Rapid edits retain only the newest pending request                | Complete                  |
+| `FR-BUILD-006` | Existing build IDs and monotonic generations remain authoritative | Complete                  |
+| `FR-BUILD-007` | Main disposition plus renderer revision reject stale results      | Complete                  |
+| `FR-BUILD-016` | Live failures and edits retain the last successful PDF            | Complete                  |
+| `FR-BUILD-017` | Current/retained PDF identity follows the accepted source state   | Complete                  |
+| `FR-PDF-008`   | Revision is rechecked after asynchronous PDF byte loading         | Complete                  |
+| `FR-SET-003`   | Autosave, auto-build, and debounce persist per opaque project ID  | Partial; full UI Sprint 9 |
+| `NFR-PERF-001` | CodeMirror input remains independent of saves and builds          | Complete                  |
+| `NFR-PERF-002` | Delayed-build E2E edits remain responsive                         | Current scope complete    |
+| `NFR-PERF-003` | Rapid edits coalesce while one active build remains the maximum   | Complete                  |
+| `NFR-PERF-004` | Default debounce plus real compile measured below three seconds   | Complete for fixture      |
+| `NFR-PERF-006` | Watcher excludes generated, dependency, and metadata directories  | Complete                  |
+| `NFR-REL-001`  | Failed or stale live builds cannot replace retained output        | Complete                  |
+| `NFR-REL-002`  | Changed renderer revisions reject otherwise-current results       | Complete                  |
+| `NFR-REL-003`  | Save/build failures and cancellation remain recoverable           | Current scope complete    |
+| `NFR-REL-004`  | Serialized autosaves retain atomic replacement behavior           | Complete where practical  |
+| `NFR-REL-005`  | Coordinator and watcher state tests use controlled timing         | Complete                  |
+| `NFR-SEC-004`  | Frozen bridge exposes nine fixed methods                          | Current scope complete    |
+| `NFR-SEC-005`  | Watch events validate project ID, path, and event kind            | Complete                  |
+| `NFR-SEC-006`  | Main watcher retains canonical root and non-traversable links     | Current scope complete    |
+| `NFR-PRIV-001` | Source, PDF, build data, and watcher events remain local          | Complete for Sprint 6     |
+| `NFR-PRIV-002` | No analytics, telemetry, or network persistence added             | Complete for Sprint 6     |
+| `AS-001`       | Edit, autosave, live compile, and current PDF E2E workflow        | Complete                  |
+| `AS-003`       | Rapid typing, queued handoff, and newest-result acceptance E2E    | Complete                  |
+
+### Sprint 6 evidence
+
+- Sprint report: `reports/SPRINT-6.md`
+- Live-build coordinator and persistence: `../src/renderer/`
+- Project watcher and session integration: `../src/project/` and
+  `../src/electron/`
+- Unit, integration, component, and Electron E2E tests: `../tests/`
+- Design decision: `adr/ADR-0008-live-build-and-project-watching.md`

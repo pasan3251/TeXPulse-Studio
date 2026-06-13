@@ -29,6 +29,7 @@ import {
   type OpenProjectResult,
   type ReadTextFileResult,
   type WriteTextFileResult,
+  type ProjectFileChange,
 } from "../ipc/project-contracts.js";
 import { ProjectError } from "../project/project-types.js";
 import { ProjectSession, ProjectSessionError } from "./project-session.js";
@@ -37,6 +38,7 @@ export interface ProjectIpcOptions {
   createCompilerAdapter?: () => CompilerAdapter;
   ipcMain: Pick<IpcMain, "handle" | "removeHandler">;
   openPath?: (path: string) => Promise<string>;
+  notifyProjectFileChange?: (change: ProjectFileChange) => void;
   selectProjectDirectory: () => Promise<string | null>;
   showItemInFolder?: (path: string) => void;
   trustedWebContentsId: () => number | null;
@@ -65,10 +67,11 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         return failure("cancelled", "Project selection was cancelled.");
       }
 
-      await projectSession?.cancelBuild();
+      await projectSession?.dispose();
       projectSession = await ProjectSession.open(
         selectedDirectory,
         options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
+        options.notifyProjectFileChange,
       );
       return {
         ok: true,
@@ -204,7 +207,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   );
 
   return () => {
-    void projectSession?.cancelBuild();
+    void projectSession?.dispose();
     for (const channel of Object.values(ALL_CHANNELS)) {
       options.ipcMain.removeHandler(channel);
     }

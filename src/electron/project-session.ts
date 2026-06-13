@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, relative } from "node:path";
 
@@ -11,6 +12,7 @@ import type {
   PdfArtifactRequest,
 } from "../ipc/build-contracts.js";
 import type { OpenProjectResult } from "../ipc/project-contracts.js";
+import type { ProjectFileChange } from "../ipc/project-contracts.js";
 import { loadProjectMetadata } from "../project/project-metadata.js";
 import {
   normalizeProjectPath,
@@ -18,6 +20,7 @@ import {
   toPortableProjectPath,
 } from "../project/project-paths.js";
 import { ProjectService } from "../project/project-service.js";
+import { ProjectWatcher } from "../project/project-watcher.js";
 import type { ProjectMetadata } from "../project/project-types.js";
 
 const MAX_PDF_BYTES = 100 * 1024 * 1024;
@@ -49,11 +52,13 @@ export class ProjectSession {
     private readonly controller: BuildController,
     private readonly metadata: ProjectMetadata,
     private readonly projectDescription: OpenProjectValue,
+    private readonly watcher: ProjectWatcher | null,
   ) {}
 
   static async open(
     projectDirectory: string,
     adapter: CompilerAdapter,
+    onFileChange?: (change: ProjectFileChange) => void,
   ): Promise<ProjectSession> {
     const service = await ProjectService.open(projectDirectory);
     const [entries, rootCandidates] = await Promise.all([
@@ -63,16 +68,43 @@ export class ProjectSession {
     const fallbackRoot = rootCandidates[0]?.path ?? null;
     const metadata = await loadProjectMetadata(service.root, fallbackRoot);
     const rootFile = metadata.metadata.rootFile ?? fallbackRoot;
+    const projectId = createHash("sha256")
+      .update(pathKey(service.root))
+      .digest("hex")
+      .slice(0, 16);
     const controller = new BuildController(adapter, {
       projectDirectory: service.root,
     });
+    const watcher =
+      onFileChange === undefined
+        ? null
+        : new ProjectWatcher({
+            root: service.root,
+            buildDirectory: metadata.metadata.buildDirectory,
+            onChange: (change) => {
+              onFileChange({ ...change, projectId });
+            },
+            onError: (error) => {
+              console.error("Project file watcher failed.", error);
+            },
+            readVersion: async (path) =>
+              (await service.readTextFile(path)).version,
+          });
 
-    return new ProjectSession(service, controller, metadata.metadata, {
-      name: basename(service.root),
-      entries,
-      rootCandidates,
-      rootFile,
-    });
+    return new ProjectSession(
+      service,
+      controller,
+      metadata.metadata,
+      {
+        name: basename(service.root),
+        projectId,
+        entries,
+        rootCandidates,
+        rootFile,
+        autoBuild: metadata.metadata.autoBuild,
+      },
+      watcher,
+    );
   }
 
   describe(): OpenProjectValue {
@@ -83,8 +115,14 @@ export class ProjectSession {
     return this.service.readTextFile(path);
   }
 
-  writeTextFile(path: string, content: string, expectedVersion: string) {
-    return this.service.writeTextFile(path, content, expectedVersion);
+  async writeTextFile(path: string, content: string, expectedVersion: string) {
+    const snapshot = await this.service.writeTextFile(
+      path,
+      content,
+      expectedVersion,
+    );
+    this.watcher?.recordInternalWrite(snapshot.path, snapshot.version);
+    return snapshot;
   }
 
   async compile(rootFile: string): Promise<BuildView> {
@@ -108,6 +146,11 @@ export class ProjectSession {
 
   cancelBuild(): Promise<boolean> {
     return this.controller.cancelActiveBuild();
+  }
+
+  async dispose(): Promise<void> {
+    await this.cancelBuild();
+    await this.watcher?.close();
   }
 
   async loadPdf(request: PdfArtifactRequest): Promise<{

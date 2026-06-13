@@ -1,24 +1,24 @@
 # Test Plan
 
-## Sprint 5 scope
+## Sprint 6 scope
 
-Sprint 5 verifies all existing controls plus manual save-before-compile,
-build/cancel IPC, opaque completed artifacts, PDF.js rendering, viewer-state
-reload, raw logs, current/retained status, open/reveal actions, failed-build
-retention, and missing-output behavior.
+Sprint 6 verifies all existing controls plus serialized autosave, configurable
+debounce, newest-only automatic builds, visible live phases, project watching,
+external-change preservation, workspace restoration, responsive editing, and
+minimum-window layout.
 
-| Check        | Command                 | Current evidence                                      |
-| ------------ | ----------------------- | ----------------------------------------------------- |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                 |
-| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests       |
-| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, and test contracts    |
-| Unit tests   | `pnpm test:unit`        | Core services, build retention, stale workspace state |
-| Component    | `pnpm test:component`   | Project tree and PDF reload state                     |
-| Integration  | `pnpm test:integration` | Compiler, session, completed artifacts, validated IPC |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches        |
-| E2E          | `pnpm test:e2e`         | Electron edit, compile, PDF render, retained failure  |
-| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle     |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                   |
+| Check        | Command                 | Current evidence                                        |
+| ------------ | ----------------------- | ------------------------------------------------------- |
+| Formatting   | `pnpm format:check`     | Prettier checks repository text files                   |
+| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests         |
+| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests      |
+| Unit tests   | `pnpm test:unit`        | Coordinator, persistence, watcher, reducer, core state  |
+| Component    | `pnpm test:component`   | Project tree and PDF reload state                       |
+| Integration  | `pnpm test:integration` | Live flow, watcher, session, compiler, validated IPC    |
+| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches          |
+| E2E          | `pnpm test:e2e`         | Rapid edit through save, compile, restore, and conflict |
+| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle       |
+| Aggregate    | `pnpm check`            | Runs every current gate in sequence                     |
 
 ## Determinism
 
@@ -30,15 +30,23 @@ retention, and missing-output behavior.
   shell metacharacters as distinct arguments.
 - Build-controller tests use fake timers and controlled promises rather than
   arbitrary sleeps.
+- Live-build coordinator tests use fake timers and controlled save/build
+  promises for debounce, queue, cancellation, and setting changes.
+- Project watcher tests use isolated directories and explicit event collection
+  for internal-write suppression, external changes, and ignored generated
+  output.
 - Process-cleanup tests launch a parent and descendant, then verify both process
   IDs are gone after cancellation and timeout.
 - Project tests use isolated temporary directories and cover spaces, Unicode,
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
 - Electron E2E uses an isolated project and development-only folder/compiler
-  overrides, verifies Node globals are absent, persists an edit, renders a valid
-  generated PDF, shows its raw log, retains it after failure, captures a
-  screenshot, closes Electron, and removes the fixture.
+  overrides. It verifies the nine-method bridge and absent Node globals, rapid
+  typing coalescence, queued handoff, non-overlapping compiler trace intervals,
+  newest-result display, disabled auto-build plus manual compile, responsive
+  editing, stale-result rejection, workspace restoration, minimum-window layout,
+  version-conflict preservation, screenshots, clean shutdown, and fixture
+  removal.
 - PDF component tests use controlled PDF.js document/page/render objects and no
   arbitrary sleeps.
 - The fake compiler emits a structurally valid one-page PDF and can
@@ -49,10 +57,10 @@ retention, and missing-output behavior.
 
 ## Later test levels
 
-Sprint 6 adds autosave, debounce, rapid-typing, and rebuild-loop tests.
-Performance benchmarks for 1,000-file projects and measured editor input latency
-remain later release evidence. Real MiKTeX results will always be labeled
-separately and generated PDFs will be inspected.
+Sprint 7 adds structured diagnostics parsing, grouping, navigation, and raw-log
+fallback tests. Performance benchmarks for 1,000-file projects and measured
+editor input latency remain later release evidence. Real MiKTeX results will
+always be labeled separately and generated PDFs will be inspected.
 
 ## Clean-state procedure
 

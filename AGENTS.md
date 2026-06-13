@@ -65,9 +65,10 @@ pnpm texpulse-doctor -- --custom-bin <directory>
 pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 ```
 
-`pnpm test:e2e` builds and exercises the Electron edit/save/compile/PDF
-workflow, including failed-build retention. Packaging begins in Sprint 11, so no
-packaging command exists yet.
+`pnpm test:e2e` builds and exercises rapid editing, autosave, queued
+compilation, newest-result PDF rendering, manual build, restoration, minimum
+window layout, and external-conflict preservation. Packaging begins in Sprint
+11, so no packaging command exists yet.
 
 The compiler service enforces timeout, cancellation, and process-tree cleanup.
 It remains limited to trusted local projects until output bounds and the full
@@ -77,9 +78,14 @@ The project service treats symbolic links and junctions inside an open project
 as non-traversable entries. Text replacement is atomic where supported and
 requires the version token returned by the latest read.
 
+The main-process project watcher does not follow links and ignores generated,
+metadata, dependency, coverage, and distribution directories. It suppresses
+matching editor-originated writes. Watcher events are validated, project-scoped
+notices and never direct save or compile triggers.
+
 The renderer is sandboxed with Node integration disabled. Its frozen preload
-bridge exposes eight fixed project/build/PDF methods. PDF paths remain in the
-main process as actionable values, and renderer PDF loads require an active
+bridge exposes nine fixed project/build/PDF/event methods. PDF paths remain in
+the main process as actionable values, and renderer PDF loads require an active
 opaque artifact token. Raw compiler logs may contain local path text.
 
 ## Completion checklist

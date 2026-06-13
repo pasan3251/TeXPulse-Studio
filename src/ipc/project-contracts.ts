@@ -43,6 +43,14 @@ const textFileSnapshotSchema = z
   })
   .strict();
 
+export const projectFileChangeSchema = z
+  .object({
+    projectId: z.string().regex(/^[a-f0-9]{16}$/u),
+    path: z.string().min(1).max(4_096),
+    kind: z.enum(["added", "changed", "deleted"]),
+  })
+  .strict();
+
 export const apiErrorSchema = z
   .object({
     code: z.enum([
@@ -81,9 +89,11 @@ export const openProjectResultSchema = z.discriminatedUnion("ok", [
       value: z
         .object({
           name: z.string().min(1),
+          projectId: z.string().regex(/^[a-f0-9]{16}$/u),
           entries: z.array(projectEntrySchema),
           rootCandidates: z.array(rootCandidateSchema),
           rootFile: z.string().nullable(),
+          autoBuild: z.boolean(),
         })
         .strict(),
     })
@@ -103,6 +113,7 @@ export type ReadTextFileResult = z.infer<typeof readTextFileResultSchema>;
 export type WriteTextFileResult = z.infer<typeof writeTextFileResultSchema>;
 export type ProjectPathRequest = z.infer<typeof projectPathRequestSchema>;
 export type ProjectWriteRequest = z.infer<typeof projectWriteRequestSchema>;
+export type ProjectFileChange = z.infer<typeof projectFileChangeSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export { PROJECT_CHANNELS } from "./channels.js";

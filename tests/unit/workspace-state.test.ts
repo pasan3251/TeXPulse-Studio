@@ -9,9 +9,11 @@ import type { BuildView } from "../../src/ipc/build-contracts.js";
 
 const project = {
   name: "paper",
+  projectId: "a".repeat(16),
   entries: [],
   rootCandidates: [],
   rootFile: "main.tex",
+  autoBuild: true,
 };
 
 function file(path: string, content: string, version = "a".repeat(64)) {
@@ -225,5 +227,167 @@ describe("workspaceReducer", () => {
     });
 
     expect(state.build?.generation).toBe(2);
+  });
+
+  it("restores open files, views, settings, and pane geometry", () => {
+    const settings = {
+      autosave: false,
+      autoBuild: false,
+      debounceMs: 1200,
+    };
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "project-opened",
+      project,
+      paneRatio: 0.64,
+      settings,
+    });
+    state = workspaceReducer(state, {
+      type: "files-restored",
+      files: [file("main.tex", "main"), file("intro.tex", "intro")],
+      activePath: "intro.tex",
+      views: {
+        "main.tex": { cursor: 4, scrollTop: 90 },
+      },
+    });
+
+    expect(state).toMatchObject({
+      activePath: "intro.tex",
+      paneRatio: 0.64,
+      settings,
+      buffers: {
+        "main.tex": { cursor: 4, scrollTop: 90 },
+        "intro.tex": { cursor: 0, scrollTop: 0 },
+      },
+    });
+
+    const fallback = workspaceReducer(initialWorkspaceState, {
+      type: "files-restored",
+      files: [file("main.tex", "main")],
+      activePath: "missing.tex",
+      views: {},
+    });
+    expect(fallback.activePath).toBe("main.tex");
+  });
+
+  it("handles silent saves, phase notices, and workspace controls", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "file-opened",
+      file: file("main.tex", "one"),
+    });
+    const unchanged = workspaceReducer(state, {
+      type: "content-changed",
+      path: "missing.tex",
+      content: "ignored",
+    });
+    expect(unchanged).toBe(state);
+    expect(
+      workspaceReducer(state, {
+        type: "view-state-changed",
+        path: "missing.tex",
+        cursor: 1,
+        scrollTop: 1,
+      }),
+    ).toBe(state);
+    expect(
+      workspaceReducer(state, {
+        type: "save-succeeded",
+        file: file("missing.tex", "ignored"),
+      }),
+    ).toBe(state);
+
+    state = workspaceReducer(state, {
+      type: "external-change-detected",
+      message: "keep this notice",
+    });
+    state = workspaceReducer(state, {
+      type: "save-succeeded",
+      file: file("main.tex", "one", "b".repeat(64)),
+      announce: false,
+    });
+    expect(state.notice).toBe("keep this notice");
+
+    state = workspaceReducer(state, {
+      type: "build-phase-changed",
+      phase: "queued",
+    });
+    expect(state.notice).toBe("keep this notice");
+    state = workspaceReducer(state, {
+      type: "build-phase-changed",
+      phase: "saving",
+    });
+    expect(state.notice).toBeNull();
+
+    state = workspaceReducer(state, {
+      type: "pane-ratio-changed",
+      paneRatio: 0.7,
+    });
+    state = workspaceReducer(state, {
+      type: "settings-changed",
+      settings: { autosave: false, autoBuild: true, debounceMs: 400 },
+    });
+    state = workspaceReducer(state, { type: "log-toggled" });
+    expect(state).toMatchObject({
+      paneRatio: 0.7,
+      settings: { autosave: false, autoBuild: true, debounceMs: 400 },
+      logOpen: true,
+    });
+  });
+
+  it("rejects stale PDF loads and contains operation failures", () => {
+    const build = successfulBuild();
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "build-finished",
+      build,
+    });
+    const staleLoad = workspaceReducer(state, {
+      type: "pdf-loaded",
+      artifact: { ...build.visiblePdf!, generation: 2 },
+      data: new Uint8Array([9]),
+    });
+    expect(staleLoad).toBe(state);
+
+    state = workspaceReducer(
+      { ...state, loadingPath: "main.tex", savingPaths: ["main.tex"] },
+      {
+        type: "operation-failed",
+        message: "failed",
+        path: "main.tex",
+      },
+    );
+    expect(state).toMatchObject({
+      loadingPath: null,
+      savingPaths: [],
+      notice: "failed",
+    });
+    state = workspaceReducer(state, {
+      type: "operation-failed",
+      message: "global",
+    });
+    expect(state.notice).toBe("global");
+    state = workspaceReducer(state, { type: "notice-dismissed" });
+    expect(state.notice).toBeNull();
+    state = workspaceReducer(state, {
+      type: "build-operation-failed",
+      message: "build failed",
+    });
+    expect(state).toMatchObject({
+      buildPhase: "idle",
+      notice: "build failed",
+    });
+  });
+
+  it("uses the build status when a failure has no reason", () => {
+    const state = workspaceReducer(initialWorkspaceState, {
+      type: "build-finished",
+      build: {
+        ...successfulBuild(),
+        status: "cancelled",
+        failureReason: null,
+        visiblePdf: null,
+      },
+    });
+
+    expect(state.notice).toBe("Build cancelled.");
+    expect(state.logOpen).toBe(true);
   });
 });
