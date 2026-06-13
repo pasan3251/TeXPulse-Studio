@@ -34,6 +34,8 @@ changing code and treat it as the authoritative product specification.
 - Native Windows 11 x64 environment.
 - Node.js 24.x.
 - pnpm 10.12.1, provisioned with Corepack.
+- MiKTeX with `latexmk`.
+- Native Windows Perl on `PATH` because MiKTeX's `latexmk` requires it.
 
 If the global Corepack directory is not writable, create user-level shims:
 
@@ -51,14 +53,19 @@ pnpm lint
 pnpm typecheck
 pnpm test:unit
 pnpm test:integration
+pnpm test:coverage
 pnpm test:e2e
 pnpm build
 pnpm check
+pnpm texpulse-doctor -- --custom-bin <directory>
+pnpm texpulse-compile -- --project <directory> --root main.tex
 ```
 
-`pnpm test:integration` and `pnpm test:e2e` currently report that no applicable
-product surface exists. Packaging begins in Sprint 11, so no packaging command
-exists in Sprint 0.
+`pnpm test:e2e` currently reports that no applicable UI surface exists.
+Packaging begins in Sprint 11, so no packaging command exists yet.
+
+The compiler prototype is for trusted local developer projects only until Sprint
+2 adds timeout, cancellation, and process-tree cleanup.
 
 ## Completion checklist
 

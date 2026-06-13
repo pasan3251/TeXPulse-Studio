@@ -1,10 +1,23 @@
 # Security
 
-## Sprint 0 posture
+## Sprint 1 posture
 
-Sprint 0 adds no network service, Electron renderer, filesystem API, compiler
-execution, telemetry, or production dependency. Its attack surface is limited to
-development tooling and CI configuration.
+Sprint 1 adds trusted-local-project compiler execution outside Electron. It adds
+no network service, renderer, telemetry, or production dependency.
+
+The prototype:
+
+- uses `spawn(executable, args, { shell: false })`;
+- passes paths as argument-array entries;
+- validates the project and root file through canonical paths;
+- rejects build paths that lexically or through filesystem links leave the
+  project;
+- writes output under `.texpulse/build` by default;
+- passes `-norc` and `-no-shell-escape`;
+- reports only output paths that exist.
+
+It is not approved for untrusted TeX input because timeout, cancellation,
+process-tree cleanup, and output bounds are scheduled for later sprints.
 
 ## Product security invariants
 
@@ -26,6 +39,8 @@ development tooling and CI configuration.
 - CI uses a frozen lockfile.
 - Dependency vulnerability review is a release gate under `NFR-SEC-012`.
 - Security findings must not be hidden by disabling tests or lint rules.
+- Pure compiler/toolchain modules enforce at least 85% statement and branch
+  coverage.
 
 ## Future work
 

@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "texpulse-compile": "./dist/cli/compile.js",
+    "texpulse-doctor": "./dist/cli/doctor.js"
+  },
   "packageManager": "pnpm@10.12.1",
   "engines": {
     "node": ">=24 <25",
@@ -15,18 +19,22 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:e2e && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:coverage && pnpm test:e2e && pnpm build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test:e2e": "node ./scripts/no-tests-yet.mjs e2e",
-    "test:integration": "node ./scripts/no-tests-yet.mjs integration",
-    "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration",
+    "test:unit": "vitest run tests/unit",
+    "texpulse-compile": "pnpm build && node ./dist/cli/compile.js",
+    "texpulse-doctor": "pnpm build && node ./dist/cli/doctor.js",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@eslint/js": "9.29.0",
     "@types/node": "24.0.3",
+    "@vitest/coverage-v8": "4.1.8",
     "eslint": "9.29.0",
     "globals": "16.2.0",
     "prettier": "3.5.3",

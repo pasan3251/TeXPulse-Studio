@@ -1,10 +1,10 @@
 # TeXPulse Studio
 
-TeXPulse Studio is a planned offline Windows LaTeX editor with local MiKTeX
-compilation and side-by-side PDF preview.
+TeXPulse Studio is an offline Windows LaTeX editor under incremental
+development. Sprint 1 provides a local MiKTeX toolchain doctor and minimal
+compile CLI outside Electron.
 
-Sprint 0 establishes repository and engineering controls only. It intentionally
-contains no Electron window, editor, compiler adapter, or PDF viewer.
+There is no Electron window, editor, or PDF viewer yet.
 
 ## Requirements
 
@@ -12,9 +12,8 @@ contains no Electron window, editor, compiler adapter, or PDF viewer.
 - Node.js 24.x
 - pnpm 10.12.1 through Corepack
 - Git
-
-MiKTeX, `latexmk`, and SyncTeX are required by later compiler sprints, not by
-the Sprint 0 quality gate.
+- MiKTeX with `latexmk`
+- Native Windows Perl available on `PATH`
 
 ## Setup
 
@@ -31,8 +30,38 @@ pnpm check
 ```
 
 The aggregate command runs formatting, linting, strict type checking, unit
-tests, the current integration and E2E status commands, and the TypeScript
-build.
+tests, fake-process integration tests, pure-module coverage, the current E2E
+status command, and the TypeScript build.
+
+## Toolchain doctor
+
+Run the real isolated compile self-test:
+
+```powershell
+pnpm texpulse-doctor
+```
+
+Use a custom executable directory when needed:
+
+```powershell
+pnpm texpulse-doctor -- --custom-bin C:\Strawberry\perl\bin
+```
+
+The command emits structured JSON and reports readiness only after the compile
+self-test succeeds, unless `--skip-self-test` is explicitly supplied.
+
+## Minimal compile CLI
+
+```powershell
+pnpm texpulse-compile -- --project fixtures\minimal-success --root main.tex
+```
+
+Output defaults to `<project>\.texpulse\build`. Supported prototype recipes are
+`pdf`, `xelatex`, and `lualatex`.
+
+This developer prototype accepts trusted local projects only. Timeout,
+cancellation, process-tree cleanup, generations, and stale-result control are
+Sprint 2 work.
 
 ## Documentation
 
@@ -44,3 +73,4 @@ build.
 - Sprint status: `docs/SPRINT_STATUS.md`
 - Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
 - Sprint 0 report: `docs/reports/SPRINT-0.md`
+- Sprint 1 report: `docs/reports/SPRINT-1.md`

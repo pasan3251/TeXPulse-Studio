@@ -21,6 +21,15 @@ Run the complete current quality gate:
 pnpm check
 ```
 
+For compiler work, use the fake-process integration suite for deterministic
+automation and label real MiKTeX evidence separately:
+
+```powershell
+pnpm test:integration
+pnpm test:coverage
+pnpm texpulse-doctor
+```
+
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to
 make a change pass.

@@ -44,9 +44,12 @@ describe("engineering controls", () => {
         "check",
         "format:check",
         "lint",
+        "test:coverage",
         "test:e2e",
         "test:integration",
         "test:unit",
+        "texpulse-compile",
+        "texpulse-doctor",
         "typecheck",
       ]),
     );

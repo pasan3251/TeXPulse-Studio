@@ -20,15 +20,42 @@ unverified environment.
 ## `latexmk` reports that Perl is missing
 
 MiKTeX's `latexmk` launcher requires a Perl interpreter. Install a supported
-native Windows Perl distribution, ensure `perl.exe` is on `PATH`, then rerun
-`latexmk --version`. This is a Sprint 1 prerequisite and does not affect the
-Sprint 0 quality gate.
+native Windows Perl distribution, ensure `perl.exe` is on `PATH`, then rerun:
+
+```powershell
+latexmk --version
+pnpm texpulse-doctor
+```
+
+Strawberry Perl can be installed with:
+
+```powershell
+winget install --id StrawberryPerl.StrawberryPerl --exact
+```
+
+If the current terminal predates the installation, open a new terminal or pass
+the directory explicitly:
+
+```powershell
+pnpm texpulse-doctor -- --custom-bin C:\Strawberry\perl\bin
+```
 
 ## MiKTeX update warning
 
 Open MiKTeX Console and check for updates before the first real compiler smoke
 test. Do not report toolchain readiness until the real self-test defined by the
 SRS succeeds.
+
+## MakeIndex version is unknown
+
+The MiKTeX MakeIndex executable is runnable but does not expose a parseable
+version flag. The doctor reports the executable path and a warning rather than
+inventing a version.
+
+## Compile output is missing
+
+Inspect the JSON `failureReason`, `exitCode`, `stdout`, and `stderr`. Successful
+prototype output should exist under `<project>\.texpulse\build`.
 
 ## WSL detected
 
