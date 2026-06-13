@@ -21,6 +21,19 @@ Run the complete current quality gate:
 pnpm check
 ```
 
+For editor work, run the focused renderer and Electron suites:
+
+```powershell
+pnpm test:component
+pnpm test:e2e
+pnpm app:start
+```
+
+Keep renderer code unprivileged. New capabilities must use narrow typed preload
+methods, validate IPC requests and responses in the main process, and preserve
+project-relative path boundaries. Do not expose `ipcRenderer`, Node globals, or
+absolute project roots to the renderer.
+
 For compiler work, use the fake-process integration suite for deterministic
 automation and label real MiKTeX evidence separately:
 
@@ -37,6 +50,10 @@ For project-filesystem work, preserve the canonical-root boundary, reject
 internal links and junctions, and use read-version tokens for destructive file
 replacement. Add integration coverage for Windows path behavior, Unicode,
 external modifications, and read-only failures.
+
+For React changes, preserve keyboard access, accessible names, visible
+non-color-only states, and the CodeMirror cursor/scroll contract. Add component
+or Electron E2E coverage for user-visible workflows.
 
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to

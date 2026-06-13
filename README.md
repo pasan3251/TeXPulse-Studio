@@ -1,12 +1,13 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 3 provides a bounded local project service with safe file
-CRUD, root detection, atomic versioned saves, project metadata, build-output
-ignore rules, and recent-project persistence. The Sprint 2 MiKTeX compiler
-service remains available.
+development. Sprint 4 provides a secure Electron shell, hierarchical project
+explorer, and CodeMirror 6 editor with modified-state tracking, Save, Save All,
+cursor/scroll restoration, and visible external-change conflicts. Project files
+remain behind a validated main-process IPC boundary.
 
-There is no Electron window, editor, or PDF viewer yet.
+Compilation UI and PDF preview begin in Sprint 5. The existing Sprint 2 compiler
+service remains available through its developer CLI.
 
 ## Requirements
 
@@ -25,15 +26,21 @@ corepack enable pnpm --install-directory "$(npm config get prefix)"
 pnpm install --frozen-lockfile
 ```
 
+Start the desktop editor:
+
+```powershell
+pnpm app:start
+```
+
 ## Quality gate
 
 ```powershell
 pnpm check
 ```
 
-The aggregate command runs formatting, linting, strict type checking, unit
-tests, fake-process integration tests, pure-module coverage, the current E2E
-status command, and the TypeScript build.
+The aggregate command runs formatting, linting, strict type checking, unit,
+component, integration, coverage, and Electron E2E tests, then creates the
+production main, renderer, and preload bundles.
 
 ## Toolchain doctor
 
@@ -65,6 +72,24 @@ and `lualatex`. Pressing `Ctrl+C` cancels the active compiler tree.
 This developer service accepts trusted local projects only. Compiler output
 bounding and the complete threat model remain later hardening work.
 
+## Desktop editor
+
+The Sprint 4 application:
+
+- opens an existing local project folder;
+- renders the bounded project entry list as a hierarchy;
+- edits valid UTF-8 project text with LaTeX highlighting, undo/redo, find, and
+  replace;
+- tracks modified files and preserves cursor/scroll state across switches;
+- saves one file or all modified files through version-checked atomic writes;
+- reports external-change conflicts without replacing either local unsaved
+  content or the external file; and
+- denies renderer Node access, arbitrary filesystem access, navigation, popups,
+  webviews, and permissions.
+
+The renderer receives project-relative paths only. It cannot access the
+filesystem except through the three-method typed preload bridge.
+
 ## Project service
 
 The typed modules under `src/project/`:
@@ -77,8 +102,6 @@ The typed modules under `src/project/`:
 - rank likely LaTeX root files;
 - validate `.texpulse/project.json`; and
 - persist a bounded recent-project list at an injected application-data path.
-
-The Electron shell and editor integration begin in Sprint 4.
 
 ## Documentation
 
@@ -93,3 +116,4 @@ The Electron shell and editor integration begin in Sprint 4.
 - Sprint 1 report: `docs/reports/SPRINT-1.md`
 - Sprint 2 report: `docs/reports/SPRINT-2.md`
 - Sprint 3 report: `docs/reports/SPRINT-3.md`
+- Sprint 4 report: `docs/reports/SPRINT-4.md`

@@ -134,3 +134,51 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Project service: `../src/project/`
 - Unit and integration tests: `../tests/unit/` and `../tests/integration/`
 - Filesystem decision: `adr/ADR-0005-project-filesystem-boundary.md`
+
+## Sprint 4
+
+| Requirement     | Sprint 4 evidence                                            | Status                       |
+| --------------- | ------------------------------------------------------------ | ---------------------------- |
+| `FR-PROJ-001`   | Folder chooser opens one bounded `ProjectService` session    | UI complete                  |
+| `FR-PROJ-003`   | Flat entries render as a deterministic hierarchical tree     | Complete                     |
+| `FR-EDIT-001`   | Valid UTF-8 project text opens in CodeMirror                 | Current scope complete       |
+| `FR-EDIT-002`   | CodeMirror `stex` language mode highlights LaTeX             | Complete                     |
+| `FR-EDIT-003`   | CodeMirror basic setup supplies undo and redo                | Complete                     |
+| `FR-EDIT-004`   | CodeMirror basic setup supplies find and replace             | Complete                     |
+| `FR-EDIT-005`   | Tree, tab, and status bar expose modified state              | Complete                     |
+| `FR-EDIT-006`   | Toolbar saves the active file or all modified files          | Complete                     |
+| `FR-EDIT-007`   | Reducer and E2E QA preserve cursor and scroll per file       | Complete                     |
+| `FR-EDIT-009`   | Word wrapping enabled; font-size configuration remains later | Partial                      |
+| `FR-EDIT-010`   | Editing remains independent while async saves are pending    | Foundation; build UI later   |
+| `FR-SAVE-003`   | Save failures are visible and remain dirty                   | UI scope complete            |
+| `FR-SAVE-005`   | Version conflict preserves local buffer and external file    | UI scope complete            |
+| `NFR-PERF-001`  | CodeMirror edits update local state without waiting for I/O  | Current scope complete       |
+| `NFR-PERF-002`  | No blocking I/O in input path; measured benchmark remains    | Foundation                   |
+| `NFR-PERF-005`  | Async enumeration plus memoized hierarchy construction       | Foundation; scale test later |
+| `NFR-SEC-001`   | Electron checklist controls recorded in ADR-0006             | Current scope complete       |
+| `NFR-SEC-002`   | BrowserWindow and E2E assert no renderer Node integration    | Complete                     |
+| `NFR-SEC-003`   | BrowserWindow enables context isolation                      | Complete                     |
+| `NFR-SEC-004`   | Frozen preload exposes exactly three project methods         | Complete                     |
+| `NFR-SEC-005`   | Strict request/response schemas and sender/frame checks      | Complete                     |
+| `NFR-SEC-006`   | IPC delegates all paths to canonical `ProjectService` checks | Current scope complete       |
+| `NFR-SEC-010`   | External navigation and new windows are denied               | Current scope complete       |
+| `NFR-SEC-011`   | Local-only renderer CSP disallows scripts/eval/network       | Complete                     |
+| `NFR-PRIV-001`  | Project source remains local                                 | Complete for Sprint 4        |
+| `NFR-PRIV-002`  | No analytics or telemetry added                              | Complete for Sprint 4        |
+| `NFR-MAINT-002` | Typed renderer, preload, IPC, and result contracts           | Current scope complete       |
+| `NFR-MAINT-003` | Electron, IPC, renderer state, and tree modules are separate | Current scope complete       |
+| `NFR-MAINT-004` | ADR-0006 records the Electron security boundary              | Complete for Sprint 4        |
+| `NFR-MAINT-005` | Reducer, component, IPC, and E2E tests use controlled inputs | Complete for Sprint 4        |
+| `NFR-UX-001`    | Core toolbar, tree, and editor actions are keyboard usable   | Current scope complete       |
+| `NFR-UX-003`    | Native control order and editor focus provide logical flow   | Current scope complete       |
+| `NFR-UX-004`    | Controls, tree, editor, status, and dismiss action are named | Current scope complete       |
+| `AS-009`        | Traversal IPC returns `path-escape` and logs a warning       | Complete                     |
+
+### Sprint 4 evidence
+
+- Sprint report: `reports/SPRINT-4.md`
+- Electron and preload: `../src/electron/`
+- Typed IPC contracts: `../src/ipc/`
+- Renderer and editor: `../src/renderer/`
+- Unit, component, integration, and E2E tests: `../tests/`
+- Security decision: `adr/ADR-0006-secure-electron-shell-and-ipc.md`

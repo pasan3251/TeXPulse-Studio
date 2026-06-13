@@ -4,7 +4,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 interface PackageManifest {
-  dependencies?: unknown;
+  dependencies?: Record<string, string>;
   packageManager?: string;
   scripts?: Record<string, string>;
 }
@@ -37,13 +37,22 @@ describe("engineering controls", () => {
     const manifest = await readJson<PackageManifest>("package.json");
 
     expect(manifest.packageManager).toBe("pnpm@10.12.1");
-    expect(manifest.dependencies).toBeUndefined();
+    expect(manifest.dependencies).toEqual(
+      expect.objectContaining({
+        codemirror: expect.any(String),
+        react: expect.any(String),
+        "react-dom": expect.any(String),
+        zod: expect.any(String),
+      }),
+    );
     expect(Object.keys(manifest.scripts ?? {})).toEqual(
       expect.arrayContaining([
+        "app:start",
         "build",
         "check",
         "format:check",
         "lint",
+        "test:component",
         "test:coverage",
         "test:e2e",
         "test:integration",

@@ -1,11 +1,12 @@
 # Security
 
-## Sprint 3 posture
+## Sprint 4 posture
 
-Sprint 3 adds a project filesystem service outside Electron. It adds no network
-service, renderer, telemetry, or production dependency.
+Sprint 4 adds the first Electron renderer and keeps it outside the trusted
+computing boundary. It adds no network service, telemetry, remote content,
+compiler UI, or PDF viewer.
 
-The prototype:
+The application:
 
 - uses `spawn(executable, args, { shell: false })`;
 - passes paths as argument-array entries;
@@ -33,6 +34,22 @@ The prototype:
 - reports changed or deleted external files explicitly;
 - validates project metadata and safely falls back with issues; and
 - ignores generated and dependency directories during project enumeration.
+- enables the Electron sandbox before app readiness;
+- uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
+  `webSecurity: true`;
+- disables renderer Node access in frames and workers;
+- exposes only three frozen preload methods, never `ipcRenderer`;
+- validates the sending web contents and main frame for every IPC call;
+- validates every IPC request and response with strict Zod schemas;
+- keeps the absolute project root out of renderer responses;
+- denies permission requests, popups, webviews, and unexpected navigation;
+- disables DevTools for production and packaged windows; and
+- applies a local-only Content Security Policy with no network connections,
+  objects, forms, external bases, inline scripts, or evaluated scripts.
+
+CodeMirror injects runtime styles, so the CSP currently permits inline styles.
+Inline and evaluated scripts remain disallowed. This exception is documented in
+ADR-0006 and must not be widened to scripts.
 
 It is not approved for untrusted TeX input because compiler output is not yet
 bounded and the complete threat model is scheduled for Sprint 10.
@@ -61,9 +78,13 @@ bounded and the complete threat model is scheduled for Sprint 10.
 - Security findings must not be hidden by disabling tests or lint rules.
 - Covered pure compiler, project, and toolchain modules enforce at least 85%
   aggregate statement and branch coverage.
+- Electron and renderer dependencies are pinned exactly and audited through the
+  same frozen lockfile.
 
 ## Future work
 
-A detailed threat model, trusted-project policy, IPC schema, and TeX execution
-review are required before the corresponding features ship. ADR-0005 defines the
-current conservative path/link policy.
+A detailed threat model, trusted-project policy, bounded compiler output, and
+TeX execution review remain required before release. Live file watching,
+external URL handling, PDF loading, and any new preload capability require their
+own validated contracts and tests. ADR-0005 defines the path/link policy;
+ADR-0006 defines the Electron and IPC boundary.

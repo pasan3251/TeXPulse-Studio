@@ -1,27 +1,29 @@
 # Test Plan
 
-## Sprint 3 scope
+## Sprint 4 scope
 
-Sprint 3 verifies repository controls, the existing compiler/build services,
-canonical project boundaries, ignore rules, root detection, UTF-8 CRUD, atomic
-versioned saves, metadata fallback, recent-project persistence, external-change
-conflicts, and link/junction rejection.
+Sprint 4 verifies all existing compiler/project controls plus the secure
+BrowserWindow configuration, preload/API contracts, trusted-sender IPC, renderer
+workspace state, project hierarchy, modified indicators, CodeMirror editing,
+versioned saves, external-change notices, and the real Electron open/edit/save
+workflow.
 
-| Check        | Command                 | Current evidence                                     |
-| ------------ | ----------------------- | ---------------------------------------------------- |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                |
-| Linting      | `pnpm lint`             | ESLint checks JavaScript and TypeScript              |
-| Strict types | `pnpm typecheck`        | TypeScript strict project check                      |
-| Unit tests   | `pnpm test:unit`        | Paths, roots, metadata, build states, toolchain      |
-| Integration  | `pnpm test:integration` | Project CRUD/conflicts plus compiler process cleanup |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% statements and branches on pure modules |
-| E2E          | `pnpm test:e2e`         | Explicitly reports no UI surface                     |
-| Build        | `pnpm build`            | Emits library modules and both CLI entry points      |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                  |
+| Check        | Command                 | Current evidence                                      |
+| ------------ | ----------------------- | ----------------------------------------------------- |
+| Formatting   | `pnpm format:check`     | Prettier checks repository text files                 |
+| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests       |
+| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, and test contracts    |
+| Unit tests   | `pnpm test:unit`        | Core services, window options, tree, workspace state  |
+| Component    | `pnpm test:component`   | Hierarchy, active/modified states, inert link entries |
+| Integration  | `pnpm test:integration` | Project/compiler processes and validated Electron IPC |
+| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches        |
+| E2E          | `pnpm test:e2e`         | Real Electron open, edit, save, and bridge isolation  |
+| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle     |
+| Aggregate    | `pnpm check`            | Runs every current gate in sequence                   |
 
 ## Determinism
 
-- Automated tests use no network, MiKTeX, Electron process, or arbitrary sleep.
+- Automated tests use no network or MiKTeX and avoid arbitrary sleeps.
 - The strict-mode test creates an isolated temporary TypeScript source and
   requires diagnostic `TS7006`.
 - The CI test parses `.github/workflows/ci.yml` and verifies the Windows runner.
@@ -34,13 +36,18 @@ conflicts, and link/junction rejection.
 - Project tests use isolated temporary directories and cover spaces, Unicode,
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
+- Electron E2E uses an isolated temporary project and a development-only test
+  folder override, verifies Node globals are absent, persists an edit, captures
+  a screenshot, closes Electron, and removes the fixture.
+- Interactive Electron QA covers Save All, stale external writes, notice
+  dismissal, file switching, cursor/scroll restoration, and compact layout.
 - Real MiKTeX smoke evidence is run separately from deterministic automation.
 
 ## Later test levels
 
-The SRS requires unit, component, integration, E2E, manual, security, and
-performance tests as relevant product surfaces arrive. Fake compilers will be
-used for deterministic automation. Real MiKTeX results will always be labeled
+Sprint 5 adds deterministic fake-compiler UI tests and PDF rendering checks.
+Performance benchmarks for 1,000-file projects and measured editor input latency
+remain later release evidence. Real MiKTeX results will always be labeled
 separately and generated PDFs will be inspected.
 
 ## Clean-state procedure

@@ -17,6 +17,32 @@ Sprint 0 requires Node.js 24.x and pnpm 10.12.1. The repository enables strict
 engine checks, so unsupported versions fail installation instead of producing an
 unverified environment.
 
+## Electron did not download during install
+
+Electron's package script downloads the pinned Windows runtime. Confirm that
+`electron` is allowed under `onlyBuiltDependencies`, that GitHub release assets
+are reachable, and rerun:
+
+```powershell
+pnpm install --frozen-lockfile
+```
+
+Do not substitute an unverified executable. Any manual recovery must verify the
+release archive against Electron's published checksum before extraction.
+
+## The desktop window is blank
+
+Build all three application surfaces and restart Electron:
+
+```powershell
+pnpm build
+pnpm app:start
+```
+
+Renderer assets live under `dist/renderer`; the sandbox preload must be
+`dist/electron/preload.cjs`. Packaged/production windows intentionally disable
+DevTools.
+
 ## `latexmk` reports that Perl is missing
 
 MiKTeX's `latexmk` launcher requires a Perl interpreter. Install a supported
@@ -79,7 +105,8 @@ shell so descendant Perl and TeX processes are terminated with the launcher.
 
 Every text read returns a content version token. If another program changes the
 file before TeXPulse saves, the write fails with a `conflict` error and leaves
-the external content intact. Reload or reconcile the content before retrying.
+the external content and unsaved editor buffer intact. Reopen or reconcile the
+content before retrying.
 
 ## Project path is rejected
 

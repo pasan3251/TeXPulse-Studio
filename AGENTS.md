@@ -54,16 +54,18 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test:unit
+pnpm test:component
 pnpm test:integration
 pnpm test:coverage
 pnpm test:e2e
 pnpm build
 pnpm check
+pnpm app:start
 pnpm texpulse-doctor -- --custom-bin <directory>
 pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 ```
 
-`pnpm test:e2e` currently reports that no applicable UI surface exists.
+`pnpm test:e2e` builds and exercises the Electron open/edit/save workflow.
 Packaging begins in Sprint 11, so no packaging command exists yet.
 
 The compiler service enforces timeout, cancellation, and process-tree cleanup.
@@ -73,6 +75,9 @@ security hardening sprint are complete.
 The project service treats symbolic links and junctions inside an open project
 as non-traversable entries. Text replacement is atomic where supported and
 requires the version token returned by the latest read.
+
+The renderer is sandboxed with Node integration disabled. Its frozen preload
+bridge exposes only open-project, read-text-file, and write-text-file methods.
 
 ## Completion checklist
 

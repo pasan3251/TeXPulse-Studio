@@ -1,6 +1,9 @@
 coverage/
 dist/
 node_modules/
+output/
+playwright-report/
+test-results/
 .texpulse/
 *.log
 .DS_Store

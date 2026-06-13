@@ -2,7 +2,7 @@
 
 ## Current state
 
-Sprint 3 adds a safe project service beside the Sprint 2 compiler service:
+Sprint 4 connects the safe project service to the first desktop application:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
@@ -15,24 +15,55 @@ Sprint 3 adds a safe project service beside the Sprint 2 compiler service:
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
   project metadata, and recent-project storage.
+- `ipc/`: strict Zod request/response schemas and stable channel names.
+- `electron/`: sandboxed BrowserWindow construction, permission/navigation
+  denial, trusted-sender IPC handlers, and a frozen three-method preload bridge.
+- `renderer/`: React workspace state, deterministic project hierarchy,
+  CodeMirror 6 LaTeX editor, error boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no Electron application, renderer, editor, diagnostics parser, or
-PDF viewer.
+There is still no compiler UI, diagnostics parser, live file watcher, SyncTeX
+UI, or PDF viewer.
 
-## Planned system boundaries
+## System boundaries
 
-The SRS defines these future boundaries:
+The implemented and planned boundaries are:
 
-1. An untrusted Electron renderer for React, CodeMirror, and PDF.js.
-2. A narrow typed preload bridge with validated IPC contracts.
-3. A privileged main process for project files, settings, and process control.
+1. An untrusted sandboxed Electron renderer for React and CodeMirror; PDF.js is
+   added later.
+2. A narrow typed preload bridge with no raw `ipcRenderer` exposure.
+3. A privileged main process that validates sender, frame, request, response,
+   and project path before filesystem work.
 4. A compiler adapter interface separating MiKTeX/`latexmk` from application
    state and deterministic fake compilers used by tests.
 5. Pure modules for path validation, build generations, diagnostics, settings,
    and SyncTeX parsing.
 
-## Sprint 3 project flow
+## Sprint 4 editor flow
+
+```text
+renderer action
+  -> frozen preload method
+  -> fixed IPC channel
+  -> trusted webContents and main-frame check
+  -> strict Zod request validation
+  -> active ProjectService
+  -> canonical project boundary and versioned file operation
+  -> strict Zod response validation
+  -> reducer-owned renderer buffer state
+```
+
+The renderer receives a project basename, relative entries, root candidates, and
+relative file snapshots. It never receives the canonical absolute project root.
+File reads may complete out of order; stale completions populate cache but
+cannot replace the newest selection.
+
+CodeMirror owns editing behavior while the reducer owns source buffers, saved
+content, version tokens, active file, modified state, cursor, scroll, pending
+saves, and user notices. Editor input remains independent of asynchronous file
+I/O.
+
+## Project flow
 
 ```text
 project directory
@@ -80,6 +111,8 @@ after the self-test, so it does not modify user projects.
 
 - Electron renderer Node integration remains disabled.
 - Context isolation remains enabled.
+- Renderer sandboxing remains enabled.
+- Popups, navigation, webviews, and permissions remain denied by default.
 - User-controlled paths and IPC payloads are validated.
 - Compiler commands use executable and argument arrays, never ordinary
   `shell: true`.
@@ -88,6 +121,7 @@ after the self-test, so it does not modify user projects.
 - Source files remain local and are not silently rewritten.
 - Project-internal links and junctions are visible but not traversed.
 - File replacement requires a matching content version token.
+- The renderer never receives unrestricted IPC or filesystem primitives.
 
 ## Decision records
 
@@ -96,5 +130,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0003-compiler-prototype-safety.md`
 - `adr/ADR-0004-build-orchestration-and-process-cleanup.md`
 - `adr/ADR-0005-project-filesystem-boundary.md`
+- `adr/ADR-0006-secure-electron-shell-and-ipc.md`
 
 Packaging and PDF loading require later ADRs before implementation.
