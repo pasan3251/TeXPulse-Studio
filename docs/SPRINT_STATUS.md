@@ -10,7 +10,8 @@
 | Sprint 5     | Complete on 2026-06-13 | Manual compilation and PDF preview                      |
 | Sprint 6     | Complete on 2026-06-14 | Autosave, live compilation, watching, restoration       |
 | Sprint 7     | Complete on 2026-06-14 | Structured diagnostics, Problems panel, source links    |
-| Sprints 8-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 8     | Complete on 2026-06-14 | SyncTeX forward and inverse navigation                  |
+| Sprints 9-14 | Not started            | See `docs/SRS.md`                                       |
 
 ## Completed scope
 
@@ -56,6 +57,11 @@ raw-log fallback; golden, malformed, multi-file, component, integration, and
 Electron E2E coverage; and native MiKTeX log validation. See
 `reports/SPRINT-7.md`.
 
+Sprint 8 adds bounded SyncTeX parsers, a shell-free timed main-process service,
+strict forward/inverse IPC, current-artifact and project-path validation, PDF
+and editor target markers, multi-file and spaces-in-path coverage, Electron E2E
+navigation, and a real MiKTeX/SyncTeX round trip. See `reports/SPRINT-8.md`.
+
 ## Current environment limitation
 
 MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
@@ -63,7 +69,8 @@ does not report a parseable version. Compiler output remains unbounded until
 security hardening, and old generation directories do not yet have a cleanup
 policy. The renderer log copy is bounded to 2 MiB and PDF preview to 100 MiB,
 while structured output is bounded to 200 diagnostics, 4,096 characters per
-message, and 2,048 characters per excerpt. Total compiler output capture remains
-pending Sprint 10. The editor detects external changes through a bounded project
-watcher and still rejects stale version tokens. Automatic reload, side-by-side
-comparison, and merge actions remain future work.
+message, 2,048 characters per excerpt, and 512 KiB of parsed SyncTeX result
+text. Total child-process output capture remains pending Sprint 10. The editor
+detects external changes through a bounded project watcher and still rejects
+stale version tokens. Automatic reload, side-by-side comparison, and merge
+actions remain future work.

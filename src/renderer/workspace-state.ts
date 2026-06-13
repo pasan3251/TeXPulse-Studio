@@ -7,6 +7,7 @@ import type {
   BuildView,
   PdfArtifact,
 } from "../ipc/build-contracts.js";
+import type { ForwardSyncTarget } from "../ipc/synctex-contracts.js";
 import {
   defaultLiveBuildSettings,
   type LiveBuildPhase,
@@ -31,6 +32,11 @@ export interface DiagnosticTarget {
   line: number;
   column: number | null;
   requestId: number;
+  kind: "diagnostic" | "synctex";
+}
+
+export interface PdfSyncTarget extends ForwardSyncTarget {
+  requestId: number;
 }
 
 export interface WorkspaceState {
@@ -45,7 +51,8 @@ export interface WorkspaceState {
   pdf: { artifact: PdfArtifact; data: Uint8Array } | null;
   logOpen: boolean;
   problemsOpen: boolean;
-  diagnosticTarget: DiagnosticTarget | null;
+  navigationTarget: DiagnosticTarget | null;
+  pdfSyncTarget: PdfSyncTarget | null;
   paneRatio: number;
   settings: LiveBuildSettings;
 }
@@ -87,6 +94,18 @@ export type WorkspaceAction =
       diagnostic: BuildDiagnostic;
       requestId: number;
     }
+  | {
+      type: "sync-forward-selected";
+      target: ForwardSyncTarget;
+      requestId: number;
+    }
+  | {
+      type: "sync-inverse-selected";
+      path: string;
+      line: number;
+      column: number | null;
+      requestId: number;
+    }
   | { type: "pane-ratio-changed"; paneRatio: number }
   | { type: "settings-changed"; settings: LiveBuildSettings }
   | { type: "external-change-detected"; message: string }
@@ -105,7 +124,8 @@ export const initialWorkspaceState: WorkspaceState = {
   pdf: null,
   logOpen: false,
   problemsOpen: false,
-  diagnosticTarget: null,
+  navigationTarget: null,
+  pdfSyncTarget: null,
   paneRatio: DEFAULT_PANE_RATIO,
   settings: defaultLiveBuildSettings(),
 };
@@ -211,7 +231,8 @@ export function workspaceReducer(
           [action.path]: { ...buffer, content: action.content },
         },
         problemsOpen: false,
-        diagnosticTarget: null,
+        navigationTarget: null,
+        pdfSyncTarget: null,
         pdf,
       };
     }
@@ -295,7 +316,8 @@ export function workspaceReducer(
           ? false
           : action.build.status !== "succeeded" || state.logOpen,
         problemsOpen: hasDiagnostics,
-        diagnosticTarget: null,
+        navigationTarget: null,
+        pdfSyncTarget: null,
         notice:
           action.build.status === "succeeded"
             ? "Build succeeded."
@@ -348,14 +370,39 @@ export function workspaceReducer(
       return {
         ...state,
         activePath: diagnostic.file,
-        diagnosticTarget: {
+        navigationTarget: {
           path: diagnostic.file,
           line: diagnostic.line,
           column: diagnostic.column,
           requestId: action.requestId,
+          kind: "diagnostic",
         },
+        pdfSyncTarget: null,
       };
     }
+    case "sync-forward-selected":
+      return {
+        ...state,
+        pdfSyncTarget: { ...action.target, requestId: action.requestId },
+        notice: `Forward search moved to PDF page ${String(action.target.page)}.`,
+      };
+    case "sync-inverse-selected":
+      if (state.buffers[action.path] === undefined) {
+        return state;
+      }
+      return {
+        ...state,
+        activePath: action.path,
+        navigationTarget: {
+          path: action.path,
+          line: action.line,
+          column: action.column,
+          requestId: action.requestId,
+          kind: "synctex",
+        },
+        pdfSyncTarget: null,
+        notice: `Inverse search moved to ${action.path}:${String(action.line)}.`,
+      };
     case "pane-ratio-changed":
       return { ...state, paneRatio: action.paneRatio };
     case "settings-changed":

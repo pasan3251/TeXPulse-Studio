@@ -1,0 +1,9 @@
+This is SyncTeX command line utility, version 1.5
+SyncTeX result begin
+Output:C:\Projects\TeX Pulse\.texpulse\build\generations\1-build\main.pdf
+Input:C:/Projects/TeX Pulse/chapters\intro.tex
+Line:2
+Column:-1
+Offset:0
+Context:
+SyncTeX result end

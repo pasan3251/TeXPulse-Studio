@@ -4,6 +4,7 @@ import {
   BUILD_CHANNELS,
   PROJECT_CHANNELS,
   PROJECT_EVENTS,
+  SYNCTEX_CHANNELS,
 } from "../ipc/channels.js";
 import type { TeXPulseApi } from "../ipc/api-contract.js";
 import type {
@@ -16,6 +17,10 @@ import type {
   ProjectWriteRequest,
 } from "../ipc/project-contracts.js";
 import { projectFileChangeSchema } from "../ipc/project-contracts.js";
+import type {
+  ForwardSyncRequest,
+  InverseSyncRequest,
+} from "../ipc/synctex-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
@@ -32,6 +37,10 @@ const api: TeXPulseApi = Object.freeze({
     ipcRenderer.invoke(BUILD_CHANNELS.openPdf, request),
   revealPdf: (request: PdfArtifactRequest) =>
     ipcRenderer.invoke(BUILD_CHANNELS.revealPdf, request),
+  forwardSync: (request: ForwardSyncRequest) =>
+    ipcRenderer.invoke(SYNCTEX_CHANNELS.forward, request),
+  inverseSync: (request: InverseSyncRequest) =>
+    ipcRenderer.invoke(SYNCTEX_CHANNELS.inverse, request),
   onProjectFileChanged: (listener: (change: ProjectFileChange) => void) => {
     const handleChange = (
       _event: Electron.IpcRendererEvent,

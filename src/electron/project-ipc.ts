@@ -17,6 +17,7 @@ import {
   type PdfActionResult,
 } from "../ipc/build-contracts.js";
 import { ALL_CHANNELS, BUILD_CHANNELS } from "../ipc/channels.js";
+import { SYNCTEX_CHANNELS } from "../ipc/channels.js";
 import {
   type ApiError,
   openProjectRequestSchema,
@@ -32,10 +33,20 @@ import {
   type ProjectFileChange,
 } from "../ipc/project-contracts.js";
 import { ProjectError } from "../project/project-types.js";
+import type { SynctexService } from "../synctex/synctex-service.js";
+import {
+  forwardSyncRequestSchema,
+  forwardSyncResultSchema,
+  inverseSyncRequestSchema,
+  inverseSyncResultSchema,
+  type ForwardSyncResult,
+  type InverseSyncResult,
+} from "../ipc/synctex-contracts.js";
 import { ProjectSession, ProjectSessionError } from "./project-session.js";
 
 export interface ProjectIpcOptions {
   createCompilerAdapter?: () => CompilerAdapter;
+  createSynctexService?: () => SynctexService;
   ipcMain: Pick<IpcMain, "handle" | "removeHandler">;
   openPath?: (path: string) => Promise<string>;
   notifyProjectFileChange?: (change: ProjectFileChange) => void;
@@ -72,6 +83,7 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         selectedDirectory,
         options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
         options.notifyProjectFileChange,
+        options.createSynctexService?.(),
       );
       return {
         ok: true,
@@ -145,6 +157,38 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         ok: true,
         value: { cancelled: await projectSession.cancelBuild() },
       };
+    },
+  );
+
+  registerHandler(
+    options,
+    SYNCTEX_CHANNELS.forward,
+    forwardSyncRequestSchema,
+    forwardSyncResultSchema,
+    async (request): Promise<ForwardSyncResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before using SyncTeX navigation.",
+        );
+      }
+      return { ok: true, value: await projectSession.forwardSync(request) };
+    },
+  );
+
+  registerHandler(
+    options,
+    SYNCTEX_CHANNELS.inverse,
+    inverseSyncRequestSchema,
+    inverseSyncResultSchema,
+    async (request): Promise<InverseSyncResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before using SyncTeX navigation.",
+        );
+      }
+      return { ok: true, value: await projectSession.inverseSync(request) };
     },
   );
 

@@ -9,7 +9,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MiktexCompilerAdapter } from "../../src/compiler/compiler-adapter.js";
 import { registerProjectIpc } from "../../src/electron/project-ipc.js";
-import { BUILD_CHANNELS } from "../../src/ipc/channels.js";
+import {
+  ALL_CHANNELS,
+  BUILD_CHANNELS,
+  SYNCTEX_CHANNELS,
+} from "../../src/ipc/channels.js";
 import { PROJECT_CHANNELS } from "../../src/ipc/project-contracts.js";
 
 type IpcHandler = Parameters<IpcMain["handle"]>[1];
@@ -93,6 +97,26 @@ describe("project IPC", () => {
       [BUILD_CHANNELS.loadPdf, { buildId: "build-1", generation: 1 }],
       [BUILD_CHANNELS.openPdf, { buildId: "build-1", generation: 1 }],
       [BUILD_CHANNELS.revealPdf, { buildId: "build-1", generation: 1 }],
+      [
+        SYNCTEX_CHANNELS.forward,
+        {
+          buildId: "build-1",
+          generation: 1,
+          path: "main.tex",
+          line: 1,
+          column: 1,
+        },
+      ],
+      [
+        SYNCTEX_CHANNELS.inverse,
+        {
+          buildId: "build-1",
+          generation: 1,
+          page: 1,
+          x: 10,
+          y: 20,
+        },
+      ],
     ] as const;
 
     for (const [channel, payload] of requests) {
@@ -354,7 +378,7 @@ describe("project IPC", () => {
 
     dispose();
     expect(removeHandler).toHaveBeenCalledTimes(
-      Object.keys(PROJECT_CHANNELS).length + Object.keys(BUILD_CHANNELS).length,
+      Object.keys(ALL_CHANNELS).length,
     );
     expect(handlers.size).toBe(0);
   });

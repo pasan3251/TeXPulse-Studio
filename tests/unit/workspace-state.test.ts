@@ -293,11 +293,12 @@ describe("workspaceReducer", () => {
     });
     expect(state).toMatchObject({
       activePath: "main.tex",
-      diagnosticTarget: {
+      navigationTarget: {
         path: "main.tex",
         line: 4,
         column: 1,
         requestId: 7,
+        kind: "diagnostic",
       },
     });
 
@@ -307,6 +308,51 @@ describe("workspaceReducer", () => {
       requestId: 8,
     });
     expect(unchanged).toBe(state);
+  });
+
+  it("tracks forward and inverse SyncTeX targets and clears them on edits", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "file-opened",
+      file: file("main.tex", "one\ntwo"),
+    });
+    state = workspaceReducer(state, {
+      type: "sync-forward-selected",
+      target: {
+        page: 1,
+        x: 72,
+        y: 108,
+        width: 180,
+        height: 16,
+      },
+      requestId: 4,
+    });
+    expect(state.pdfSyncTarget).toMatchObject({ page: 1, requestId: 4 });
+
+    state = workspaceReducer(state, {
+      type: "sync-inverse-selected",
+      path: "main.tex",
+      line: 2,
+      column: null,
+      requestId: 5,
+    });
+    expect(state).toMatchObject({
+      activePath: "main.tex",
+      navigationTarget: {
+        path: "main.tex",
+        line: 2,
+        kind: "synctex",
+        requestId: 5,
+      },
+      pdfSyncTarget: null,
+    });
+
+    state = workspaceReducer(state, {
+      type: "content-changed",
+      path: "main.tex",
+      content: "changed",
+    });
+    expect(state.navigationTarget).toBeNull();
+    expect(state.pdfSyncTarget).toBeNull();
   });
 
   it("restores open files, views, settings, and pane geometry", () => {

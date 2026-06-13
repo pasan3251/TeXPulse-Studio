@@ -72,6 +72,7 @@ describe("EditorPane diagnostics", () => {
           line: 2,
           column: 2,
           requestId: 1,
+          kind: "diagnostic",
         }}
         onChange={vi.fn()}
         onViewStateChange={vi.fn()}
@@ -82,6 +83,30 @@ describe("EditorPane diagnostics", () => {
       expect(screen.getByLabelText("Editor for main.tex")).toHaveFocus();
       expect(container.querySelector(".cm-activeLine")).toHaveTextContent(
         "line two",
+      );
+    });
+  });
+
+  it("marks an inverse-search source line", async () => {
+    const { container } = render(
+      <EditorPane
+        buffer={buffer}
+        diagnostics={[]}
+        navigationTarget={{
+          path: "main.tex",
+          line: 3,
+          column: null,
+          requestId: 2,
+          kind: "synctex",
+        }}
+        onChange={vi.fn()}
+        onViewStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".cm-synctex-target")).toHaveTextContent(
+        "line three",
       );
     });
   });

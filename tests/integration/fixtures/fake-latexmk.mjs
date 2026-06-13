@@ -85,10 +85,12 @@ if (
     join(outputDirectory, `${baseName}.log`),
     "fake latexmk log\n",
   );
-  await writeFile(
-    join(outputDirectory, `${baseName}.synctex.gz`),
-    "fake synctex\n",
-  );
+  if (!args.includes("--fake-no-synctex")) {
+    await writeFile(
+      join(outputDirectory, `${baseName}.synctex.gz`),
+      "fake synctex\n",
+    );
+  }
   process.stdout.write(
     JSON.stringify({ args, cwd: process.cwd(), path: process.env.PATH }),
   );

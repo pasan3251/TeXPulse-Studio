@@ -5,6 +5,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
   type CSSProperties,
 } from "react";
 
@@ -75,6 +76,8 @@ export function App({ api = window.texpulse }: AppProps) {
   const splitRef = useRef<HTMLDivElement>(null);
   const draggingSplitRef = useRef(false);
   const diagnosticRequestRef = useRef(0);
+  const synctexRequestRef = useRef(0);
+  const [syncBusy, setSyncBusy] = useState(false);
   stateRef.current = state;
 
   const activeBuffer =
@@ -178,6 +181,8 @@ export function App({ api = window.texpulse }: AppProps) {
 
   const openProject = async (): Promise<void> => {
     coordinatorRef.current?.cancelPending();
+    synctexRequestRef.current += 1;
+    setSyncBusy(false);
     if (!(await savePaths(null, false))) {
       dispatch({
         type: "operation-failed",
@@ -257,6 +262,8 @@ export function App({ api = window.texpulse }: AppProps) {
   };
 
   const requestCompile = async (revision: number): Promise<void> => {
+    synctexRequestRef.current += 1;
+    setSyncBusy(false);
     const rootFile = stateRef.current.project?.rootFile;
     if (rootFile === null || rootFile === undefined) {
       dispatch({
@@ -375,6 +382,121 @@ export function App({ api = window.texpulse }: AppProps) {
       type: "diagnostic-selected",
       diagnostic,
       requestId: diagnosticRequestRef.current,
+    });
+  };
+
+  const forwardSearch = async (): Promise<void> => {
+    const current = stateRef.current;
+    const buffer =
+      current.activePath === null
+        ? undefined
+        : current.buffers[current.activePath];
+    const artifact = current.pdf?.artifact;
+    if (buffer === undefined || artifact === undefined) {
+      return;
+    }
+    if (!artifact.isCurrent) {
+      dispatch({
+        type: "build-operation-failed",
+        message: "Compile the current source before using forward search.",
+      });
+      return;
+    }
+    const requestId = ++synctexRequestRef.current;
+    const position = sourcePosition(buffer.content, buffer.cursor);
+    setSyncBusy(true);
+    const result = await api.forwardSync({
+      buildId: artifact.buildId,
+      generation: artifact.generation,
+      path: buffer.path,
+      line: position.line,
+      column: position.column,
+    });
+    setSyncBusy(false);
+    if (
+      requestId !== synctexRequestRef.current ||
+      !isCurrentArtifact(stateRef.current, artifact)
+    ) {
+      return;
+    }
+    if (result.ok) {
+      dispatch({
+        type: "sync-forward-selected",
+        target: result.value,
+        requestId,
+      });
+    } else {
+      dispatch({
+        type: "build-operation-failed",
+        message: result.error.message,
+      });
+    }
+  };
+
+  const inverseSearch = async (
+    page: number,
+    x: number,
+    y: number,
+  ): Promise<void> => {
+    const artifact = stateRef.current.pdf?.artifact;
+    if (artifact === undefined) {
+      return;
+    }
+    if (!artifact.isCurrent) {
+      dispatch({
+        type: "build-operation-failed",
+        message: "Compile the current source before using inverse search.",
+      });
+      return;
+    }
+    const requestId = ++synctexRequestRef.current;
+    setSyncBusy(true);
+    const result = await api.inverseSync({
+      buildId: artifact.buildId,
+      generation: artifact.generation,
+      page,
+      x,
+      y,
+    });
+    setSyncBusy(false);
+    if (
+      requestId !== synctexRequestRef.current ||
+      !isCurrentArtifact(stateRef.current, artifact)
+    ) {
+      return;
+    }
+    if (!result.ok) {
+      dispatch({
+        type: "build-operation-failed",
+        message: result.error.message,
+      });
+      return;
+    }
+    if (stateRef.current.buffers[result.value.path] === undefined) {
+      dispatch({ type: "file-loading", path: result.value.path });
+      const fileResult = await api.readTextFile({ path: result.value.path });
+      if (
+        requestId !== synctexRequestRef.current ||
+        !isCurrentArtifact(stateRef.current, artifact)
+      ) {
+        return;
+      }
+      if (!fileResult.ok) {
+        dispatch({
+          type: "operation-failed",
+          message: fileResult.error.message,
+          path: result.value.path,
+        });
+        return;
+      }
+      dispatch({ type: "file-opened", file: fileResult.value });
+    }
+    dispatch({
+      type: "sync-inverse-selected",
+      path: result.value.path,
+      line: result.value.line,
+      column: result.value.column,
+      requestId,
     });
   };
 
@@ -744,6 +866,20 @@ export function App({ api = window.texpulse }: AppProps) {
                         </span>
                       ) : null}
                     </div>
+                    <button
+                      type="button"
+                      className="editor-sync-button"
+                      disabled={
+                        syncBusy ||
+                        state.pdf === null ||
+                        !state.pdf.artifact.isCurrent
+                      }
+                      onClick={() => {
+                        void forwardSearch();
+                      }}
+                    >
+                      Forward search
+                    </button>
                   </div>
                   <Suspense
                     fallback={
@@ -753,8 +889,10 @@ export function App({ api = window.texpulse }: AppProps) {
                     <EditorPane
                       buffer={activeBuffer}
                       diagnostics={activeDiagnostics}
-                      navigationTarget={state.diagnosticTarget}
+                      navigationTarget={state.navigationTarget}
                       onChange={(path, content) => {
+                        synctexRequestRef.current += 1;
+                        setSyncBusy(false);
                         dispatch({ type: "content-changed", path, content });
                         coordinatorRef.current?.noteEdit();
                       }}
@@ -822,11 +960,15 @@ export function App({ api = window.texpulse }: AppProps) {
                 <PdfViewer
                   artifact={state.pdf.artifact}
                   data={state.pdf.data}
+                  syncTarget={state.pdfSyncTarget}
                   onOpen={() => {
                     void performPdfAction("open");
                   }}
                   onReveal={() => {
                     void performPdfAction("reveal");
+                  }}
+                  onInverseSearch={(page, x, y) => {
+                    void inverseSearch(page, x, y);
                   }}
                 />
               </Suspense>
@@ -880,5 +1022,29 @@ export function App({ api = window.texpulse }: AppProps) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function sourcePosition(
+  content: string,
+  cursor: number,
+): { line: number; column: number } {
+  const boundedCursor = Math.min(Math.max(cursor, 0), content.length);
+  const lines = content.slice(0, boundedCursor).split("\n");
+  return {
+    line: lines.length,
+    column: (lines.at(-1)?.length ?? 0) + 1,
+  };
+}
+
+function isCurrentArtifact(
+  state: WorkspaceState,
+  expected: { buildId: string; generation: number },
+): boolean {
+  const artifact = state.pdf?.artifact;
+  return (
+    artifact?.isCurrent === true &&
+    artifact.buildId === expected.buildId &&
+    artifact.generation === expected.generation
   );
 }

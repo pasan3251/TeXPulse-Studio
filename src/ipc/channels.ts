@@ -16,7 +16,13 @@ export const BUILD_CHANNELS = {
   revealPdf: "build:reveal-pdf",
 } as const;
 
+export const SYNCTEX_CHANNELS = {
+  forward: "synctex:forward",
+  inverse: "synctex:inverse",
+} as const;
+
 export const ALL_CHANNELS = {
   ...PROJECT_CHANNELS,
   ...BUILD_CHANNELS,
+  ...SYNCTEX_CHANNELS,
 } as const;

@@ -1,12 +1,11 @@
 # Security
 
-## Sprint 7 posture
+## Sprint 8 posture
 
-Sprint 7 keeps the Electron renderer outside the trusted computing boundary
-while adding structured diagnostic parsing, display, markers, and source
-navigation. It adds no network service, telemetry, remote content, arbitrary
-filesystem access, general process capability, preload method, or production
-dependency.
+Sprint 8 keeps the Electron renderer outside the trusted computing boundary
+while adding two narrow SyncTeX navigation capabilities. It adds no network
+service, telemetry, remote content, arbitrary filesystem access, general
+renderer process capability, or production dependency.
 
 The application:
 
@@ -40,7 +39,7 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes nine frozen project/build/PDF/event preload methods, never
+- exposes eleven frozen project/build/PDF/SyncTeX/event preload methods, never
   `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
@@ -82,7 +81,17 @@ The application:
 - rejects stale diagnostic generations and clears accepted diagnostics after
   source edits;
 - renders messages and excerpts as escaped React text, never HTML; and
-- reuses the existing validated `readTextFile` capability for source navigation.
+- reuses the existing validated `readTextFile` capability for source navigation;
+- accepts SyncTeX requests only for the current visible successful artifact;
+- validates forward source paths through the canonical project service;
+- resolves inverse paths only against enumerated project files and returns only
+  project-relative paths;
+- invokes SyncTeX with argument arrays, `shell: false`, a five-second timeout,
+  and the canonical project working directory;
+- removes `SYNCTEX_VIEWER` and `SYNCTEX_EDITOR` before invocation;
+- parses no more than 512 KiB of SyncTeX result text; and
+- reports missing, malformed, failed, or stale navigation non-fatally without
+  repeating canonical paths or child output.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
@@ -148,4 +157,5 @@ capability require their own validated contracts and tests. ADR-0005 defines the
 path/link policy; ADR-0006 defines the Electron boundary; ADR-0007 defines
 completed PDF loading and artifact actions; ADR-0008 defines live build and
 project watching; ADR-0009 defines structured diagnostic parsing and source
-links.
+links; ADR-0010 defines the SyncTeX process, artifact, path, and renderer
+boundary.

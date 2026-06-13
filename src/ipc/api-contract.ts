@@ -14,6 +14,12 @@ import type {
   ReadTextFileResult,
   WriteTextFileResult,
 } from "./project-contracts.js";
+import type {
+  ForwardSyncRequest,
+  ForwardSyncResult,
+  InverseSyncRequest,
+  InverseSyncResult,
+} from "./synctex-contracts.js";
 
 export interface TeXPulseApi {
   openProject(): Promise<OpenProjectResult>;
@@ -24,6 +30,8 @@ export interface TeXPulseApi {
   loadPdf(request: PdfArtifactRequest): Promise<LoadPdfResult>;
   openPdf(request: PdfArtifactRequest): Promise<PdfActionResult>;
   revealPdf(request: PdfArtifactRequest): Promise<PdfActionResult>;
+  forwardSync(request: ForwardSyncRequest): Promise<ForwardSyncResult>;
+  inverseSync(request: InverseSyncRequest): Promise<InverseSyncResult>;
   onProjectFileChanged(
     listener: (change: ProjectFileChange) => void,
   ): () => void;

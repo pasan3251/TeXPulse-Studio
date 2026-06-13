@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
-import { basename, relative } from "node:path";
+import { basename, dirname, relative } from "node:path";
 
 import { BuildController } from "../build/build-controller.js";
 import type { BuildCompletion } from "../build/build-types.js";
@@ -23,6 +23,16 @@ import {
 import { ProjectService } from "../project/project-service.js";
 import { ProjectWatcher } from "../project/project-watcher.js";
 import type { ProjectMetadata } from "../project/project-types.js";
+import {
+  SynctexService,
+  SynctexServiceError,
+} from "../synctex/synctex-service.js";
+import type {
+  ForwardSyncRequest,
+  ForwardSyncTarget,
+  InverseSyncRequest,
+  InverseSyncTarget,
+} from "../ipc/synctex-contracts.js";
 
 const MAX_PDF_BYTES = 100 * 1024 * 1024;
 const MAX_DISPLAY_LOG_CHARACTERS = 2 * 1024 * 1024;
@@ -35,7 +45,10 @@ export type ProjectSessionErrorCode =
   | "external-open-failed"
   | "no-pdf"
   | "no-root"
-  | "pdf-too-large";
+  | "pdf-too-large"
+  | "synctex-failed"
+  | "synctex-stale"
+  | "synctex-unavailable";
 
 export class ProjectSessionError extends Error {
   constructor(
@@ -54,12 +67,14 @@ export class ProjectSession {
     private readonly metadata: ProjectMetadata,
     private readonly projectDescription: OpenProjectValue,
     private readonly watcher: ProjectWatcher | null,
+    private readonly synctex: SynctexService,
   ) {}
 
   static async open(
     projectDirectory: string,
     adapter: CompilerAdapter,
     onFileChange?: (change: ProjectFileChange) => void,
+    synctex: SynctexService = new SynctexService(),
   ): Promise<ProjectSession> {
     const service = await ProjectService.open(projectDirectory);
     const [entries, rootCandidates] = await Promise.all([
@@ -105,6 +120,7 @@ export class ProjectSession {
         autoBuild: metadata.metadata.autoBuild,
       },
       watcher,
+      synctex,
     );
   }
 
@@ -208,6 +224,47 @@ export class ProjectSession {
           new Date(0).toISOString(),
       },
     };
+  }
+
+  async forwardSync(request: ForwardSyncRequest): Promise<ForwardSyncTarget> {
+    const context = await this.resolveSyncContext(request);
+    const normalizedPath = normalizeProjectPath(request.path);
+    await this.service.readTextFile(normalizedPath);
+    const sourcePath = await resolveProjectPath(
+      this.service.root,
+      normalizedPath,
+    );
+    try {
+      return await this.synctex.forward({
+        projectDirectory: this.service.root,
+        sourcePath,
+        line: request.line,
+        column: request.column,
+        pdfPath: context.pdfPath,
+        buildDirectory: dirname(context.synctexPath),
+      });
+    } catch (error) {
+      throw mapSynctexError(error);
+    }
+  }
+
+  async inverseSync(request: InverseSyncRequest): Promise<InverseSyncTarget> {
+    const context = await this.resolveSyncContext(request);
+    try {
+      return await this.synctex.inverse({
+        projectDirectory: this.service.root,
+        page: request.page,
+        x: request.x,
+        y: request.y,
+        pdfPath: context.pdfPath,
+        buildDirectory: dirname(context.synctexPath),
+        projectFiles: this.projectDescription.entries
+          .filter((entry) => entry.kind === "file")
+          .map((entry) => entry.path),
+      });
+    } catch (error) {
+      throw mapSynctexError(error);
+    }
   }
 
   private async buildView(
@@ -333,6 +390,46 @@ export class ProjectSession {
     }
     return resolved;
   }
+
+  private async resolveSyncContext(
+    request: PdfArtifactRequest,
+  ): Promise<{ pdfPath: string; synctexPath: string }> {
+    const resolvedPdf = await this.resolvePdf(request);
+    if (!resolvedPdf.artifact.isCurrent) {
+      throw new ProjectSessionError(
+        "synctex-stale",
+        "Compile the current source before using SyncTeX navigation.",
+      );
+    }
+    const successful = this.controller.getSnapshot().lastSuccessfulBuild;
+    if (
+      successful === null ||
+      successful.buildId !== request.buildId ||
+      successful.generation !== request.generation ||
+      successful.synctexPath === null
+    ) {
+      throw new ProjectSessionError(
+        "synctex-unavailable",
+        "This build did not produce SyncTeX data. Compile again and check the MiKTeX setup.",
+      );
+    }
+    try {
+      const synctexPath = await this.safeGeneratedPath(successful.synctexPath);
+      const synctexStat = await stat(synctexPath);
+      if (!synctexStat.isFile()) {
+        throw new Error("SyncTeX output is not a file.");
+      }
+      return { pdfPath: resolvedPdf.path, synctexPath };
+    } catch (error) {
+      if (error instanceof ProjectSessionError) {
+        throw error;
+      }
+      throw new ProjectSessionError(
+        "synctex-unavailable",
+        "SyncTeX data for the current build is no longer available.",
+      );
+    }
+  }
 }
 
 function metadataRecipe(recipe: ProjectMetadata["recipe"]): CompileRecipe {
@@ -348,4 +445,14 @@ function metadataRecipe(recipe: ProjectMetadata["recipe"]): CompileRecipe {
 
 function pathKey(path: string): string {
   return process.platform === "win32" ? path.toLocaleLowerCase("en-US") : path;
+}
+
+function mapSynctexError(error: unknown): ProjectSessionError {
+  if (error instanceof SynctexServiceError) {
+    return new ProjectSessionError(error.code, error.message);
+  }
+  return new ProjectSessionError(
+    "synctex-failed",
+    "SyncTeX navigation failed unexpectedly.",
+  );
 }

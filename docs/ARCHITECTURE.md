@@ -2,9 +2,8 @@
 
 ## Current state
 
-Sprint 7 converts bounded compiler logs into source-linked diagnostics while
-preserving the Sprint 6 autosave, newest-only live compilation, project
-watching, and workspace restoration controls:
+Sprint 8 adds current-build SyncTeX forward and inverse navigation while
+preserving the editor, build, PDF, diagnostic, and project controls:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
@@ -16,23 +15,23 @@ watching, and workspace restoration controls:
   metadata.
 - `diagnostics/`: pure bounded parsing for LaTeX, `latexmk`, BibTeX, Biber,
   malformed output, and build status events.
+- `synctex/`: bounded result parsing and shell-free forward/inverse invocation.
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
   project metadata, recent-project storage, and filtered Chokidar events.
-- `ipc/`: strict Zod request/response schemas and stable project, build, and PDF
-  channel names.
+- `ipc/`: strict Zod request/response schemas and stable project, build, PDF,
+  and SyncTeX channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, a session owning project/build state, and
-  a frozen nine-method preload bridge.
+  a frozen eleven-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
   persistence, resizable panes, build controls, source-linked Problems and raw
-  log panels, diagnostic line markers, lazy PDF.js viewer, retained-output
-  status, error boundary, and desktop layout.
+  log panels, diagnostic and SyncTeX target markers, lazy PDF.js viewer,
+  retained-output status, error boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no SyncTeX navigation UI, full settings UI, recovery workflow, or
-production packaging.
+There is still no full settings UI, recovery workflow, or production packaging.
 
 ## System boundaries
 
@@ -159,6 +158,24 @@ The renderer rejects older build generations and source revisions before
 diagnostics can become current. Any edit clears the accepted diagnostic set and
 line decorations until the next current build completes.
 
+## Sprint 8 SyncTeX flow
+
+```text
+current source or PDF position
+  -> strict forward/inverse request with opaque build identity
+  -> current PDF and generation-path revalidation
+  -> validated source path or bounded PDF coordinates
+  -> shell-free `synctex` process with helper environment removed
+  -> bounded output parser and known-project-file resolution
+  -> relative source target or numeric PDF target
+  -> CodeMirror line marker or PDF overlay marker
+```
+
+Only the current successful artifact may be queried. Retained output after an
+edit or failed build produces a non-fatal stale message. Inverse results become
+actionable only when their path matches an enumerated project file. The renderer
+receives no canonical source, project, PDF, or SyncTeX path.
+
 ## Project flow
 
 ```text
@@ -224,6 +241,9 @@ after the self-test, so it does not modify user projects.
   main-process generation is current.
 - Stale generations or edited source cannot retain current diagnostics.
 - Diagnostic links are limited to enumerated project-relative files.
+- SyncTeX requests require the current opaque artifact identity.
+- SyncTeX inverse paths are limited to enumerated project-relative files.
+- SyncTeX viewer/editor helper environment variables are removed before spawn.
 - Untrusted diagnostic text is bounded and rendered as escaped React text.
 - The renderer never receives unrestricted IPC or filesystem primitives.
 - The renderer receives no canonical PDF path capability; artifact actions
@@ -241,5 +261,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`
 - `adr/ADR-0008-live-build-and-project-watching.md`
 - `adr/ADR-0009-structured-diagnostics.md`
+- `adr/ADR-0010-synctex-navigation-boundary.md`
 
 Packaging requires a later ADR before implementation.

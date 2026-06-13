@@ -22,6 +22,7 @@ interface EditorPaneProps {
 }
 
 const setDiagnosticsEffect = StateEffect.define<readonly BuildDiagnostic[]>();
+const setSyncTargetEffect = StateEffect.define<number | null>();
 
 const diagnosticField = StateField.define({
   create: () => Decoration.none,
@@ -30,6 +31,30 @@ const diagnosticField = StateField.define({
     for (const effect of transaction.effects) {
       if (effect.is(setDiagnosticsEffect)) {
         updated = diagnosticDecorations(transaction.state, effect.value);
+      }
+    }
+    return updated;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+const syncTargetField = StateField.define({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let updated = decorations.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (effect.is(setSyncTargetEffect)) {
+        updated =
+          effect.value === null
+            ? Decoration.none
+            : Decoration.set([
+                Decoration.line({
+                  attributes: {
+                    class: "cm-synctex-target",
+                    title: "Inverse search target",
+                  },
+                }).range(transaction.state.doc.line(effect.value).from),
+              ]);
       }
     }
     return updated;
@@ -68,6 +93,7 @@ export function EditorPane({
           StreamLanguage.define(stex),
           EditorView.lineWrapping,
           diagnosticField,
+          syncTargetField,
           EditorView.contentAttributes.of({
             "aria-label": `Editor for ${path}`,
             "data-testid": "code-editor",
@@ -146,11 +172,11 @@ export function EditorPane({
 
   useEffect(() => {
     const view = viewRef.current;
-    if (
-      view === null ||
-      navigationTarget === null ||
-      navigationTarget.path !== buffer.path
-    ) {
+    if (view === null) {
+      return;
+    }
+    if (navigationTarget === null || navigationTarget.path !== buffer.path) {
+      view.dispatch({ effects: setSyncTargetEffect.of(null) });
       return;
     }
     const line = view.state.doc.line(
@@ -162,7 +188,12 @@ export function EditorPane({
     );
     view.dispatch({
       selection: EditorSelection.cursor(position),
-      effects: EditorView.scrollIntoView(position, { y: "center" }),
+      effects: [
+        EditorView.scrollIntoView(position, { y: "center" }),
+        setSyncTargetEffect.of(
+          navigationTarget.kind === "synctex" ? line.number : null,
+        ),
+      ],
     });
     view.focus();
   }, [buffer.path, navigationTarget]);

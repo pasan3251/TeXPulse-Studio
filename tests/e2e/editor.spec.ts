@@ -12,6 +12,13 @@ const fakeLatexmk = join(
   "fixtures",
   "fake-latexmk.mjs",
 );
+const fakeSynctex = join(
+  repositoryRoot,
+  "tests",
+  "integration",
+  "fixtures",
+  "fake-synctex.mjs",
+);
 
 interface BuildTrace {
   source: string;
@@ -42,6 +49,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
       TEXPULSE_E2E_LATEXMK: fakeLatexmk,
       TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
       TEXPULSE_FAKE_DELAY_MS: "1600",
       TEXPULSE_FAKE_TRACE: tracePath,
     },
@@ -77,6 +85,8 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
       bridgeKeys: [
         "cancelBuild",
         "compileProject",
+        "forwardSync",
+        "inverseSync",
         "loadPdf",
         "onProjectFileChanged",
         "openPdf",
@@ -264,6 +274,7 @@ test("shows diagnostics, navigates to the source, and clears fixed problems", as
       TEXPULSE_E2E_LATEXMK: fakeLatexmk,
       TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
     },
   });
 
@@ -341,6 +352,88 @@ test("shows diagnostics, navigates to the source, and clears fixed problems", as
     await expect(
       page.getByText("Undefined control sequence."),
     ).not.toBeVisible();
+  } finally {
+    await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("navigates forward to the PDF and inversely to an included source file", async () => {
+  const projectDirectory = await mkdtemp(
+    join(tmpdir(), "texpulse synctex e2e "),
+  );
+  await mkdir(join(projectDirectory, "chapters"));
+  await writeFile(
+    join(projectDirectory, "main.tex"),
+    "\\documentclass{article}\n\\begin{document}\n\\input{chapters/intro}\n\\end{document}\n",
+  );
+  await writeFile(
+    join(projectDirectory, "chapters", "intro.tex"),
+    "Included heading\nIncluded target line\n",
+  );
+
+  const electronApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
+      TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+    },
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    await page.evaluate(() => {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith("texpulse.workspace.v1.")) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    });
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    await page.getByLabel("Auto build").uncheck();
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+
+    await page.getByRole("button", { name: /intro\.tex/i }).click();
+    const editor = page.getByLabel("Editor for chapters/intro.tex");
+    await editor.click();
+    await page.keyboard.press("Control+End");
+    await page.getByRole("button", { name: "Forward search" }).click();
+    await expect(
+      page.getByLabel("Forward search target on page 1"),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Forward search moved to PDF page 1."),
+    ).toBeVisible();
+
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-8-forward-search.png"),
+    });
+
+    await page
+      .getByLabel("PDF page 1")
+      .dblclick({ position: { x: 30, y: 30 } });
+    await expect(editor).toBeFocused();
+    await expect(
+      page.locator(".cm-line.cm-synctex-target", {
+        hasText: "Included target line",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Inverse search moved to chapters/intro.tex:2."),
+    ).toBeVisible();
+
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-8-inverse-search.png"),
+    });
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });

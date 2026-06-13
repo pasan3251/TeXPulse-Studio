@@ -12,10 +12,12 @@ import type {
   CompileResult,
 } from "../../src/compiler/compile-types.js";
 import { ProjectSession } from "../../src/electron/project-session.js";
+import { SynctexService } from "../../src/synctex/synctex-service.js";
 
 const temporaryDirectories: string[] = [];
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const fakeLatexmk = join(currentDirectory, "fixtures", "fake-latexmk.mjs");
+const fakeSynctex = join(currentDirectory, "fixtures", "fake-synctex.mjs");
 
 afterEach(async () => {
   await Promise.all(
@@ -154,6 +156,32 @@ describe("ProjectSession", () => {
     });
   });
 
+  it("reports missing SyncTeX data as a non-fatal navigation error", async () => {
+    const project = await createProject();
+    const session = await ProjectSession.open(
+      project,
+      adapter("--fake-no-synctex"),
+    );
+    const build = await session.compile("main.tex");
+    expect(build.visiblePdf).not.toBeNull();
+    if (build.visiblePdf === null) {
+      return;
+    }
+
+    await expect(
+      session.forwardSync({
+        buildId: build.visiblePdf.buildId,
+        generation: build.visiblePdf.generation,
+        path: "main.tex",
+        line: 1,
+        column: 1,
+      }),
+    ).rejects.toMatchObject({
+      code: "synctex-unavailable",
+      message: expect.stringContaining("did not produce SyncTeX data"),
+    });
+  });
+
   it("returns a project-relative diagnostic for an included source file", async () => {
     const project = await createProject();
     await mkdir(join(project, "chapters"));
@@ -183,6 +211,76 @@ describe("ProjectSession", () => {
       log: expect.stringContaining("Undefined control sequence"),
     });
     expect(JSON.stringify(failed.diagnostics)).not.toContain(project);
+  });
+
+  it("maps current multi-file source and PDF positions without exposing absolute paths", async () => {
+    const project = await createProject();
+    await mkdir(join(project, "chapters"));
+    await writeFile(
+      join(project, "main.tex"),
+      "\\documentclass{article}\n\\begin{document}\n\\input{chapters/intro}\n\\end{document}\n",
+    );
+    await writeFile(
+      join(project, "chapters", "intro.tex"),
+      "Included heading\nIncluded target\n",
+    );
+    const session = await ProjectSession.open(
+      project,
+      adapter(),
+      undefined,
+      new SynctexService({
+        command: { executable: process.execPath, prefixArgs: [fakeSynctex] },
+      }),
+    );
+    const build = await session.compile("main.tex");
+    expect(build.visiblePdf).not.toBeNull();
+    if (build.visiblePdf === null) {
+      return;
+    }
+
+    const forward = await session.forwardSync({
+      buildId: build.visiblePdf.buildId,
+      generation: build.visiblePdf.generation,
+      path: "chapters/intro.tex",
+      line: 2,
+      column: 1,
+    });
+    const inverse = await session.inverseSync({
+      buildId: build.visiblePdf.buildId,
+      generation: build.visiblePdf.generation,
+      page: forward.page,
+      x: forward.x,
+      y: forward.y,
+    });
+
+    expect(forward).toEqual({
+      page: 1,
+      x: 72,
+      y: 108,
+      width: 180,
+      height: 16,
+    });
+    expect(inverse).toEqual({
+      path: "chapters/intro.tex",
+      line: 2,
+      column: null,
+    });
+    expect(JSON.stringify(inverse)).not.toContain(project);
+
+    await writeFile(
+      join(project, "main.tex"),
+      "\\documentclass{article}\n% TEXPULSE_FAKE_FAIL\n",
+    );
+    await session.compile("main.tex");
+    await expect(
+      session.forwardSync({
+        buildId: build.visiblePdf.buildId,
+        generation: build.visiblePdf.generation,
+        path: "chapters/intro.tex",
+        line: 2,
+        column: 1,
+      }),
+    ).rejects.toMatchObject({ code: "synctex-stale" });
   });
 
   it("rejects invalid and stale artifact requests before filesystem access", async () => {

@@ -71,8 +71,10 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(1)}
         data={new Uint8Array([1])}
+        syncTarget={null}
         onOpen={vi.fn()}
         onReveal={vi.fn()}
+        onInverseSearch={vi.fn()}
       />,
     );
 
@@ -95,8 +97,10 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(2)}
         data={new Uint8Array([2])}
+        syncTarget={null}
         onOpen={vi.fn()}
         onReveal={vi.fn()}
+        onInverseSearch={vi.fn()}
       />,
     );
 
@@ -107,5 +111,105 @@ describe("PdfViewer", () => {
       expect(viewport.scrollLeft).toBe(12);
     });
     expect(pdfMocks.destroy).toHaveBeenCalled();
+  });
+
+  it("shows a forward target and reports inverse-search page coordinates", async () => {
+    pdfMocks.getDocument.mockImplementation(() => ({
+      destroy: pdfMocks.destroy,
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: () =>
+          Promise.resolve({
+            getViewport: ({ scale }: { scale: number }) => ({
+              height: 800 * scale,
+              width: 600 * scale,
+            }),
+            render: () => ({
+              cancel: pdfMocks.renderCancel,
+              promise: Promise.resolve(),
+            }),
+          }),
+      }),
+    }));
+    const onInverseSearch = vi.fn();
+    render(
+      <PdfViewer
+        artifact={artifact(1)}
+        data={new Uint8Array([1])}
+        syncTarget={{
+          page: 1,
+          x: 72,
+          y: 108,
+          width: 180,
+          height: 16,
+          requestId: 1,
+        }}
+        onOpen={vi.fn()}
+        onReveal={vi.fn()}
+        onInverseSearch={onInverseSearch}
+      />,
+    );
+
+    const canvas = await screen.findByLabelText("PDF page 1");
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      bottom: 820,
+      height: 800,
+      left: 10,
+      right: 610,
+      top: 20,
+      width: 600,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    });
+    expect(
+      screen.getByLabelText("Forward search target on page 1"),
+    ).toBeVisible();
+
+    fireEvent.doubleClick(canvas, { clientX: 25, clientY: 45 });
+    expect(onInverseSearch).toHaveBeenCalledWith(1, 15, 25);
+  });
+
+  it("does not request a PDF page beyond the loaded document", async () => {
+    const getPage = vi.fn(() =>
+      Promise.resolve({
+        getViewport: ({ scale }: { scale: number }) => ({
+          height: 800 * scale,
+          width: 600 * scale,
+        }),
+        render: () => ({
+          cancel: pdfMocks.renderCancel,
+          promise: Promise.resolve(),
+        }),
+      }),
+    );
+    pdfMocks.getDocument.mockImplementation(() => ({
+      destroy: pdfMocks.destroy,
+      promise: Promise.resolve({ numPages: 1, getPage }),
+    }));
+
+    render(
+      <PdfViewer
+        artifact={artifact(1)}
+        data={new Uint8Array([1])}
+        syncTarget={{
+          page: 99,
+          x: 1,
+          y: 1,
+          width: 1,
+          height: 1,
+          requestId: 1,
+        }}
+        onOpen={vi.fn()}
+        onReveal={vi.fn()}
+        onInverseSearch={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Page 1 of 1");
+    await waitFor(() => {
+      expect(getPage).toHaveBeenCalled();
+    });
+    expect(getPage).not.toHaveBeenCalledWith(99);
   });
 });

@@ -69,6 +69,12 @@ update golden fixtures for every supported log shape, including malformed and
 native MiKTeX-wrapped output. Preserve explicit Error, Warning, and Info labels,
 React text escaping, stale-generation rejection, and source-navigation tests.
 
+For SyncTeX changes, keep execution in the main process with argument arrays and
+a timeout. Preserve current-artifact checks, remove external viewer/editor
+environment variables, return only project-relative inverse paths, and keep
+parsing bounded. Add parser, spaces-in-path, multi-file, component, E2E, and
+real MiKTeX evidence as applicable.
+
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to
 make a change pass.

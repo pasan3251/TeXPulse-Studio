@@ -1,11 +1,12 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 7 provides a secure Electron editor with autosave, debounced
+development. Sprint 8 provides a secure Electron editor with autosave, debounced
 live compilation, project change detection, workspace restoration, structured
-source-linked diagnostics, raw build logs, and a PDF.js preview that retains the
-last successful output when a later build fails. Project files and generated
-artifact paths remain behind a validated main-process IPC boundary.
+source-linked diagnostics, raw build logs, SyncTeX forward/inverse navigation,
+and a PDF.js preview that retains the last successful output when a later build
+fails. Project files and generated artifact paths remain behind a validated
+main-process IPC boundary.
 
 ## Requirements
 
@@ -72,7 +73,7 @@ bounding and the complete threat model remain later hardening work.
 
 ## Desktop editor
 
-The Sprint 7 application:
+The Sprint 8 application:
 
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
@@ -98,6 +99,11 @@ The Sprint 7 application:
 - marks affected CodeMirror lines and navigates to validated project-relative
   files and source locations;
 - clears stale diagnostics after edits and rejects older build generations;
+- moves from the current source position to a marked PDF location;
+- inverse-searches by double-clicking the PDF, then opens and marks the
+  validated project source line;
+- disables SyncTeX navigation for edited or retained stale output and reports
+  unavailable data non-fatally;
 - shows a bounded raw build log while retaining the complete log on disk;
 - opens or reveals only a main-process-revalidated generated PDF;
 - watches the project without following links or generated output and reports
@@ -110,8 +116,8 @@ The Sprint 7 application:
 The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
-renderer cannot access the filesystem or compiler except through the nine-method
-typed preload bridge.
+renderer cannot access the filesystem or compiler except through the
+eleven-method typed preload bridge.
 
 ## Project service
 
@@ -143,3 +149,4 @@ The typed modules under `src/project/`:
 - Sprint 5 report: `docs/reports/SPRINT-5.md`
 - Sprint 6 report: `docs/reports/SPRINT-6.md`
 - Sprint 7 report: `docs/reports/SPRINT-7.md`
+- Sprint 8 report: `docs/reports/SPRINT-8.md`

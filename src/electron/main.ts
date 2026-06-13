@@ -15,6 +15,7 @@ import { MiktexCompilerAdapter } from "../compiler/compiler-adapter.js";
 import { PROJECT_EVENTS } from "../ipc/channels.js";
 import { registerProjectIpc } from "./project-ipc.js";
 import { createSecureWindowOptions } from "./window-options.js";
+import { SynctexService } from "../synctex/synctex-service.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -37,6 +38,7 @@ void app.whenReady().then(async () => {
 
   disposeProjectIpc = registerProjectIpc({
     createCompilerAdapter,
+    createSynctexService,
     ipcMain,
     openPath: (path) => shell.openPath(path),
     notifyProjectFileChange: (change) => {
@@ -94,6 +96,20 @@ function createCompilerAdapter(): MiktexCompilerAdapter {
     });
   }
   return new MiktexCompilerAdapter();
+}
+
+function createSynctexService(): SynctexService {
+  const e2eNode = process.env.TEXPULSE_E2E_NODE;
+  const e2eSynctex = process.env.TEXPULSE_E2E_SYNCTEX;
+  if (!app.isPackaged && e2eNode !== undefined && e2eSynctex !== undefined) {
+    return new SynctexService({
+      command: {
+        executable: e2eNode,
+        prefixArgs: [e2eSynctex],
+      },
+    });
+  }
+  return new SynctexService();
 }
 
 function configurePermissionPolicy(): void {

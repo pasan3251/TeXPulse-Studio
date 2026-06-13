@@ -330,3 +330,49 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Unit, component, integration, Electron E2E, and real MiKTeX evidence:
   `../tests/`
 - Design decision: `adr/ADR-0009-structured-diagnostics.md`
+
+## Sprint 8
+
+| Requirement     | Sprint 8 evidence                                                    | Status                 |
+| --------------- | -------------------------------------------------------------------- | ---------------------- |
+| `FR-SYNC-001`   | Existing `latexmk` arguments continue to request `-synctex=1`        | Complete               |
+| `FR-SYNC-002`   | Current source position maps to a marked PDF page location           | Complete               |
+| `FR-SYNC-003`   | PDF double-click maps to a validated source file and line            | Complete               |
+| `FR-SYNC-004`   | Canonical paths, argument arrays, shell-off spawn, and timeout       | Complete               |
+| `FR-SYNC-005`   | Missing, malformed, failed, and stale data return visible notices    | Complete               |
+| `FR-SYNC-006`   | Fixture, session, E2E, and native multi-file round trips             | Complete               |
+| `FR-BUILD-007`  | Only the current visible successful generation may be queried        | Complete               |
+| `FR-PDF-003`    | Forward target changes page without replacing viewer state           | Current scope complete |
+| `FR-PDF-008`    | Opaque build identity is revalidated before every SyncTeX query      | Complete               |
+| `NFR-COMP-003`  | Argument and native tests run from Windows paths containing spaces   | Current scope complete |
+| `NFR-REL-003`   | Navigation failures are typed, non-destructive, and recoverable      | Complete               |
+| `NFR-REL-005`   | Parser, process, session, component, and E2E tests are deterministic | Complete               |
+| `NFR-SEC-004`   | Frozen preload exposes eleven fixed methods                          | Current scope complete |
+| `NFR-SEC-005`   | Strict request and response schemas cover both directions            | Complete               |
+| `NFR-SEC-006`   | Forward and inverse paths remain inside the canonical project        | Complete               |
+| `NFR-SEC-008`   | SyncTeX queries use a five-second process timeout                    | Current scope complete |
+| `NFR-SEC-009`   | Parsed SyncTeX output is bounded to 512 KiB                          | Partial; capture later |
+| `NFR-MAINT-002` | Typed contracts cover service, IPC, renderer, and targets            | Complete               |
+| `NFR-MAINT-003` | SyncTeX parsing and execution are independent modules                | Complete               |
+| `NFR-MAINT-004` | ADR-0010 records the SyncTeX boundary                                | Complete               |
+| `NFR-MAINT-005` | Focused tests use fixtures, fake runners, and controlled processes   | Complete               |
+| `NFR-UX-001`    | Forward search is a keyboard-operable named button                   | Current scope complete |
+| `NFR-UX-002`    | Source and PDF targets use shape/border as well as color             | Complete               |
+| `NFR-UX-003`    | Inverse search moves focus to the target editor                      | Complete               |
+| `NFR-UX-004`    | Forward target and navigation controls have accessible names         | Complete               |
+| `NFR-UX-006`    | Stale and unavailable messages state the corrective action           | Complete               |
+| `NFR-PRIV-001`  | Source, PDF, and SyncTeX processing remain local                     | Complete for Sprint 8  |
+| `NFR-PRIV-002`  | No analytics, telemetry, or network service was added                | Complete for Sprint 8  |
+| `AS-007`        | Electron and native evidence complete both navigation directions     | Complete               |
+
+### Sprint 8 evidence
+
+- Sprint report: `reports/SPRINT-8.md`
+- Parser and process service: `../src/synctex/`
+- Strict contracts and main-process session/IPC: `../src/ipc/` and
+  `../src/electron/`
+- PDF and editor target UI: `../src/renderer/`
+- Multi-file fixture: `../fixtures/synctex-multifile/`
+- Unit, component, integration, Electron E2E, and native MiKTeX evidence:
+  `../tests/`
+- Design decision: `adr/ADR-0010-synctex-navigation-boundary.md`

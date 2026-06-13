@@ -123,6 +123,21 @@ file or the previous successful preview.
 requires Windows Explorer. Both actions revalidate the active generated artifact
 before invoking the operating system.
 
+## SyncTeX navigation is unavailable
+
+Forward search requires a current successful build and an open source file.
+Double-click the rendered PDF page for inverse search. If either action reports
+stale data, compile the current source again.
+
+If the build did not produce `main.synctex.gz`, confirm that `synctex` is
+available on `PATH`, that the build command includes `-synctex=1`, and that
+MiKTeX is current. Results are accepted only when the returned source matches a
+file enumerated inside the open project; reopen after adding a new source file.
+
+TeXPulse does not invoke an external SyncTeX editor or viewer. It removes
+`SYNCTEX_EDITOR` and `SYNCTEX_VIEWER` from the child environment and performs
+navigation inside the application.
+
 ## Build timed out
 
 `texpulse-compile` defaults to 120 seconds and exits with code 124 on timeout.
