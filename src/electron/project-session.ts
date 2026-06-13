@@ -6,6 +6,7 @@ import { BuildController } from "../build/build-controller.js";
 import type { BuildCompletion } from "../build/build-types.js";
 import type { CompilerAdapter } from "../compiler/compiler-adapter.js";
 import type { CompileRecipe } from "../compiler/compile-types.js";
+import { parseBuildDiagnostics } from "../diagnostics/diagnostic-parser.js";
 import type {
   BuildView,
   PdfArtifact,
@@ -225,6 +226,7 @@ export class ProjectSession {
         failureReason: null,
         log: "",
         logTruncated: false,
+        diagnostics: [],
         visiblePdf: this.visiblePdfArtifact(),
       };
     }
@@ -234,6 +236,15 @@ export class ProjectSession {
       result.stdout,
       result.stderr,
     );
+    const diagnostics = parseBuildDiagnostics({
+      log: rawLog.text,
+      status: result.status,
+      failureReason: result.failureReason,
+      rootFile: this.projectDescription.rootFile ?? result.rootFile ?? "",
+      projectFiles: this.projectDescription.entries
+        .filter((entry) => entry.kind === "file")
+        .map((entry) => entry.path),
+    });
     return {
       buildId: result.buildId,
       generation: result.generation,
@@ -243,6 +254,7 @@ export class ProjectSession {
       failureReason: result.failureReason,
       log: rawLog.text,
       logTruncated: rawLog.truncated,
+      diagnostics,
       visiblePdf: this.visiblePdfArtifact(),
     };
   }

@@ -67,8 +67,9 @@ pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 
 `pnpm test:e2e` builds and exercises rapid editing, autosave, queued
 compilation, newest-result PDF rendering, manual build, restoration, minimum
-window layout, and external-conflict preservation. Packaging begins in Sprint
-11, so no packaging command exists yet.
+window layout, external-conflict preservation, structured diagnostic display,
+raw-log access, source navigation, retained PDF behavior, and fix-error cleanup.
+Packaging begins in Sprint 11, so no packaging command exists yet.
 
 The compiler service enforces timeout, cancellation, and process-tree cleanup.
 It remains limited to trusted local projects until output bounds and the full
@@ -87,6 +88,11 @@ The renderer is sandboxed with Node integration disabled. Its frozen preload
 bridge exposes nine fixed project/build/PDF/event methods. PDF paths remain in
 the main process as actionable values, and renderer PDF loads require an active
 opaque artifact token. Raw compiler logs may contain local path text.
+
+Structured diagnostics are parsed from the bounded display log in a pure module.
+They are limited to enumerated project-relative source links, 200 items, 4,096
+message characters, and 2,048 excerpt characters. Parser failure must preserve
+the raw log, and stale or edited source must not retain current diagnostics.
 
 ## Completion checklist
 

@@ -1,24 +1,24 @@
 # Test Plan
 
-## Sprint 6 scope
+## Sprint 7 scope
 
-Sprint 6 verifies all existing controls plus serialized autosave, configurable
-debounce, newest-only automatic builds, visible live phases, project watching,
-external-change preservation, workspace restoration, responsive editing, and
-minimum-window layout.
+Sprint 7 verifies all existing controls plus bounded structured diagnostic
+parsing, malformed-log fallback, multi-file mapping, stale-result rejection,
+severity accessibility, editor markers, source navigation, raw-log retention,
+and the introduce-error/fix-error desktop workflow.
 
-| Check        | Command                 | Current evidence                                        |
-| ------------ | ----------------------- | ------------------------------------------------------- |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                   |
-| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests         |
-| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests      |
-| Unit tests   | `pnpm test:unit`        | Coordinator, persistence, watcher, reducer, core state  |
-| Component    | `pnpm test:component`   | Project tree and PDF reload state                       |
-| Integration  | `pnpm test:integration` | Live flow, watcher, session, compiler, validated IPC    |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches          |
-| E2E          | `pnpm test:e2e`         | Rapid edit through save, compile, restore, and conflict |
-| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle       |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                     |
+| Check        | Command                 | Current evidence                                         |
+| ------------ | ----------------------- | -------------------------------------------------------- |
+| Formatting   | `pnpm format:check`     | Prettier checks repository text files                    |
+| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests          |
+| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests       |
+| Unit tests   | `pnpm test:unit`        | Parser golden cases, bounds, reducer, and core state     |
+| Component    | `pnpm test:component`   | Problems accessibility, markers, tree, and PDF state     |
+| Integration  | `pnpm test:integration` | Multi-file diagnostics, session, compiler, validated IPC |
+| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches           |
+| E2E          | `pnpm test:e2e`         | Live editing plus introduce, navigate, inspect, and fix  |
+| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle        |
+| Aggregate    | `pnpm check`            | Runs every current gate in sequence                      |
 
 ## Determinism
 
@@ -47,6 +47,17 @@ minimum-window layout.
   editing, stale-result rejection, workspace restoration, minimum-window layout,
   version-conflict preservation, screenshots, clean shutdown, and fixture
   removal.
+- Diagnostic golden tests cover undefined commands, missing packages, undefined
+  references/citations, box warnings, emergency stops, BibTeX, Biber, timeout,
+  cancellation, malformed output, explicit severities, MiKTeX 79-column wraps,
+  deduplication, and count/string bounds.
+- Multi-file integration verifies that an included-file error crosses the
+  session boundary only as the correct project-relative file and line.
+- Problems component tests verify visible severity labels, safe rendering of
+  log-like markup, location-aware navigation, and the empty state.
+- The diagnostic E2E keeps a prior PDF visible, opens structured problems and
+  the raw log, focuses the source line, captures a screenshot, fixes the source,
+  and verifies stale diagnostics disappear.
 - PDF component tests use controlled PDF.js document/page/render objects and no
   arbitrary sleeps.
 - The fake compiler emits a structurally valid one-page PDF and can
@@ -57,10 +68,10 @@ minimum-window layout.
 
 ## Later test levels
 
-Sprint 7 adds structured diagnostics parsing, grouping, navigation, and raw-log
-fallback tests. Performance benchmarks for 1,000-file projects and measured
-editor input latency remain later release evidence. Real MiKTeX results will
-always be labeled separately and generated PDFs will be inspected.
+Sprint 8 adds SyncTeX forward/inverse parsing and navigation tests. Performance
+benchmarks for 1,000-file projects and measured editor input latency remain
+later release evidence. Real MiKTeX results will always be labeled separately
+and generated PDFs will be inspected.
 
 ## Clean-state procedure
 

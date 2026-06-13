@@ -1,24 +1,51 @@
 import { StreamLanguage } from "@codemirror/language";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import {
+  EditorSelection,
+  EditorState,
+  StateEffect,
+  StateField,
+} from "@codemirror/state";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { EditorView } from "@codemirror/view";
+import { Decoration, EditorView } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef } from "react";
 
-import type { EditorBuffer } from "../workspace-state.js";
+import type { BuildDiagnostic } from "../../ipc/build-contracts.js";
+import type { DiagnosticTarget, EditorBuffer } from "../workspace-state.js";
 
 interface EditorPaneProps {
   buffer: EditorBuffer;
+  diagnostics: readonly BuildDiagnostic[];
+  navigationTarget: DiagnosticTarget | null;
   onChange: (path: string, content: string) => void;
   onViewStateChange: (path: string, cursor: number, scrollTop: number) => void;
 }
 
+const setDiagnosticsEffect = StateEffect.define<readonly BuildDiagnostic[]>();
+
+const diagnosticField = StateField.define({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let updated = decorations.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiagnosticsEffect)) {
+        updated = diagnosticDecorations(transaction.state, effect.value);
+      }
+    }
+    return updated;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 export function EditorPane({
   buffer,
+  diagnostics,
+  navigationTarget,
   onChange,
   onViewStateChange,
 }: EditorPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
   const callbacksRef = useRef({ onChange, onViewStateChange });
   callbacksRef.current = { onChange, onViewStateChange };
 
@@ -40,6 +67,7 @@ export function EditorPane({
           basicSetup,
           StreamLanguage.define(stex),
           EditorView.lineWrapping,
+          diagnosticField,
           EditorView.contentAttributes.of({
             "aria-label": `Editor for ${path}`,
             "data-testid": "code-editor",
@@ -90,6 +118,7 @@ export function EditorPane({
         ],
       }),
     });
+    viewRef.current = view;
 
     view.scrollDOM.scrollTop = buffer.scrollTop;
     const handleScroll = () => {
@@ -103,10 +132,89 @@ export function EditorPane({
 
     return () => {
       handleScroll();
+      viewRef.current = null;
       view.scrollDOM.removeEventListener("scroll", handleScroll);
       view.destroy();
     };
   }, [buffer.path]);
 
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: setDiagnosticsEffect.of(diagnostics),
+    });
+  }, [diagnostics]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (
+      view === null ||
+      navigationTarget === null ||
+      navigationTarget.path !== buffer.path
+    ) {
+      return;
+    }
+    const line = view.state.doc.line(
+      Math.min(navigationTarget.line, view.state.doc.lines),
+    );
+    const position = Math.min(
+      line.to,
+      line.from + Math.max((navigationTarget.column ?? 1) - 1, 0),
+    );
+    view.dispatch({
+      selection: EditorSelection.cursor(position),
+      effects: EditorView.scrollIntoView(position, { y: "center" }),
+    });
+    view.focus();
+  }, [buffer.path, navigationTarget]);
+
   return <div className="editor-host" ref={hostRef} />;
+}
+
+function diagnosticDecorations(
+  state: EditorState,
+  diagnostics: readonly BuildDiagnostic[],
+) {
+  const byLine = new Map<
+    number,
+    { severity: BuildDiagnostic["severity"]; messages: string[] }
+  >();
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.line === null || diagnostic.line > state.doc.lines) {
+      continue;
+    }
+    const existing = byLine.get(diagnostic.line);
+    if (existing === undefined) {
+      byLine.set(diagnostic.line, {
+        severity: diagnostic.severity,
+        messages: [diagnostic.message],
+      });
+    } else {
+      existing.messages.push(diagnostic.message);
+      if (severityRank(diagnostic.severity) > severityRank(existing.severity)) {
+        existing.severity = diagnostic.severity;
+      }
+    }
+  }
+  return Decoration.set(
+    [...byLine.entries()].map(([lineNumber, value]) =>
+      Decoration.line({
+        attributes: {
+          class: `cm-diagnostic-line cm-diagnostic-${value.severity}`,
+          title: value.messages.join("\n"),
+        },
+      }).range(state.doc.line(lineNumber).from),
+    ),
+    true,
+  );
+}
+
+function severityRank(severity: BuildDiagnostic["severity"]): number {
+  switch (severity) {
+    case "error":
+      return 3;
+    case "warning":
+      return 2;
+    case "info":
+      return 1;
+  }
 }

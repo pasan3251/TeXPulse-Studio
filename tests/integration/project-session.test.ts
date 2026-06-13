@@ -154,6 +154,37 @@ describe("ProjectSession", () => {
     });
   });
 
+  it("returns a project-relative diagnostic for an included source file", async () => {
+    const project = await createProject();
+    await mkdir(join(project, "chapters"));
+    await writeFile(
+      join(project, "main.tex"),
+      "\\documentclass{article}\n\\begin{document}\n\\input{chapters/intro}\n\\end{document}\n",
+    );
+    await writeFile(
+      join(project, "chapters", "intro.tex"),
+      "Included line\n\\undefinedcommand % TEXPULSE_DIAG_UNDEFINED\n",
+    );
+    const session = await ProjectSession.open(project, adapter());
+
+    const failed = await session.compile("main.tex");
+
+    expect(failed).toMatchObject({
+      status: "failed",
+      diagnostics: [
+        {
+          severity: "error",
+          message: "Undefined control sequence.",
+          file: "chapters/intro.tex",
+          line: 2,
+          source: "latex",
+        },
+      ],
+      log: expect.stringContaining("Undefined control sequence"),
+    });
+    expect(JSON.stringify(failed.diagnostics)).not.toContain(project);
+  });
+
   it("rejects invalid and stale artifact requests before filesystem access", async () => {
     const project = await createProject();
     const session = await ProjectSession.open(project, adapter());

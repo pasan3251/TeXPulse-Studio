@@ -1,0 +1,9 @@
+(./main.tex
+! LaTeX Error: File `not-installed.sty' not found.
+
+Type X to quit or <RETURN> to proceed,
+or enter new name. (Default extension: sty)
+
+l.3 \begin{document}
+)
+Latexmk: Missing input file 'not-installed.sty'

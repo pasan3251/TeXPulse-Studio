@@ -2,7 +2,11 @@ import type {
   OpenProjectResult,
   ReadTextFileResult,
 } from "../ipc/project-contracts.js";
-import type { BuildView, PdfArtifact } from "../ipc/build-contracts.js";
+import type {
+  BuildDiagnostic,
+  BuildView,
+  PdfArtifact,
+} from "../ipc/build-contracts.js";
 import {
   defaultLiveBuildSettings,
   type LiveBuildPhase,
@@ -22,6 +26,13 @@ export interface EditorBuffer {
   scrollTop: number;
 }
 
+export interface DiagnosticTarget {
+  path: string;
+  line: number;
+  column: number | null;
+  requestId: number;
+}
+
 export interface WorkspaceState {
   project: OpenedProject | null;
   buffers: Record<string, EditorBuffer>;
@@ -33,6 +44,8 @@ export interface WorkspaceState {
   build: BuildView | null;
   pdf: { artifact: PdfArtifact; data: Uint8Array } | null;
   logOpen: boolean;
+  problemsOpen: boolean;
+  diagnosticTarget: DiagnosticTarget | null;
   paneRatio: number;
   settings: LiveBuildSettings;
 }
@@ -68,6 +81,12 @@ export type WorkspaceAction =
   | { type: "pdf-loaded"; artifact: PdfArtifact; data: Uint8Array }
   | { type: "build-operation-failed"; message: string }
   | { type: "log-toggled" }
+  | { type: "problems-toggled" }
+  | {
+      type: "diagnostic-selected";
+      diagnostic: BuildDiagnostic;
+      requestId: number;
+    }
   | { type: "pane-ratio-changed"; paneRatio: number }
   | { type: "settings-changed"; settings: LiveBuildSettings }
   | { type: "external-change-detected"; message: string }
@@ -85,6 +104,8 @@ export const initialWorkspaceState: WorkspaceState = {
   build: null,
   pdf: null,
   logOpen: false,
+  problemsOpen: false,
+  diagnosticTarget: null,
   paneRatio: DEFAULT_PANE_RATIO,
   settings: defaultLiveBuildSettings(),
 };
@@ -172,12 +193,15 @@ export function workspaceReducer(
               artifact: { ...state.pdf.artifact, isCurrent: false },
             };
       const build =
-        state.build?.visiblePdf === null ||
-        state.build?.visiblePdf === undefined
-          ? state.build
+        state.build === null
+          ? null
           : {
               ...state.build,
-              visiblePdf: { ...state.build.visiblePdf, isCurrent: false },
+              diagnostics: [],
+              visiblePdf:
+                state.build.visiblePdf === null
+                  ? null
+                  : { ...state.build.visiblePdf, isCurrent: false },
             };
       return {
         ...state,
@@ -186,6 +210,8 @@ export function workspaceReducer(
           ...state.buffers,
           [action.path]: { ...buffer, content: action.content },
         },
+        problemsOpen: false,
+        diagnosticTarget: null,
         pdf,
       };
     }
@@ -259,12 +285,17 @@ export function workspaceReducer(
               artifact: action.build.visiblePdf,
             }
           : state.pdf;
+      const hasDiagnostics = action.build.diagnostics.length > 0;
       return {
         ...state,
         buildPhase: "idle",
         build: action.build,
         pdf: retainedPdf,
-        logOpen: action.build.status !== "succeeded" || state.logOpen,
+        logOpen: hasDiagnostics
+          ? false
+          : action.build.status !== "succeeded" || state.logOpen,
+        problemsOpen: hasDiagnostics,
+        diagnosticTarget: null,
         notice:
           action.build.status === "succeeded"
             ? "Build succeeded."
@@ -294,7 +325,37 @@ export function workspaceReducer(
         notice: action.message,
       };
     case "log-toggled":
-      return { ...state, logOpen: !state.logOpen };
+      return {
+        ...state,
+        logOpen: !state.logOpen,
+        problemsOpen: false,
+      };
+    case "problems-toggled":
+      return {
+        ...state,
+        logOpen: false,
+        problemsOpen: !state.problemsOpen,
+      };
+    case "diagnostic-selected": {
+      const diagnostic = action.diagnostic;
+      if (
+        diagnostic.file === null ||
+        diagnostic.line === null ||
+        state.buffers[diagnostic.file] === undefined
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        activePath: diagnostic.file,
+        diagnosticTarget: {
+          path: diagnostic.file,
+          line: diagnostic.line,
+          column: diagnostic.column,
+          requestId: action.requestId,
+        },
+      };
+    }
     case "pane-ratio-changed":
       return { ...state, paneRatio: action.paneRatio };
     case "settings-changed":

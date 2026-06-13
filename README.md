@@ -1,11 +1,11 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 6 provides a secure Electron editor with autosave, debounced
-live compilation, project change detection, workspace restoration, raw build
-logs, and a PDF.js preview that retains the last successful output when a later
-build fails. Project files and generated artifact paths remain behind a
-validated main-process IPC boundary.
+development. Sprint 7 provides a secure Electron editor with autosave, debounced
+live compilation, project change detection, workspace restoration, structured
+source-linked diagnostics, raw build logs, and a PDF.js preview that retains the
+last successful output when a later build fails. Project files and generated
+artifact paths remain behind a validated main-process IPC boundary.
 
 ## Requirements
 
@@ -72,7 +72,7 @@ bounding and the complete threat model remain later hardening work.
 
 ## Desktop editor
 
-The Sprint 6 application:
+The Sprint 7 application:
 
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
@@ -92,6 +92,12 @@ The Sprint 6 application:
   fit-page controls;
 - preserves page, zoom, and approximate scroll state across PDF reloads;
 - preserves and labels the last successful PDF after a failed build;
+- parses common LaTeX, `latexmk`, BibTeX, and Biber messages into bounded
+  structured diagnostics;
+- presents visible Error, Warning, and Info labels in a Problems panel;
+- marks affected CodeMirror lines and navigates to validated project-relative
+  files and source locations;
+- clears stale diagnostics after edits and rejects older build generations;
 - shows a bounded raw build log while retaining the complete log on disk;
 - opens or reveals only a main-process-revalidated generated PDF;
 - watches the project without following links or generated output and reports
@@ -136,3 +142,4 @@ The typed modules under `src/project/`:
 - Sprint 4 report: `docs/reports/SPRINT-4.md`
 - Sprint 5 report: `docs/reports/SPRINT-5.md`
 - Sprint 6 report: `docs/reports/SPRINT-6.md`
+- Sprint 7 report: `docs/reports/SPRINT-7.md`

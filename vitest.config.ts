@@ -8,6 +8,7 @@ export default defineConfig({
         "src/build/build-controller.ts",
         "src/compiler/latexmk-arguments.ts",
         "src/compiler/path-validation.ts",
+        "src/diagnostics/diagnostic-parser.ts",
         "src/process/environment.ts",
         "src/electron/project-ipc.ts",
         "src/electron/project-session.ts",

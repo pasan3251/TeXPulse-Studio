@@ -3,6 +3,17 @@ import { z } from "zod";
 import { apiErrorSchema } from "./project-contracts.js";
 
 const buildIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u);
+const buildDiagnosticSchema = z
+  .object({
+    severity: z.enum(["error", "warning", "info"]),
+    message: z.string().max(4_096),
+    file: z.string().min(1).max(4_096).nullable(),
+    line: z.number().int().positive().nullable(),
+    column: z.number().int().positive().nullable(),
+    source: z.enum(["biber", "bibtex", "latex", "latexmk", "system"]),
+    rawExcerpt: z.string().max(2_048),
+  })
+  .strict();
 
 export const compileProjectRequestSchema = z
   .object({
@@ -36,6 +47,7 @@ export const buildViewSchema = z
     failureReason: z.string().nullable(),
     log: z.string(),
     logTruncated: z.boolean(),
+    diagnostics: z.array(buildDiagnosticSchema).max(200),
     visiblePdf: pdfArtifactSchema.nullable(),
   })
   .strict();
@@ -84,6 +96,7 @@ export const pdfActionResultSchema = z.discriminatedUnion("ok", [
 export type CompileProjectRequest = z.infer<typeof compileProjectRequestSchema>;
 export type CompileProjectResult = z.infer<typeof compileProjectResultSchema>;
 export type BuildView = z.infer<typeof buildViewSchema>;
+export type BuildDiagnostic = z.infer<typeof buildDiagnosticSchema>;
 export type PdfArtifact = z.infer<typeof pdfArtifactSchema>;
 export type PdfArtifactRequest = z.infer<typeof pdfArtifactRequestSchema>;
 export type LoadPdfResult = z.infer<typeof loadPdfResultSchema>;

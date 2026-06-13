@@ -285,3 +285,48 @@ sprint assignments are authoritative in `docs/SRS.md`.
   `../src/electron/`
 - Unit, integration, component, and Electron E2E tests: `../tests/`
 - Design decision: `adr/ADR-0008-live-build-and-project-watching.md`
+
+## Sprint 7
+
+| Requirement     | Sprint 7 evidence                                                   | Status                 |
+| --------------- | ------------------------------------------------------------------- | ---------------------- |
+| `FR-EDIT-008`   | CodeMirror line decorations mark error, warning, and info lines     | Complete               |
+| `FR-BUILD-007`  | Reducer rejects older generations before replacing diagnostics      | Complete               |
+| `FR-BUILD-020`  | Missing file/package output explains MiKTeX install/path actions    | Complete               |
+| `FR-DIAG-001`   | Full compiler log remains on disk; bounded raw panel remains        | Complete               |
+| `FR-DIAG-002`   | Pure parser handles common LaTeX and bibliography output            | Complete               |
+| `FR-DIAG-003`   | Typed severity, message, file, line, column, source, and excerpt    | Complete               |
+| `FR-DIAG-004`   | Problem selection opens the validated project file and source line  | Complete               |
+| `FR-DIAG-005`   | Required error, warning, bibliography, timeout, and cancel cases    | Complete               |
+| `FR-DIAG-006`   | Unknown/malformed output falls back while raw log remains visible   | Complete               |
+| `FR-DIAG-007`   | Main generation and renderer revision checks reject stale results   | Complete               |
+| `FR-DIAG-008`   | Problems UI uses visible Error, Warning, and Info text labels       | Complete               |
+| `NFR-REL-003`   | Malformed logs and status-only timeout/cancel paths are recoverable | Current scope complete |
+| `NFR-REL-005`   | Parser and reducer behavior is deterministic and unit tested        | Complete               |
+| `NFR-SEC-009`   | Display log, diagnostic count, messages, and excerpts are bounded   | Partial; capture later |
+| `NFR-MAINT-002` | Strict Zod IPC and TypeScript diagnostic contracts                  | Current scope complete |
+| `NFR-MAINT-003` | Diagnostics live in an independent pure module                      | Current scope complete |
+| `NFR-MAINT-005` | Parser, component, integration, and E2E tests avoid sleeps          | Complete               |
+| `NFR-UX-001`    | Problems and source navigation are keyboard-operable buttons        | Current scope complete |
+| `NFR-UX-002`    | Severity and retained/current build states use text, not color only | Complete               |
+| `NFR-UX-003`    | Selecting a problem moves focus into the target editor              | Complete               |
+| `NFR-UX-004`    | Problems region, controls, and each located problem are named       | Complete               |
+| `NFR-UX-006`    | Missing-package and fallback messages provide next actions          | Current scope complete |
+| `NFR-PRIV-001`  | Diagnostic parsing and display remain entirely local                | Complete for Sprint 7  |
+| `NFR-PRIV-002`  | No analytics, telemetry, or network service was added               | Complete for Sprint 7  |
+| `AS-002`        | E2E retains and labels the previous PDF and links the new error     | Complete               |
+| `AS-006`        | Session integration maps included-file errors to path and line      | Complete               |
+
+### Sprint 7 evidence
+
+- Sprint report: `reports/SPRINT-7.md`
+- Parser and typed model: `../src/diagnostics/` and
+  `../src/ipc/build-contracts.ts`
+- Problems panel, editor markers, and reducer: `../src/renderer/`
+- Golden fixtures: `../fixtures/syntax-error/`,
+  `../fixtures/undefined-reference/`, `../fixtures/missing-package/`,
+  `../fixtures/bibliography-bibtex/`, `../fixtures/bibliography-biber/`,
+  `../fixtures/multi-file/`, and `../fixtures/malformed-log/`
+- Unit, component, integration, Electron E2E, and real MiKTeX evidence:
+  `../tests/`
+- Design decision: `adr/ADR-0009-structured-diagnostics.md`

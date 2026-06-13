@@ -2,8 +2,9 @@
 
 ## Current state
 
-Sprint 6 connects editing bursts to serialized autosave, newest-only live
-compilation, bounded project watching, and validated workspace restoration:
+Sprint 7 converts bounded compiler logs into source-linked diagnostics while
+preserving the Sprint 6 autosave, newest-only live compilation, project
+watching, and workspace restoration controls:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
@@ -13,6 +14,8 @@ compilation, bounded project watching, and validated workspace restoration:
 - `build/`: per-project state machine, generation IDs, newest-only queue,
   debounce foundation, stale-result rejection, timeout, and last-successful
   metadata.
+- `diagnostics/`: pure bounded parsing for LaTeX, `latexmk`, BibTeX, Biber,
+  malformed output, and build status events.
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
   project metadata, recent-project storage, and filtered Chokidar events.
@@ -23,12 +26,13 @@ compilation, bounded project watching, and validated workspace restoration:
   a frozen nine-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
-  persistence, resizable panes, build controls, raw log panel, lazy PDF.js
-  viewer, retained-output status, error boundary, and desktop layout.
+  persistence, resizable panes, build controls, source-linked Problems and raw
+  log panels, diagnostic line markers, lazy PDF.js viewer, retained-output
+  status, error boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no diagnostics parser, SyncTeX navigation UI, full settings UI,
-recovery workflow, or production packaging.
+There is still no SyncTeX navigation UI, full settings UI, recovery workflow, or
+production packaging.
 
 ## System boundaries
 
@@ -125,6 +129,36 @@ relative open paths, active path, cursor and scroll views, pane ratio, and
 live-build preferences. Source text, PDF bytes, logs, canonical paths, and build
 state are not stored.
 
+## Sprint 7 diagnostic flow
+
+```text
+completed current build
+  -> bounded raw log assembled in the main process
+  -> pure diagnostic parser
+  -> known project-relative file resolution only
+  -> strict diagnostic IPC schema
+  -> generation and renderer-revision acceptance checks
+  -> Problems panel plus CodeMirror line decorations
+  -> validated project read and editor focus on selection
+```
+
+The parser emits at most 200 diagnostics. Messages are bounded to 4,096
+characters and excerpts to 2,048 characters. It recognizes common LaTeX,
+`latexmk`, BibTeX, and Biber formats, reconstructs MiKTeX file-line messages
+wrapped at 79 columns, and emits status diagnostics for timeout and
+cancellation. Unknown failed output receives a fallback problem without removing
+or rewriting the raw log.
+
+Only paths already enumerated by the open project can become diagnostic file
+links. Absolute paths in logs are reduced to a known project-relative suffix or
+discarded. Selecting a located problem uses the existing validated
+`readTextFile` preload method, then moves CodeMirror focus and selection to the
+bounded line/column. No preload capability was added.
+
+The renderer rejects older build generations and source revisions before
+diagnostics can become current. Any edit clears the accepted diagnostic set and
+line decorations until the next current build completes.
+
 ## Project flow
 
 ```text
@@ -188,6 +222,9 @@ after the self-test, so it does not modify user projects.
   filesystem writes or builds.
 - Stale renderer revisions cannot accept build or PDF results even when the
   main-process generation is current.
+- Stale generations or edited source cannot retain current diagnostics.
+- Diagnostic links are limited to enumerated project-relative files.
+- Untrusted diagnostic text is bounded and rendered as escaped React text.
 - The renderer never receives unrestricted IPC or filesystem primitives.
 - The renderer receives no canonical PDF path capability; artifact actions
   require a current opaque build token. Raw compiler logs may contain path text.
@@ -203,5 +240,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0006-secure-electron-shell-and-ipc.md`
 - `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`
 - `adr/ADR-0008-live-build-and-project-watching.md`
+- `adr/ADR-0009-structured-diagnostics.md`
 
 Packaging requires a later ADR before implementation.

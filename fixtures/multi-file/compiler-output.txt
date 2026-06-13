@@ -1,0 +1,6 @@
+(./main.tex
+(./chapters/intro.tex
+! Undefined control sequence.
+l.2 \undefinedchaptercommand
+)
+)

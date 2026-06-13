@@ -1,0 +1,7 @@
+(./main.tex
+LaTeX Warning: Reference `sec:missing' on page 1 undefined on input line 3.
+Package natbib Warning: Citation `missing-source' on page 1 undefined on input line 3.
+Overfull \hbox (4.0pt too wide) in paragraph at lines 3--4
+Underfull \hbox (badness 10000) in paragraph at lines 3--4
+LaTeX Warning: There were undefined references.
+)

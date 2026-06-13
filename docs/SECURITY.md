@@ -1,11 +1,12 @@
 # Security
 
-## Sprint 6 posture
+## Sprint 7 posture
 
-Sprint 6 keeps the Electron renderer outside the trusted computing boundary
-while adding autosave, live compilation, project watching, and workspace
-restoration. It adds no network service, telemetry, remote content, arbitrary
-filesystem access, or general process capability.
+Sprint 7 keeps the Electron renderer outside the trusted computing boundary
+while adding structured diagnostic parsing, display, markers, and source
+navigation. It adds no network service, telemetry, remote content, arbitrary
+filesystem access, general process capability, preload method, or production
+dependency.
 
 The application:
 
@@ -69,7 +70,19 @@ The application:
 - serializes saves and retains version-token checks before automatic builds;
 - rejects build and PDF results when the renderer source revision changed; and
 - persists only validated relative workspace state and preferences, never source
-  text, PDF bytes, logs, canonical paths, or credentials.
+  text, PDF bytes, logs, canonical paths, or credentials;
+- parses only the bounded renderer log copy in a pure module without filesystem
+  or process access;
+- limits each build response to 200 diagnostics, 4,096 message characters, and
+  2,048 excerpt characters per diagnostic;
+- resolves diagnostic links only to files enumerated inside the open project and
+  returns project-relative paths;
+- discards unknown absolute paths as navigation targets;
+- sends diagnostics through a strict Zod response schema;
+- rejects stale diagnostic generations and clears accepted diagnostics after
+  source edits;
+- renders messages and excerpts as escaped React text, never HTML; and
+- reuses the existing validated `readTextFile` capability for source navigation.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
@@ -89,6 +102,11 @@ The raw user-visible compiler log may contain local absolute paths and
 environment details emitted by MiKTeX or `latexmk`. These strings do not become
 filesystem capabilities, and source remains local, but the path-text exposure is
 intentional for unmodified troubleshooting output.
+
+Structured diagnostics do not repeat arbitrary absolute paths in their `file`
+field. A path becomes selectable only when it matches a known project-relative
+entry. Raw excerpts may still contain the original local path text because they
+are troubleshooting text, not capabilities.
 
 It is not approved for untrusted TeX input because total compiler output and
 generated-file counts are not yet bounded and the complete threat model is
@@ -129,4 +147,5 @@ Automatic external-file reload/merge, external URL handling, and any new preload
 capability require their own validated contracts and tests. ADR-0005 defines the
 path/link policy; ADR-0006 defines the Electron boundary; ADR-0007 defines
 completed PDF loading and artifact actions; ADR-0008 defines live build and
-project watching.
+project watching; ADR-0009 defines structured diagnostic parsing and source
+links.

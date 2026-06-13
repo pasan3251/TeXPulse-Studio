@@ -340,7 +340,7 @@ button.tree-row:hover {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.main-workspace.with-log {
+.main-workspace.with-bottom-panel {
   grid-template-rows: minmax(0, 1fr) minmax(150px, 28vh);
 }
 
@@ -451,6 +451,25 @@ button.tree-row:hover {
 
 .editor-host .cm-editor {
   height: 100%;
+}
+
+.editor-host .cm-diagnostic-line {
+  box-shadow: inset 3px 0 currentcolor;
+}
+
+.editor-host .cm-diagnostic-error {
+  color: #f5b6b6;
+  background: rgb(127 29 29 / 18%);
+}
+
+.editor-host .cm-diagnostic-warning {
+  color: #f7c86a;
+  background: rgb(146 64 14 / 16%);
+}
+
+.editor-host .cm-diagnostic-info {
+  color: #93c5fd;
+  background: rgb(30 64 175 / 14%);
 }
 
 .preview-empty,
@@ -656,6 +675,137 @@ button.tree-row:hover {
   grid-template-rows: auto minmax(0, 1fr);
   border-top: 1px solid #334155;
   background: #090f1d;
+}
+
+.problems-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-top: 1px solid #334155;
+  background: #090f1d;
+}
+
+.problems-panel header {
+  display: flex;
+  min-width: 0;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #1e293b;
+  color: #93a1b5;
+  font-size: 10px;
+}
+
+.problems-panel header div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.problems-panel header strong {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.problems-empty {
+  margin: 0;
+  padding: 18px;
+  color: #7f8da4;
+  font-size: 11px;
+}
+
+.problem-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.problem {
+  border-bottom: 1px solid #172033;
+}
+
+.problem > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  color: #dbe4f0;
+  background: transparent;
+  text-align: left;
+}
+
+.problem > button:not(:disabled) {
+  cursor: pointer;
+}
+
+.problem > button:hover:not(:disabled),
+.problem > button:focus-visible {
+  background: rgb(148 163 184 / 8%);
+  outline: none;
+}
+
+.problem > button:disabled {
+  opacity: 0.78;
+}
+
+.problem-severity {
+  width: fit-content;
+  height: fit-content;
+  padding: 2px 6px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.severity-error {
+  color: #f5b6b6;
+}
+
+.severity-warning {
+  color: #f7c86a;
+}
+
+.severity-info {
+  color: #93c5fd;
+}
+
+.problem-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.problem-copy strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problem-copy > span {
+  color: #8492a8;
+  font-size: 9px;
+}
+
+.problem-copy code {
+  overflow: hidden;
+  color: #aebbd0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .build-log header {

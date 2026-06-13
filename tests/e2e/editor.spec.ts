@@ -245,3 +245,104 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     await rm(projectDirectory, { recursive: true, force: true });
   }
 });
+
+test("shows diagnostics, navigates to the source, and clears fixed problems", async () => {
+  const projectDirectory = await mkdtemp(join(tmpdir(), "texpulse-diag-e2e-"));
+  const mainPath = join(projectDirectory, "main.tex");
+  await writeFile(
+    mainPath,
+    "\\documentclass{article}\n\\begin{document}\nWorking document\n\\end{document}\n",
+  );
+
+  const electronApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
+      TEXPULSE_E2E_PROJECT: projectDirectory,
+    },
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    await page.evaluate(() => {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith("texpulse.workspace.v1.")) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    });
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    await expect(page.getByLabel("Editor for main.tex")).toBeVisible();
+    await page.getByLabel("Auto build").uncheck();
+
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect(page.getByText("Current build")).toBeVisible();
+
+    const editor = page.getByTestId("code-editor");
+    const failingSource =
+      "\\documentclass{article}\n\\begin{document}\nBefore error\n\\undefinedcommand % TEXPULSE_DIAG_UNDEFINED\n\\end{document}\n";
+    await editor.click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type(failingSource);
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+
+    await expect(page.getByText("Build: failed")).toBeVisible();
+    await expect(page.getByText("Last successful build")).toBeVisible();
+    const problems = page.getByRole("region", { name: "Problems" });
+    await expect(problems).toBeVisible();
+    await expect(problems).toContainText("1 errors");
+    await expect(problems).toContainText("Undefined control sequence.");
+    await expect(problems).toContainText("main.tex:4:1");
+    await expect(
+      page.locator(".cm-line.cm-diagnostic-error", {
+        hasText: "\\undefinedcommand",
+      }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Show log" }).click();
+    const rawLog = page.getByRole("region", { name: "Raw build log" });
+    await expect(rawLog).toBeVisible();
+    await expect(rawLog).toContainText("Undefined control sequence.");
+    await page.getByRole("button", { name: "Problems (1)" }).click();
+
+    await page
+      .getByRole("button", {
+        name: "Error: Undefined control sequence. at main.tex:4:1",
+      })
+      .click();
+    await expect(editor).toBeFocused();
+    await expect(
+      page.locator(".cm-activeLine", { hasText: "\\undefinedcommand" }),
+    ).toBeVisible();
+
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-7-problems.png"),
+    });
+
+    const fixedSource =
+      "\\documentclass{article}\n\\begin{document}\nFixed document\n\\end{document}\n";
+    await editor.click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type(fixedSource);
+    await expect(
+      page.getByRole("button", { name: "Problems (0)" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect(page.getByText("Current build")).toBeVisible();
+    await expect(
+      page.getByText("Undefined control sequence."),
+    ).not.toBeVisible();
+  } finally {
+    await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});

@@ -1,0 +1,5 @@
+(./main.tex
+! Undefined control sequence.
+l.4 \undefinedcommand
+)
+Latexmk: Errors, so I did not complete making targets

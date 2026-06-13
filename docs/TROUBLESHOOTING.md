@@ -87,6 +87,31 @@ output should exist under
 In the desktop editor, open the raw build log. A failed or missing-output build
 keeps the previous successful PDF visible and labels it `Last successful build`.
 
+## A build failed but no source line is shown
+
+Open `Problems` after the build. Located errors and warnings are buttons that
+open the project file and focus the reported line. Messages without a validated
+project file or line remain visible but are intentionally not selectable.
+
+Use `Show log` to inspect the bounded raw compiler output. An unrecognized log
+format produces a fallback problem and does not hide the raw log. The complete
+MiKTeX log remains in the generation directory under
+`<project>\.texpulse\build\generations`.
+
+If a newly created source file is named in the log but does not link, reopen the
+project so its bounded entry list is refreshed. Diagnostic paths are accepted
+only when they match a file enumerated in the open project.
+
+## A missing package is reported
+
+The Problems panel identifies common `File ... not found` and `latexmk` missing
+input messages. Check the document path first. For a missing `.sty` or `.cls`,
+open MiKTeX Console, install or update the named package, then compile again.
+
+MiKTeX may be configured to install missing packages automatically. Do not
+enable shell escape or bypass project path validation to work around a package
+error.
+
 ## PDF preview failed
 
 The viewer loads only a completed, readable generated PDF and limits preview

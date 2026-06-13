@@ -9,7 +9,8 @@
 | Sprint 4     | Complete on 2026-06-13 | Secure Electron shell and editor                        |
 | Sprint 5     | Complete on 2026-06-13 | Manual compilation and PDF preview                      |
 | Sprint 6     | Complete on 2026-06-14 | Autosave, live compilation, watching, restoration       |
-| Sprints 7-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 7     | Complete on 2026-06-14 | Structured diagnostics, Problems panel, source links    |
+| Sprints 8-14 | Not started            | See `docs/SRS.md`                                       |
 
 ## Completed scope
 
@@ -48,13 +49,21 @@ main-process project watching, external-change notices, workspace restoration,
 responsive pane resizing, and rapid-workflow E2E coverage. See
 `reports/SPRINT-6.md`.
 
+Sprint 7 adds a bounded pure diagnostic parser for common LaTeX, `latexmk`,
+BibTeX, and Biber output; strict typed diagnostic contracts; source-linked
+Problems UI; CodeMirror line markers and navigation; stale-diagnostic rejection;
+raw-log fallback; golden, malformed, multi-file, component, integration, and
+Electron E2E coverage; and native MiKTeX log validation. See
+`reports/SPRINT-7.md`.
+
 ## Current environment limitation
 
 MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
 does not report a parseable version. Compiler output remains unbounded until
 security hardening, and old generation directories do not yet have a cleanup
 policy. The renderer log copy is bounded to 2 MiB and PDF preview to 100 MiB,
-but total compiler output capture remains pending Sprint 10. The editor now
-detects external changes through a bounded project watcher and still rejects
-stale version tokens. Automatic reload, side-by-side comparison, and merge
-actions remain future work.
+while structured output is bounded to 200 diagnostics, 4,096 characters per
+message, and 2,048 characters per excerpt. Total compiler output capture remains
+pending Sprint 10. The editor detects external changes through a bounded project
+watcher and still rejects stale version tokens. Automatic reload, side-by-side
+comparison, and merge actions remain future work.

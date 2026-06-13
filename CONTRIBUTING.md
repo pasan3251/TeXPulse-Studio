@@ -63,6 +63,12 @@ or Electron E2E coverage for user-visible workflows. Live-build changes must
 preserve serialized saves, newest-only compile behavior, and source-revision
 revalidation before accepting build or PDF results.
 
+For diagnostic changes, keep parsing pure and bounded, retain the raw log, and
+resolve source links only against enumerated project-relative files. Add or
+update golden fixtures for every supported log shape, including malformed and
+native MiKTeX-wrapped output. Preserve explicit Error, Warning, and Info labels,
+React text escaping, stale-generation rejection, and source-navigation tests.
+
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to
 make a change pass.

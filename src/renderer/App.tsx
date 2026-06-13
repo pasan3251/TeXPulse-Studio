@@ -9,7 +9,9 @@ import {
 } from "react";
 
 import type { TeXPulseApi } from "../ipc/api-contract.js";
+import type { BuildDiagnostic } from "../ipc/build-contracts.js";
 import { BuildLog } from "./components/BuildLog.js";
+import { ProblemsPanel } from "./components/ProblemsPanel.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
 import {
   LiveBuildCoordinator,
@@ -72,6 +74,7 @@ export function App({ api = window.texpulse }: AppProps) {
   const openRequestRef = useRef(0);
   const splitRef = useRef<HTMLDivElement>(null);
   const draggingSplitRef = useRef(false);
+  const diagnosticRequestRef = useRef(0);
   stateRef.current = state;
 
   const activeBuffer =
@@ -348,6 +351,33 @@ export function App({ api = window.texpulse }: AppProps) {
     }
   };
 
+  const navigateToDiagnostic = async (
+    diagnostic: BuildDiagnostic,
+  ): Promise<void> => {
+    if (diagnostic.file === null || diagnostic.line === null) {
+      return;
+    }
+    if (stateRef.current.buffers[diagnostic.file] === undefined) {
+      dispatch({ type: "file-loading", path: diagnostic.file });
+      const result = await api.readTextFile({ path: diagnostic.file });
+      if (!result.ok) {
+        dispatch({
+          type: "operation-failed",
+          message: result.error.message,
+          path: diagnostic.file,
+        });
+        return;
+      }
+      dispatch({ type: "file-opened", file: result.value });
+    }
+    diagnosticRequestRef.current += 1;
+    dispatch({
+      type: "diagnostic-selected",
+      diagnostic,
+      requestId: diagnosticRequestRef.current,
+    });
+  };
+
   useEffect(() => {
     const coordinator = new LiveBuildCoordinator({
       save: () => savePaths(null, false),
@@ -499,6 +529,14 @@ export function App({ api = window.texpulse }: AppProps) {
     state.buildPhase === "idle"
       ? (state.build?.status ?? "idle")
       : state.buildPhase;
+  const diagnostics = state.build?.diagnostics ?? [];
+  const activeDiagnostics =
+    activeBuffer === undefined
+      ? []
+      : diagnostics.filter(
+          (diagnostic) => diagnostic.file === activeBuffer.path,
+        );
+  const bottomPanelOpen = state.logOpen || state.problemsOpen;
 
   return (
     <div className="app-shell">
@@ -513,6 +551,18 @@ export function App({ api = window.texpulse }: AppProps) {
           </div>
         </div>
         <div className="toolbar" aria-label="Editor actions">
+          <button
+            type="button"
+            className="button secondary"
+            disabled={state.build === null}
+            onClick={() => {
+              dispatch({ type: "problems-toggled" });
+            }}
+          >
+            {state.problemsOpen
+              ? "Hide problems"
+              : `Problems (${String(diagnostics.length)})`}
+          </button>
           <button
             type="button"
             className="button secondary"
@@ -650,7 +700,9 @@ export function App({ api = window.texpulse }: AppProps) {
           />
         )}
 
-        <div className={`main-workspace ${state.logOpen ? "with-log" : ""}`}>
+        <div
+          className={`main-workspace ${bottomPanelOpen ? "with-bottom-panel" : ""}`}
+        >
           <div
             className="content-split"
             ref={splitRef}
@@ -700,6 +752,8 @@ export function App({ api = window.texpulse }: AppProps) {
                   >
                     <EditorPane
                       buffer={activeBuffer}
+                      diagnostics={activeDiagnostics}
+                      navigationTarget={state.diagnosticTarget}
                       onChange={(path, content) => {
                         dispatch({ type: "content-changed", path, content });
                         coordinatorRef.current?.noteEdit();
@@ -778,7 +832,17 @@ export function App({ api = window.texpulse }: AppProps) {
               </Suspense>
             )}
           </div>
-          {state.logOpen && state.build !== null ? (
+          {state.problemsOpen && state.build !== null ? (
+            <ProblemsPanel
+              diagnostics={diagnostics}
+              onClose={() => {
+                dispatch({ type: "problems-toggled" });
+              }}
+              onSelect={(diagnostic) => {
+                void navigateToDiagnostic(diagnostic);
+              }}
+            />
+          ) : state.logOpen && state.build !== null ? (
             <BuildLog
               build={state.build}
               onClose={() => {

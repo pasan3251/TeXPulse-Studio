@@ -1,0 +1,2 @@
+@@@ compiler output changed format <<<
+unstructured failure data without a source location

@@ -36,6 +36,7 @@ function successfulBuild(generation = 1): BuildView {
     failureReason: null,
     log: "complete",
     logTruncated: false,
+    diagnostics: [],
     visiblePdf: {
       buildId: `build-${String(generation)}`,
       generation,
@@ -45,6 +46,16 @@ function successfulBuild(generation = 1): BuildView {
     },
   };
 }
+
+const undefinedControlSequence = {
+  severity: "error" as const,
+  message: "Undefined control sequence.",
+  file: "main.tex",
+  line: 4,
+  column: 1,
+  source: "latex" as const,
+  rawExcerpt: "! Undefined control sequence.\nl.4 \\undefinedcommand",
+};
 
 describe("workspaceReducer", () => {
   it("tracks modified state and preserves newer edits after a save completes", () => {
@@ -227,6 +238,75 @@ describe("workspaceReducer", () => {
     });
 
     expect(state.build?.generation).toBe(2);
+  });
+
+  it("opens current problems, rejects stale diagnostics, and clears markers on edit", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "file-opened",
+      file: file("main.tex", "compiled"),
+    });
+    state = workspaceReducer(state, {
+      type: "build-finished",
+      build: {
+        ...successfulBuild(2),
+        status: "failed",
+        failureReason: "latexmk exited with code 3.",
+        diagnostics: [undefinedControlSequence],
+        visiblePdf: null,
+      },
+    });
+    expect(state).toMatchObject({
+      problemsOpen: true,
+      logOpen: false,
+      build: { generation: 2, diagnostics: [undefinedControlSequence] },
+    });
+
+    const stale = workspaceReducer(state, {
+      type: "build-finished",
+      build: {
+        ...successfulBuild(1),
+        diagnostics: [
+          { ...undefinedControlSequence, message: "Stale diagnostic." },
+        ],
+      },
+    });
+    expect(stale).toBe(state);
+
+    state = workspaceReducer(state, {
+      type: "content-changed",
+      path: "main.tex",
+      content: "fixed",
+    });
+    expect(state.build?.diagnostics).toEqual([]);
+    expect(state.problemsOpen).toBe(false);
+  });
+
+  it("selects only diagnostics with an available file and line", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "file-opened",
+      file: file("main.tex", "one\ntwo\nthree\nfour"),
+    });
+    state = workspaceReducer(state, {
+      type: "diagnostic-selected",
+      diagnostic: undefinedControlSequence,
+      requestId: 7,
+    });
+    expect(state).toMatchObject({
+      activePath: "main.tex",
+      diagnosticTarget: {
+        path: "main.tex",
+        line: 4,
+        column: 1,
+        requestId: 7,
+      },
+    });
+
+    const unchanged = workspaceReducer(state, {
+      type: "diagnostic-selected",
+      diagnostic: { ...undefinedControlSequence, file: null, line: null },
+      requestId: 8,
+    });
+    expect(unchanged).toBe(state);
   });
 
   it("restores open files, views, settings, and pane geometry", () => {
