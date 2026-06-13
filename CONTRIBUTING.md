@@ -1,0 +1,36 @@
+# Contributing
+
+## Before changing code
+
+1. Read `AGENTS.md`, `docs/SRS.md`, and `docs/SPRINT_STATUS.md`.
+2. Confirm the requested sprint and map work to SRS requirements.
+3. Inspect Git status and preserve unrelated user changes.
+4. Use native Windows Node.js and tools for the MVP.
+
+## Development
+
+Install the pinned dependencies:
+
+```powershell
+pnpm install --frozen-lockfile
+```
+
+Run the complete current quality gate:
+
+```powershell
+pnpm check
+```
+
+Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
+TypeScript settings, Electron security constraints, or compiler safety rules to
+make a change pass.
+
+## Pull requests
+
+- Keep changes within one sprint.
+- Include requirement IDs and test evidence.
+- Update architecture, security, test, status, and traceability documents when
+  behavior changes.
+- Report skipped or unavailable real MiKTeX tests honestly.
+- Do not commit generated build output, dependency directories, logs, or user
+  LaTeX projects.
