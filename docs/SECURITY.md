@@ -1,8 +1,8 @@
 # Security
 
-## Sprint 2 posture
+## Sprint 3 posture
 
-Sprint 2 adds compiler orchestration outside Electron. It adds no network
+Sprint 3 adds a project filesystem service outside Electron. It adds no network
 service, renderer, telemetry, or production dependency.
 
 The prototype:
@@ -22,6 +22,17 @@ The prototype:
 - isolates outputs by generation so stale or failed builds cannot overwrite the
   retained successful PDF;
 - rejects adapter results with mismatched build identity.
+- canonicalizes the selected project directory;
+- accepts only relative project entry paths and verifies resolved paths remain
+  below the canonical root;
+- rejects traversal through project-internal symbolic links and junctions;
+- lists link entries without following them;
+- decodes editor files as bounded valid UTF-8 text;
+- saves through a same-directory temporary file with sync and atomic rename;
+- requires a SHA-256 version token before replacing a file;
+- reports changed or deleted external files explicitly;
+- validates project metadata and safely falls back with issues; and
+- ignores generated and dependency directories during project enumeration.
 
 It is not approved for untrusted TeX input because compiler output is not yet
 bounded and the complete threat model is scheduled for Sprint 10.
@@ -36,6 +47,8 @@ bounded and the complete threat model is scheduled for Sprint 10.
 - Keep TeX shell escape disabled by default.
 - Enforce compile timeout, cancellation, output bounds, and process cleanup.
 - Reject stale build results.
+- Reject stale file-version tokens before replacement.
+- Do not traverse project-internal links or junctions.
 - Validate external URLs and configure a Content Security Policy.
 - Keep source content local and omit analytics from the initial release.
 
@@ -46,10 +59,11 @@ bounded and the complete threat model is scheduled for Sprint 10.
 - CI uses a frozen lockfile.
 - Dependency vulnerability review is a release gate under `NFR-SEC-012`.
 - Security findings must not be hidden by disabling tests or lint rules.
-- Pure compiler/toolchain modules enforce at least 85% statement and branch
-  coverage.
+- Covered pure compiler, project, and toolchain modules enforce at least 85%
+  aggregate statement and branch coverage.
 
 ## Future work
 
-A detailed threat model, trusted-project policy, path/link policy, IPC schema,
-and TeX execution review are required before the corresponding features ship.
+A detailed threat model, trusted-project policy, IPC schema, and TeX execution
+review are required before the corresponding features ship. ADR-0005 defines the
+current conservative path/link policy.

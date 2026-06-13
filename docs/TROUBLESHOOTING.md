@@ -75,6 +75,24 @@ Press `Ctrl+C` while `texpulse-compile` is running. A cancelled build exits with
 code 130. On Windows the service invokes `taskkill.exe /T /F` directly without a
 shell so descendant Perl and TeX processes are terminated with the launcher.
 
+## Project file changed externally
+
+Every text read returns a content version token. If another program changes the
+file before TeXPulse saves, the write fails with a `conflict` error and leaves
+the external content intact. Reload or reconcile the content before retrying.
+
+## Project path is rejected
+
+Project entry paths must be relative and remain inside the canonical project
+root. TeXPulse reports internal symbolic links and junctions in enumeration but
+does not traverse, read through, rename through, or delete through them.
+
+## Project metadata falls back to defaults
+
+Project settings live at `.texpulse/project.json`. Invalid JSON, invalid fields,
+or an unsupported schema version return safe defaults with issue messages.
+Correct the metadata instead of bypassing validation.
+
 ## WSL detected
 
 Do not combine WSL paths or Node.js with native Windows MiKTeX for the MVP.

@@ -1,22 +1,23 @@
 # Test Plan
 
-## Sprint 2 scope
+## Sprint 3 scope
 
-Sprint 2 verifies repository controls, toolchain logic, build state transitions,
-generation and stale-result policy, newest-only queueing, timeout, cancellation,
-and whole-process-tree cleanup.
+Sprint 3 verifies repository controls, the existing compiler/build services,
+canonical project boundaries, ignore rules, root detection, UTF-8 CRUD, atomic
+versioned saves, metadata fallback, recent-project persistence, external-change
+conflicts, and link/junction rejection.
 
-| Check        | Command                 | Current evidence                                        |
-| ------------ | ----------------------- | ------------------------------------------------------- |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                   |
-| Linting      | `pnpm lint`             | ESLint checks JavaScript and TypeScript                 |
-| Strict types | `pnpm typecheck`        | TypeScript strict project check                         |
-| Unit tests   | `pnpm test:unit`        | Build states, debounce, queue, stale results, toolchain |
-| Integration  | `pnpm test:integration` | Fake compiler, cancellation, timeout, process cleanup   |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% statements and branches on pure modules    |
-| E2E          | `pnpm test:e2e`         | Explicitly reports no UI surface                        |
-| Build        | `pnpm build`            | Emits library modules and both CLI entry points         |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                     |
+| Check        | Command                 | Current evidence                                     |
+| ------------ | ----------------------- | ---------------------------------------------------- |
+| Formatting   | `pnpm format:check`     | Prettier checks repository text files                |
+| Linting      | `pnpm lint`             | ESLint checks JavaScript and TypeScript              |
+| Strict types | `pnpm typecheck`        | TypeScript strict project check                      |
+| Unit tests   | `pnpm test:unit`        | Paths, roots, metadata, build states, toolchain      |
+| Integration  | `pnpm test:integration` | Project CRUD/conflicts plus compiler process cleanup |
+| Coverage     | `pnpm test:coverage`    | Enforces 85% statements and branches on pure modules |
+| E2E          | `pnpm test:e2e`         | Explicitly reports no UI surface                     |
+| Build        | `pnpm build`            | Emits library modules and both CLI entry points      |
+| Aggregate    | `pnpm check`            | Runs every current gate in sequence                  |
 
 ## Determinism
 
@@ -30,6 +31,9 @@ and whole-process-tree cleanup.
   arbitrary sleeps.
 - Process-cleanup tests launch a parent and descendant, then verify both process
   IDs are gone after cancellation and timeout.
+- Project tests use isolated temporary directories and cover spaces, Unicode,
+  malformed metadata, ignored output, external edits/deletion, links or
+  junctions, and deterministic read-only failure.
 - Real MiKTeX smoke evidence is run separately from deterministic automation.
 
 ## Later test levels

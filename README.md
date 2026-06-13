@@ -1,8 +1,10 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 2 provides a local MiKTeX compiler service with newest-only
-queueing, generations, cancellation, timeout, and process-tree cleanup.
+development. Sprint 3 provides a bounded local project service with safe file
+CRUD, root detection, atomic versioned saves, project metadata, build-output
+ignore rules, and recent-project persistence. The Sprint 2 MiKTeX compiler
+service remains available.
 
 There is no Electron window, editor, or PDF viewer yet.
 
@@ -63,6 +65,21 @@ and `lualatex`. Pressing `Ctrl+C` cancels the active compiler tree.
 This developer service accepts trusted local projects only. Compiler output
 bounding and the complete threat model remain later hardening work.
 
+## Project service
+
+The typed modules under `src/project/`:
+
+- canonicalize project roots and reject path escapes;
+- list files without traversing symbolic links, junctions, or ignored output;
+- read and write UTF-8 text with SHA-256 version tokens;
+- reject stale writes after external changes;
+- atomically replace saved files where the platform supports rename;
+- rank likely LaTeX root files;
+- validate `.texpulse/project.json`; and
+- persist a bounded recent-project list at an injected application-data path.
+
+The Electron shell and editor integration begin in Sprint 4.
+
 ## Documentation
 
 - Product specification: `docs/SRS.md`
@@ -75,3 +92,4 @@ bounding and the complete threat model remain later hardening work.
 - Sprint 0 report: `docs/reports/SPRINT-0.md`
 - Sprint 1 report: `docs/reports/SPRINT-1.md`
 - Sprint 2 report: `docs/reports/SPRINT-2.md`
+- Sprint 3 report: `docs/reports/SPRINT-3.md`

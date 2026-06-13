@@ -26,6 +26,8 @@ changing code and treat it as the authoritative product specification.
 - Spawn executables with argument arrays.
 - Disable TeX shell escape by default.
 - Validate and canonicalize project paths.
+- Do not traverse project-internal symbolic links or junctions.
+- Require version-token checks before replacing externally editable files.
 - Enforce compiler timeout and cancellation.
 - Never allow stale build output to replace the newest result.
 
@@ -67,6 +69,10 @@ Packaging begins in Sprint 11, so no packaging command exists yet.
 The compiler service enforces timeout, cancellation, and process-tree cleanup.
 It remains limited to trusted local projects until output bounds and the full
 security hardening sprint are complete.
+
+The project service treats symbolic links and junctions inside an open project
+as non-traversable entries. Text replacement is atomic where supported and
+requires the version token returned by the latest read.
 
 ## Completion checklist
 

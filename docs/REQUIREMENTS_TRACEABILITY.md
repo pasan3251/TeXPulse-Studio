@@ -97,3 +97,40 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Timeout fixture: `../fixtures/timeout/main.tex`
 - Orchestration decision:
   `adr/ADR-0004-build-orchestration-and-process-cleanup.md`
+
+## Sprint 3
+
+| Requirement     | Sprint 3 evidence                                            | Status                   |
+| --------------- | ------------------------------------------------------------ | ------------------------ |
+| `FR-PROJ-001`   | Canonical existing-directory open in `ProjectService`        | Service complete         |
+| `FR-PROJ-003`   | Typed deterministic entry enumeration for future tree        | Foundation; UI later     |
+| `FR-PROJ-004`   | File/folder create, rename, move, and delete service         | Service complete         |
+| `FR-PROJ-005`   | Deterministic scoring of likely LaTeX root files             | Complete                 |
+| `FR-PROJ-006`   | Validated `rootFile` project metadata override               | Service complete         |
+| `FR-PROJ-007`   | Bounded, deduplicated recent-project persistence             | Service complete         |
+| `FR-PROJ-008`   | Content-version check reports changed or deleted files       | Service complete         |
+| `FR-PROJ-009`   | Internal links/junctions listed but never traversed          | Complete                 |
+| `FR-PROJ-010`   | Unicode and spaces covered through full CRUD lifecycle       | Complete                 |
+| `FR-PROJ-011`   | Stale writes fail with conflict and preserve external data   | Service complete         |
+| `FR-SAVE-002`   | Same-directory temporary file, sync, and atomic replacement  | Complete where practical |
+| `FR-SAVE-003`   | Typed failures prevent callers treating save as successful   | Service foundation       |
+| `FR-SAVE-004`   | Explicit current, changed, and deleted file states           | Service complete         |
+| `FR-SAVE-005`   | Required version token rejects external overwrite            | Service complete         |
+| `FR-SET-002`    | Project metadata separate in `.texpulse/project.json`        | Service complete         |
+| `FR-SET-003`    | Root, recipe, auto-build, and build-directory fields         | Partial; later settings  |
+| `FR-SET-004`    | Schema-version and field validation                          | Service complete         |
+| `FR-SET-005`    | Invalid/outdated data returns defaults plus issue messages   | Service complete         |
+| `NFR-PERF-005`  | Async deterministic enumeration without renderer blocking    | Foundation; UI later     |
+| `NFR-PERF-006`  | Default and configured generated folders are not traversed   | Complete                 |
+| `NFR-REL-004`   | Atomic replacement minimizes partial-file corruption         | Complete where practical |
+| `NFR-SEC-006`   | Canonical root, relative paths, realpath, and link rejection | Current scope complete   |
+| `NFR-COMP-003`  | Windows Unicode and spaces integration test                  | Current scope complete   |
+| `NFR-MAINT-003` | Independent path, metadata, persistence, and root modules    | Current scope complete   |
+| `AS-009`        | Traversal and internal-link requests rejected before access  | Service complete         |
+
+### Sprint 3 evidence
+
+- Sprint report: `reports/SPRINT-3.md`
+- Project service: `../src/project/`
+- Unit and integration tests: `../tests/unit/` and `../tests/integration/`
+- Filesystem decision: `adr/ADR-0005-project-filesystem-boundary.md`

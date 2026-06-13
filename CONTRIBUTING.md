@@ -33,6 +33,11 @@ pnpm texpulse-doctor
 The intentional infinite-loop fixture under `fixtures/timeout/` must only be run
 through a path that supplies an enforced compiler timeout.
 
+For project-filesystem work, preserve the canonical-root boundary, reject
+internal links and junctions, and use read-version tokens for destructive file
+replacement. Add integration coverage for Windows path behavior, Unicode,
+external modifications, and read-only failures.
+
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to
 make a change pass.
