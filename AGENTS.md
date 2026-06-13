@@ -58,14 +58,15 @@ pnpm test:e2e
 pnpm build
 pnpm check
 pnpm texpulse-doctor -- --custom-bin <directory>
-pnpm texpulse-compile -- --project <directory> --root main.tex
+pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 ```
 
 `pnpm test:e2e` currently reports that no applicable UI surface exists.
 Packaging begins in Sprint 11, so no packaging command exists yet.
 
-The compiler prototype is for trusted local developer projects only until Sprint
-2 adds timeout, cancellation, and process-tree cleanup.
+The compiler service enforces timeout, cancellation, and process-tree cleanup.
+It remains limited to trusted local projects until output bounds and the full
+security hardening sprint are complete.
 
 ## Completion checklist
 

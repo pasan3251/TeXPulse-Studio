@@ -5,6 +5,7 @@ export default defineConfig({
     clearMocks: true,
     coverage: {
       include: [
+        "src/build/build-controller.ts",
         "src/compiler/latexmk-arguments.ts",
         "src/compiler/path-validation.ts",
         "src/process/environment.ts",

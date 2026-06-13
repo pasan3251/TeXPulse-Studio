@@ -30,6 +30,9 @@ pnpm test:coverage
 pnpm texpulse-doctor
 ```
 
+The intentional infinite-loop fixture under `fixtures/timeout/` must only be run
+through a path that supplies an enforced compiler timeout.
+
 Use `pnpm format` to apply formatting. Do not weaken tests, lint rules, strict
 TypeScript settings, Electron security constraints, or compiler safety rules to
 make a change pass.

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { CompileRequest, CompileResult } from "./compile-types.js";
 import {
   compileProject,
@@ -15,9 +17,12 @@ export interface CompilerProbeOptions {
 export interface CompilerAdapter {
   probe(options?: CompilerProbeOptions): Promise<ToolchainProbe>;
   compile(request: CompileRequest): Promise<CompileResult>;
+  cancel(buildId: string): Promise<boolean>;
 }
 
 export class MiktexCompilerAdapter implements CompilerAdapter {
+  private readonly activeBuilds = new Map<string, AbortController>();
+
   constructor(private readonly dependencies: MiktexCompilerDependencies = {}) {}
 
   probe(options: CompilerProbeOptions = {}): Promise<ToolchainProbe> {
@@ -31,7 +36,37 @@ export class MiktexCompilerAdapter implements CompilerAdapter {
     });
   }
 
-  compile(request: CompileRequest): Promise<CompileResult> {
-    return compileProject(request, this.dependencies);
+  async compile(request: CompileRequest): Promise<CompileResult> {
+    const buildId = request.buildId ?? randomUUID();
+    const generation = request.generation ?? 1;
+    if (this.activeBuilds.has(buildId)) {
+      throw new Error(`Build ID is already active: ${buildId}`);
+    }
+
+    const abortController = new AbortController();
+    this.activeBuilds.set(buildId, abortController);
+    try {
+      return await compileProject(
+        {
+          ...request,
+          buildId,
+          generation,
+        },
+        this.dependencies,
+        abortController.signal,
+      );
+    } finally {
+      this.activeBuilds.delete(buildId);
+    }
+  }
+
+  cancel(buildId: string): Promise<boolean> {
+    const activeBuild = this.activeBuilds.get(buildId);
+    if (activeBuild === undefined) {
+      return Promise.resolve(false);
+    }
+
+    activeBuild.abort();
+    return Promise.resolve(true);
   }
 }

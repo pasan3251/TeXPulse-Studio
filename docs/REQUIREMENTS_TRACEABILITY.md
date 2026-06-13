@@ -17,9 +17,10 @@
 
 ## Scope boundary
 
-All compiler, project, Electron, editor, PDF, diagnostics, SyncTeX, recovery,
-settings, packaging, and collaboration requirements remain not started. Their
-planned sprint assignments are authoritative in `docs/SRS.md`.
+At the Sprint 0 baseline, compiler, project, Electron, editor, PDF, diagnostics,
+SyncTeX, recovery, settings, packaging, and collaboration requirements were not
+started. The sprint tables below record subsequent progress; remaining planned
+sprint assignments are authoritative in `docs/SRS.md`.
 
 ## Evidence
 
@@ -63,3 +64,36 @@ planned sprint assignments are authoritative in `docs/SRS.md`.
 - Compiler fixture: `../fixtures/minimal-success/main.tex`
 - Unit and integration tests: `../tests/`
 - Safety decision: `adr/ADR-0003-compiler-prototype-safety.md`
+
+## Sprint 2
+
+| Requirement    | Sprint 2 evidence                                        | Status                 |
+| -------------- | -------------------------------------------------------- | ---------------------- |
+| `FR-BUILD-002` | Controller accepts fake-timer debounce requests          | Foundation; UI later   |
+| `FR-BUILD-003` | 800 ms debounce verified with fake timers                | Foundation; UI later   |
+| `FR-BUILD-004` | One active compile per project controller                | Complete               |
+| `FR-BUILD-005` | One newest pending request replaces intermediates        | Complete               |
+| `FR-BUILD-006` | UUID build IDs and monotonic generations                 | Complete               |
+| `FR-BUILD-007` | Stale result disposition cannot update current state     | Complete               |
+| `FR-BUILD-008` | Adapter cancellation and CLI `Ctrl+C`                    | Service complete       |
+| `FR-BUILD-009` | Configurable timeout with process-tree cleanup           | Complete               |
+| `FR-BUILD-010` | Structured timing, process output, exit, and status      | Complete               |
+| `FR-BUILD-016` | Generation isolation and retained successful metadata    | Service complete       |
+| `FR-BUILD-017` | `VisiblePdf.isCurrent` distinguishes retained output     | Service complete       |
+| `NFR-PERF-003` | 50-request stress test runs active plus newest only      | Complete               |
+| `NFR-REL-001`  | Failed generation cannot overwrite successful generation | Service complete       |
+| `NFR-REL-002`  | Stale success is rejected from last-successful state     | Complete               |
+| `NFR-REL-003`  | Exit, missing output, timeout, cancellation survive      | Current scope complete |
+| `NFR-REL-005`  | Deterministic state-machine and fake-timer tests         | Complete               |
+| `NFR-SEC-008`  | Default and configurable enforced compiler timeout       | Complete               |
+| `AS-003`       | Rapid requests collapse and stale output is rejected     | Service complete       |
+| `AS-004`       | Cancellation terminates fake parent and descendant       | Service/CLI complete   |
+
+### Sprint 2 evidence
+
+- Sprint report: `reports/SPRINT-2.md`
+- Build controller tests: `../tests/unit/build-controller.test.ts`
+- Process cleanup tests: `../tests/integration/process-cleanup.test.ts`
+- Timeout fixture: `../fixtures/timeout/main.tex`
+- Orchestration decision:
+  `adr/ADR-0004-build-orchestration-and-process-cleanup.md`

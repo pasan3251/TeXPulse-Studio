@@ -2,17 +2,20 @@
 
 ## Current state
 
-Sprint 1 adds a compiler-core prototype outside Electron:
+Sprint 2 adds a reliable compiler service outside Electron:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
   isolated doctor self-test.
 - `compiler/`: validated project paths, fixed `latexmk` argument arrays, and
-  structured compile results.
+  cancellable structured compile results.
+- `build/`: per-project state machine, generation IDs, newest-only queue,
+  debounce foundation, stale-result rejection, timeout, and last-successful
+  metadata.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no Electron application, renderer, editor, build controller,
-diagnostics parser, or PDF viewer.
+There is still no Electron application, renderer, editor, diagnostics parser,
+project service, or PDF viewer.
 
 ## Planned system boundaries
 
@@ -26,15 +29,20 @@ The SRS defines these future boundaries:
 5. Pure modules for path validation, build generations, diagnostics, settings,
    and SyncTeX parsing.
 
-## Sprint 1 compiler flow
+## Sprint 2 compiler flow
 
 ```text
 CLI
-  -> tool discovery / readiness probe
+  -> per-project build controller
+  -> build ID and monotonically increasing generation
+  -> newest-only pending request
   -> validated project, root, and build paths
+  -> generation-isolated output directory
   -> Node process runner with shell disabled
-  -> latexmk with -norc and -no-shell-escape
-  -> structured result with existing PDF/log/SyncTeX paths
+  -> latexmk with timeout and cancellation signal
+  -> Windows process-tree cleanup with taskkill /T /F
+  -> current result or stale result rejected from current state
+  -> retained last-successful PDF metadata
 ```
 
 The doctor copies the minimal fixture into a temporary directory and removes it
@@ -56,6 +64,7 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0001-desktop-stack.md`
 - `adr/ADR-0002-windows-development-environment.md`
 - `adr/ADR-0003-compiler-prototype-safety.md`
+- `adr/ADR-0004-build-orchestration-and-process-cleanup.md`
 
-Packaging, full compiler-controller design, PDF loading, and the final
-link/junction policy require later ADRs before implementation.
+Packaging, PDF loading, and the final link/junction policy require later ADRs
+before implementation.

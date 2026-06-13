@@ -1,8 +1,8 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 1 provides a local MiKTeX toolchain doctor and minimal
-compile CLI outside Electron.
+development. Sprint 2 provides a local MiKTeX compiler service with newest-only
+queueing, generations, cancellation, timeout, and process-tree cleanup.
 
 There is no Electron window, editor, or PDF viewer yet.
 
@@ -53,15 +53,15 @@ self-test succeeds, unless `--skip-self-test` is explicitly supplied.
 ## Minimal compile CLI
 
 ```powershell
-pnpm texpulse-compile -- --project fixtures\minimal-success --root main.tex
+pnpm texpulse-compile -- --project fixtures\minimal-success --root main.tex --timeout 120000
 ```
 
-Output defaults to `<project>\.texpulse\build`. Supported prototype recipes are
-`pdf`, `xelatex`, and `lualatex`.
+Output defaults to generation-isolated directories under
+`<project>\.texpulse\build\generations`. Supported recipes are `pdf`, `xelatex`,
+and `lualatex`. Pressing `Ctrl+C` cancels the active compiler tree.
 
-This developer prototype accepts trusted local projects only. Timeout,
-cancellation, process-tree cleanup, generations, and stale-result control are
-Sprint 2 work.
+This developer service accepts trusted local projects only. Compiler output
+bounding and the complete threat model remain later hardening work.
 
 ## Documentation
 
@@ -74,3 +74,4 @@ Sprint 2 work.
 - Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
 - Sprint 0 report: `docs/reports/SPRINT-0.md`
 - Sprint 1 report: `docs/reports/SPRINT-1.md`
+- Sprint 2 report: `docs/reports/SPRINT-2.md`

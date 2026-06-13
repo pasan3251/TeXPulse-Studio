@@ -55,7 +55,25 @@ inventing a version.
 ## Compile output is missing
 
 Inspect the JSON `failureReason`, `exitCode`, `stdout`, and `stderr`. Successful
-prototype output should exist under `<project>\.texpulse\build`.
+output should exist under
+`<project>\.texpulse\build\generations\<generation>-<build-id>`.
+
+## Build timed out
+
+`texpulse-compile` defaults to 120 seconds and exits with code 124 on timeout.
+Set a positive timeout explicitly when needed:
+
+```powershell
+pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 180000
+```
+
+Do not disable the timeout for unknown or intentionally non-terminating TeX.
+
+## Build cancellation
+
+Press `Ctrl+C` while `texpulse-compile` is running. A cancelled build exits with
+code 130. On Windows the service invokes `taskkill.exe /T /F` directly without a
+shell so descendant Perl and TeX processes are terminated with the launcher.
 
 ## WSL detected
 

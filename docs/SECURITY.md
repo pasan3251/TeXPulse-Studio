@@ -1,9 +1,9 @@
 # Security
 
-## Sprint 1 posture
+## Sprint 2 posture
 
-Sprint 1 adds trusted-local-project compiler execution outside Electron. It adds
-no network service, renderer, telemetry, or production dependency.
+Sprint 2 adds compiler orchestration outside Electron. It adds no network
+service, renderer, telemetry, or production dependency.
 
 The prototype:
 
@@ -15,9 +15,16 @@ The prototype:
 - writes output under `.texpulse/build` by default;
 - passes `-norc` and `-no-shell-escape`;
 - reports only output paths that exist.
+- enforces a default 120-second compiler timeout;
+- cancels by build ID through `AbortController`;
+- terminates Windows compiler descendants with direct, shell-free
+  `taskkill.exe /T /F`;
+- isolates outputs by generation so stale or failed builds cannot overwrite the
+  retained successful PDF;
+- rejects adapter results with mismatched build identity.
 
-It is not approved for untrusted TeX input because timeout, cancellation,
-process-tree cleanup, and output bounds are scheduled for later sprints.
+It is not approved for untrusted TeX input because compiler output is not yet
+bounded and the complete threat model is scheduled for Sprint 10.
 
 ## Product security invariants
 

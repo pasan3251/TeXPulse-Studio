@@ -8,7 +8,12 @@ import {
 } from "../process/process-runner.js";
 import { environmentWithPrependedPath } from "../process/environment.js";
 import { discoverExecutable } from "../toolchain/executable-discovery.js";
-import type { CompileRequest, CompileResult } from "./compile-types.js";
+import {
+  DEFAULT_COMPILE_TIMEOUT_MS,
+  type CompileRequest,
+  type CompileResult,
+  type CompileStatus,
+} from "./compile-types.js";
 import { buildLatexmkArguments } from "./latexmk-arguments.js";
 import { validateCompilePaths } from "./path-validation.js";
 
@@ -25,13 +30,16 @@ export interface MiktexCompilerDependencies {
 
 function failedResult(
   buildId: string,
+  generation: number,
   reason: string,
   startedAt: Date,
+  status: CompileStatus = "failed",
 ): CompileResult {
   const endedAt = new Date();
   return {
     buildId,
-    status: "failed",
+    generation,
+    status,
     exitCode: null,
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
@@ -82,15 +90,48 @@ async function outputPathOrNull(path: string): Promise<string | null> {
   }
 }
 
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted ?? false;
+}
+
 export async function compileProject(
   request: CompileRequest,
   dependencies: MiktexCompilerDependencies = {},
+  signal?: AbortSignal,
 ): Promise<CompileResult> {
-  const buildId = randomUUID();
+  const buildId = request.buildId ?? randomUUID();
+  const generation = request.generation ?? 1;
   const requestStartedAt = new Date();
   const recipe = request.recipe ?? "pdf";
   const requestedBuildDirectory = request.buildDirectory ?? ".texpulse/build";
+  const timeoutMs = request.timeoutMs ?? DEFAULT_COMPILE_TIMEOUT_MS;
   let paths;
+
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    return failedResult(
+      buildId,
+      generation,
+      "Build generation must be a positive safe integer.",
+      requestStartedAt,
+    );
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return failedResult(
+      buildId,
+      generation,
+      "Compile timeout must be greater than zero milliseconds.",
+      requestStartedAt,
+    );
+  }
+  if (isAborted(signal)) {
+    return failedResult(
+      buildId,
+      generation,
+      "Build was cancelled before the compiler started.",
+      requestStartedAt,
+      "cancelled",
+    );
+  }
 
   try {
     paths = await validateCompilePaths(
@@ -101,10 +142,21 @@ export async function compileProject(
   } catch (error) {
     return failedResult(
       buildId,
+      generation,
       error instanceof Error
         ? error.message
         : "Compile path validation failed.",
       requestStartedAt,
+    );
+  }
+
+  if (isAborted(signal)) {
+    return failedResult(
+      buildId,
+      generation,
+      "Build was cancelled before the compiler started.",
+      requestStartedAt,
+      "cancelled",
     );
   }
 
@@ -115,6 +167,7 @@ export async function compileProject(
   if (command === null) {
     return failedResult(
       buildId,
+      generation,
       "latexmk was not found. Install MiKTeX or provide --custom-bin.",
       requestStartedAt,
     );
@@ -131,6 +184,7 @@ export async function compileProject(
   if (engineExecutable === null) {
     return failedResult(
       buildId,
+      generation,
       `${engineName} was not found. Install the selected MiKTeX engine or provide --custom-bin.`,
       requestStartedAt,
     );
@@ -152,6 +206,8 @@ export async function compileProject(
     executable: command.executable,
     args,
     cwd: paths.projectDirectory,
+    timeoutMs,
+    ...(signal === undefined ? {} : { signal }),
     ...(request.customBinDirectory === undefined
       ? {}
       : {
@@ -164,19 +220,38 @@ export async function compileProject(
   const readableSynctexPath = await outputPathOrNull(synctexPath);
 
   const succeeded =
+    processResult.terminationReason === null &&
     processResult.error === null &&
     processResult.exitCode === 0 &&
     readablePdfPath !== null;
-  const failureReason = succeeded
-    ? null
-    : (processResult.error ??
-      (processResult.exitCode !== 0
-        ? `latexmk exited with code ${String(processResult.exitCode)}.`
-        : "latexmk exited successfully but did not produce a readable PDF."));
+  const status: CompileStatus =
+    processResult.terminationReason === "cancelled"
+      ? "cancelled"
+      : processResult.terminationReason === "timed-out"
+        ? "timed-out"
+        : succeeded
+          ? "succeeded"
+          : "failed";
+  const terminationDetail =
+    processResult.terminationError === null
+      ? ""
+      : ` Process cleanup reported: ${processResult.terminationError}`;
+  const failureReason =
+    status === "succeeded"
+      ? null
+      : status === "cancelled"
+        ? `Build was cancelled.${terminationDetail}`
+        : status === "timed-out"
+          ? `Build exceeded the ${String(timeoutMs)} ms timeout.${terminationDetail}`
+          : (processResult.error ??
+            (processResult.exitCode !== 0
+              ? `latexmk exited with code ${String(processResult.exitCode)}.`
+              : "latexmk exited successfully but did not produce a readable PDF."));
 
   return {
     buildId,
-    status: succeeded ? "succeeded" : "failed",
+    generation,
+    status,
     exitCode: processResult.exitCode,
     startedAt: processResult.startedAt,
     endedAt: processResult.endedAt,
@@ -186,7 +261,7 @@ export async function compileProject(
     projectDirectory: paths.projectDirectory,
     rootFile: paths.rootFile,
     buildDirectory: paths.buildDirectory,
-    pdfPath: readablePdfPath,
+    pdfPath: succeeded ? readablePdfPath : null,
     logPath: readableLogPath,
     synctexPath: readableSynctexPath,
     stdout: processResult.stdout,

@@ -1,16 +1,23 @@
 export type CompileRecipe = "pdf" | "xelatex" | "lualatex";
+export type CompileStatus = "succeeded" | "failed" | "cancelled" | "timed-out";
+
+export const DEFAULT_COMPILE_TIMEOUT_MS = 120_000;
 
 export interface CompileRequest {
+  buildId?: string;
+  generation?: number;
   projectDirectory: string;
   rootFile: string;
   buildDirectory?: string;
   recipe?: CompileRecipe;
   customBinDirectory?: string;
+  timeoutMs?: number;
 }
 
 export interface CompileResult {
   buildId: string;
-  status: "succeeded" | "failed";
+  generation: number;
+  status: CompileStatus;
   exitCode: number | null;
   startedAt: string;
   endedAt: string;
