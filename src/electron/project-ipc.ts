@@ -1,9 +1,24 @@
-import { basename } from "node:path";
-
 import type { IpcMain, IpcMainInvokeEvent } from "electron/main";
 import type { ZodType } from "zod";
 
+import type { CompilerAdapter } from "../compiler/compiler-adapter.js";
+import { MiktexCompilerAdapter } from "../compiler/compiler-adapter.js";
 import {
+  cancelBuildRequestSchema,
+  cancelBuildResultSchema,
+  compileProjectRequestSchema,
+  compileProjectResultSchema,
+  loadPdfResultSchema,
+  pdfActionResultSchema,
+  pdfArtifactRequestSchema,
+  type CancelBuildResult,
+  type CompileProjectResult,
+  type LoadPdfResult,
+  type PdfActionResult,
+} from "../ipc/build-contracts.js";
+import { ALL_CHANNELS, BUILD_CHANNELS } from "../ipc/channels.js";
+import {
+  type ApiError,
   openProjectRequestSchema,
   openProjectResultSchema,
   PROJECT_CHANNELS,
@@ -15,32 +30,29 @@ import {
   type ReadTextFileResult,
   type WriteTextFileResult,
 } from "../ipc/project-contracts.js";
-import { ProjectService } from "../project/project-service.js";
 import { ProjectError } from "../project/project-types.js";
+import { ProjectSession, ProjectSessionError } from "./project-session.js";
 
 export interface ProjectIpcOptions {
+  createCompilerAdapter?: () => CompilerAdapter;
   ipcMain: Pick<IpcMain, "handle" | "removeHandler">;
+  openPath?: (path: string) => Promise<string>;
   selectProjectDirectory: () => Promise<string | null>;
+  showItemInFolder?: (path: string) => void;
   trustedWebContentsId: () => number | null;
 }
 
 interface ApiFailure {
   ok: false;
   error: {
-    code:
-      | ProjectError["code"]
-      | "cancelled"
-      | "internal"
-      | "invalid-request"
-      | "no-project"
-      | "unauthorized";
+    code: ApiError["code"];
     message: string;
     projectPath: string | null;
   };
 }
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
-  let projectService: ProjectService | null = null;
+  let projectSession: ProjectSession | null = null;
 
   registerHandler(
     options,
@@ -53,19 +65,14 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         return failure("cancelled", "Project selection was cancelled.");
       }
 
-      const service = await ProjectService.open(selectedDirectory);
-      const [entries, rootCandidates] = await Promise.all([
-        service.listEntries(),
-        service.detectRootFiles(),
-      ]);
-      projectService = service;
+      await projectSession?.cancelBuild();
+      projectSession = await ProjectSession.open(
+        selectedDirectory,
+        options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
+      );
       return {
         ok: true,
-        value: {
-          name: basename(service.root),
-          entries,
-          rootCandidates,
-        },
+        value: projectSession.describe(),
       };
     },
   );
@@ -76,12 +83,12 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     projectPathRequestSchema,
     readTextFileResultSchema,
     async (request): Promise<ReadTextFileResult> => {
-      if (projectService === null) {
+      if (projectSession === null) {
         return failure("no-project", "Open a project before reading files.");
       }
       return {
         ok: true,
-        value: await projectService.readTextFile(request.path),
+        value: await projectSession.readTextFile(request.path),
       };
     },
   );
@@ -92,12 +99,12 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     projectWriteRequestSchema,
     writeTextFileResultSchema,
     async (request): Promise<WriteTextFileResult> => {
-      if (projectService === null) {
+      if (projectSession === null) {
         return failure("no-project", "Open a project before saving files.");
       }
       return {
         ok: true,
-        value: await projectService.writeTextFile(
+        value: await projectSession.writeTextFile(
           request.path,
           request.content,
           request.expectedVersion,
@@ -106,8 +113,99 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     },
   );
 
+  registerHandler(
+    options,
+    BUILD_CHANNELS.compile,
+    compileProjectRequestSchema,
+    compileProjectResultSchema,
+    async (request): Promise<CompileProjectResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before compiling.");
+      }
+      return {
+        ok: true,
+        value: await projectSession.compile(request.rootFile),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.cancel,
+    cancelBuildRequestSchema,
+    cancelBuildResultSchema,
+    async (): Promise<CancelBuildResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before cancelling.");
+      }
+      return {
+        ok: true,
+        value: { cancelled: await projectSession.cancelBuild() },
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.loadPdf,
+    pdfArtifactRequestSchema,
+    loadPdfResultSchema,
+    async (request): Promise<LoadPdfResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before loading a PDF.");
+      }
+      return { ok: true, value: await projectSession.loadPdf(request) };
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.openPdf,
+    pdfArtifactRequestSchema,
+    pdfActionResultSchema,
+    async (request): Promise<PdfActionResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before opening a PDF.");
+      }
+      if (options.openPath === undefined) {
+        return failure(
+          "external-open-failed",
+          "The system PDF viewer is unavailable.",
+        );
+      }
+      const artifact = await projectSession.resolvePdf(request);
+      const errorMessage = await options.openPath(artifact.path);
+      if (errorMessage === "") {
+        return { ok: true, value: undefined };
+      }
+      return failure("external-open-failed", errorMessage);
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.revealPdf,
+    pdfArtifactRequestSchema,
+    pdfActionResultSchema,
+    async (request): Promise<PdfActionResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before revealing a PDF.");
+      }
+      if (options.showItemInFolder === undefined) {
+        return failure(
+          "external-open-failed",
+          "The system file manager is unavailable.",
+        );
+      }
+      const artifact = await projectSession.resolvePdf(request);
+      options.showItemInFolder(artifact.path);
+      return { ok: true, value: undefined };
+    },
+  );
+
   return () => {
-    for (const channel of Object.values(PROJECT_CHANNELS)) {
+    void projectSession?.cancelBuild();
+    for (const channel of Object.values(ALL_CHANNELS)) {
       options.ipcMain.removeHandler(channel);
     }
   };
@@ -150,6 +248,9 @@ function registerHandler<Request, Response>(
           return responseSchema.parse(
             failure(error.code, error.message, error.projectPath),
           );
+        }
+        if (error instanceof ProjectSessionError) {
+          return responseSchema.parse(failure(error.code, error.message));
         }
         console.error(`IPC handler failed on ${channel}.`, error);
         return responseSchema.parse(

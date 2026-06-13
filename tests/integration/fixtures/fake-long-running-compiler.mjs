@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 
 const pidFileArgument = process.argv
   .slice(2)
@@ -18,12 +18,15 @@ if (pidFileArgument === undefined) {
       windowsHide: true,
     },
   );
+  const pidFile = pidFileArgument.slice("--pid-file=".length);
+  const temporaryPidFile = `${pidFile}.${String(process.pid)}.tmp`;
   await writeFile(
-    pidFileArgument.slice("--pid-file=".length),
+    temporaryPidFile,
     JSON.stringify({
       parentPid: process.pid,
       childPid: child.pid,
     }),
   );
+  await rename(temporaryPidFile, pidFile);
   setInterval(() => {}, 1_000);
 }

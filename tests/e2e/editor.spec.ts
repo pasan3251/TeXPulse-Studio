@@ -5,8 +5,15 @@ import { join, resolve } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 
 const repositoryRoot = resolve(import.meta.dirname, "..", "..");
+const fakeLatexmk = join(
+  repositoryRoot,
+  "tests",
+  "integration",
+  "fixtures",
+  "fake-latexmk.mjs",
+);
 
-test("opens, edits, and saves through the isolated preload API", async () => {
+test("edits, compiles, previews, and retains the last successful PDF", async () => {
   const projectDirectory = await mkdtemp(join(tmpdir(), "texpulse-e2e-"));
   const mainPath = join(projectDirectory, "main.tex");
   await mkdir(join(projectDirectory, "chapters"));
@@ -23,6 +30,8 @@ test("opens, edits, and saves through the isolated preload API", async () => {
     env: {
       ...process.env,
       NODE_ENV: "production",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
     },
   });
@@ -39,7 +48,16 @@ test("opens, edits, and saves through the isolated preload API", async () => {
     expect(securityState).toEqual({
       nodeRequire: "undefined",
       nodeProcess: "undefined",
-      bridgeKeys: ["openProject", "readTextFile", "writeTextFile"],
+      bridgeKeys: [
+        "cancelBuild",
+        "compileProject",
+        "loadPdf",
+        "openPdf",
+        "openProject",
+        "readTextFile",
+        "revealPdf",
+        "writeTextFile",
+      ],
     });
 
     await page.getByRole("button", { name: "Open project" }).first().click();
@@ -52,7 +70,7 @@ test("opens, edits, and saves through the isolated preload API", async () => {
     await editor.click();
     await page.keyboard.press("Control+A");
     await page.keyboard.type(
-      "\\documentclass{article}\n\\begin{document}\nSaved from Sprint 4\n\\end{document}\n",
+      "\\documentclass{article}\n\\begin{document}\nCompiled from Sprint 5\n\\end{document}\n",
     );
     await expect(page.getByLabel("Modified").first()).toBeVisible();
 
@@ -60,13 +78,31 @@ test("opens, edits, and saves through the isolated preload API", async () => {
     await expect(page.getByText("All changes saved")).toBeVisible();
     await expect
       .poll(() => readFile(mainPath, "utf8"))
-      .toContain("Saved from Sprint 4");
+      .toContain("Compiled from Sprint 5");
+
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Current build")).toBeVisible();
+    await expect(page.getByLabel("PDF page 1")).toBeVisible();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await page.getByRole("button", { name: "Show log" }).click();
+    await expect(page.getByText("fake latexmk log")).toBeVisible();
 
     const screenshotDirectory = join(repositoryRoot, "output", "playwright");
     await mkdir(screenshotDirectory, { recursive: true });
     await page.screenshot({
-      path: join(screenshotDirectory, "sprint-4-editor.png"),
+      path: join(screenshotDirectory, "sprint-5-pdf-preview.png"),
     });
+
+    await editor.click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type(
+      "\\documentclass{article}\n% TEXPULSE_FAKE_FAIL\n",
+    );
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Last successful build")).toBeVisible();
+    await expect(page.getByLabel("PDF page 1")).toBeVisible();
+    await expect(page.getByText("Build: failed")).toBeVisible();
+    await expect(page.getByText("Fake compiler failure.")).toBeVisible();
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });

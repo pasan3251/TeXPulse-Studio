@@ -1,4 +1,4 @@
-import type { TeXPulseApi } from "../ipc/project-contracts.js";
+import type { TeXPulseApi } from "../ipc/api-contract.js";
 
 declare global {
   interface Window {

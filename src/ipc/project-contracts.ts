@@ -43,23 +43,29 @@ const textFileSnapshotSchema = z
   })
   .strict();
 
-const apiErrorSchema = z
+export const apiErrorSchema = z
   .object({
     code: z.enum([
       "already-exists",
+      "artifact-stale",
       "binary-file",
+      "build-failed",
       "cancelled",
       "conflict",
+      "external-open-failed",
       "internal",
       "invalid-metadata",
       "invalid-path",
       "invalid-request",
       "link-not-allowed",
+      "no-pdf",
       "no-project",
+      "no-root",
       "not-directory",
       "not-file",
       "not-found",
       "path-escape",
+      "pdf-too-large",
       "read-only",
       "unauthorized",
     ]),
@@ -77,6 +83,7 @@ export const openProjectResultSchema = z.discriminatedUnion("ok", [
           name: z.string().min(1),
           entries: z.array(projectEntrySchema),
           rootCandidates: z.array(rootCandidateSchema),
+          rootFile: z.string().nullable(),
         })
         .strict(),
     })
@@ -96,11 +103,6 @@ export type ReadTextFileResult = z.infer<typeof readTextFileResultSchema>;
 export type WriteTextFileResult = z.infer<typeof writeTextFileResultSchema>;
 export type ProjectPathRequest = z.infer<typeof projectPathRequestSchema>;
 export type ProjectWriteRequest = z.infer<typeof projectWriteRequestSchema>;
-
-export interface TeXPulseApi {
-  openProject(): Promise<OpenProjectResult>;
-  readTextFile(request: ProjectPathRequest): Promise<ReadTextFileResult>;
-  writeTextFile(request: ProjectWriteRequest): Promise<WriteTextFileResult>;
-}
+export type ApiError = z.infer<typeof apiErrorSchema>;
 
 export { PROJECT_CHANNELS } from "./channels.js";

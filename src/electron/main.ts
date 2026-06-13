@@ -9,7 +9,9 @@ import {
   Menu,
   session,
 } from "electron/main";
+import { shell } from "electron";
 
+import { MiktexCompilerAdapter } from "../compiler/compiler-adapter.js";
 import { registerProjectIpc } from "./project-ipc.js";
 import { createSecureWindowOptions } from "./window-options.js";
 
@@ -33,7 +35,12 @@ void app.whenReady().then(async () => {
   hardenNavigation(mainWindow);
 
   disposeProjectIpc = registerProjectIpc({
+    createCompilerAdapter,
     ipcMain,
+    openPath: (path) => shell.openPath(path),
+    showItemInFolder: (path) => {
+      shell.showItemInFolder(path);
+    },
     trustedWebContentsId: () => mainWindow?.webContents.id ?? null,
     selectProjectDirectory: async () => {
       const e2eProject = process.env.TEXPULSE_E2E_PROJECT;
@@ -69,6 +76,21 @@ void app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
   app.quit();
 });
+
+function createCompilerAdapter(): MiktexCompilerAdapter {
+  const e2eNode = process.env.TEXPULSE_E2E_NODE;
+  const e2eLatexmk = process.env.TEXPULSE_E2E_LATEXMK;
+  if (!app.isPackaged && e2eNode !== undefined && e2eLatexmk !== undefined) {
+    return new MiktexCompilerAdapter({
+      latexmkCommand: {
+        executable: e2eNode,
+        prefixArgs: [e2eLatexmk],
+      },
+      engineExecutable: e2eNode,
+    });
+  }
+  return new MiktexCompilerAdapter();
+}
 
 function configurePermissionPolicy(): void {
   session.defaultSession.setPermissionCheckHandler(() => false);

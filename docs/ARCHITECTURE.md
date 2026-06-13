@@ -2,7 +2,8 @@
 
 ## Current state
 
-Sprint 4 connects the safe project service to the first desktop application:
+Sprint 5 connects manual compilation and completed PDF output to the desktop
+application:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
@@ -15,22 +16,24 @@ Sprint 4 connects the safe project service to the first desktop application:
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
   project metadata, and recent-project storage.
-- `ipc/`: strict Zod request/response schemas and stable channel names.
+- `ipc/`: strict Zod request/response schemas and stable project, build, and PDF
+  channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
-  denial, trusted-sender IPC handlers, and a frozen three-method preload bridge.
+  denial, trusted-sender IPC handlers, a session owning project/build state, and
+  a frozen eight-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
-  CodeMirror 6 LaTeX editor, error boundary, and desktop layout.
+  CodeMirror 6 LaTeX editor, build controls, raw log panel, lazy PDF.js viewer,
+  retained-output status, error boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no compiler UI, diagnostics parser, live file watcher, SyncTeX
-UI, or PDF viewer.
+There is still no diagnostics parser, live file watcher, autosave/auto-build,
+SyncTeX navigation UI, or settings UI.
 
 ## System boundaries
 
 The implemented and planned boundaries are:
 
-1. An untrusted sandboxed Electron renderer for React and CodeMirror; PDF.js is
-   added later.
+1. An untrusted sandboxed Electron renderer for React, CodeMirror, and PDF.js.
 2. A narrow typed preload bridge with no raw `ipcRenderer` exposure.
 3. A privileged main process that validates sender, frame, request, response,
    and project path before filesystem work.
@@ -54,14 +57,40 @@ renderer action
 ```
 
 The renderer receives a project basename, relative entries, root candidates, and
-relative file snapshots. It never receives the canonical absolute project root.
-File reads may complete out of order; stale completions populate cache but
-cannot replace the newest selection.
+relative file snapshots. It receives no canonical project root as a structured
+capability, although raw compiler logs may contain local path text. File reads
+may complete out of order; stale completions populate cache but cannot replace
+the newest selection.
 
 CodeMirror owns editing behavior while the reducer owns source buffers, saved
 content, version tokens, active file, modified state, cursor, scroll, pending
 saves, and user notices. Editor input remains independent of asynchronous file
 I/O.
+
+## Sprint 5 build and PDF flow
+
+```text
+Compile action
+  -> save every modified buffer with its latest version token
+  -> fixed compile IPC request containing the relative root file
+  -> session-owned BuildController and compiler adapter
+  -> generation-isolated completed result
+  -> bounded build view plus opaque artifact identity
+  -> artifact token and canonical generation-path revalidation
+  -> bounded Uint8Array PDF response
+  -> lazy PDF.js worker and canvas render
+```
+
+The renderer receives no canonical artifact path as a structured or actionable
+value. Raw compiler logs may contain local path text. Open and reveal actions
+send only the active build ID and generation back to the main process, which
+resolves and revalidates the visible artifact before calling Electron shell
+APIs.
+
+The reducer retains loaded PDF bytes across failed builds and marks them as
+last-successful. Source edits also mark the displayed PDF as retained. PDF page,
+zoom mode, custom zoom, and approximate scroll position survive replacement by a
+newer successful artifact.
 
 ## Project flow
 
@@ -91,7 +120,7 @@ application-data path.
 ## Compiler flow
 
 ```text
-CLI
+CLI or desktop `ProjectSession`
   -> per-project build controller
   -> build ID and monotonically increasing generation
   -> newest-only pending request
@@ -122,6 +151,9 @@ after the self-test, so it does not modify user projects.
 - Project-internal links and junctions are visible but not traversed.
 - File replacement requires a matching content version token.
 - The renderer never receives unrestricted IPC or filesystem primitives.
+- The renderer receives no canonical PDF path capability; artifact actions
+  require a current opaque build token. Raw compiler logs may contain path text.
+- PDF preview bytes and renderer log text are bounded before crossing IPC.
 
 ## Decision records
 
@@ -131,5 +163,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0004-build-orchestration-and-process-cleanup.md`
 - `adr/ADR-0005-project-filesystem-boundary.md`
 - `adr/ADR-0006-secure-electron-shell-and-ipc.md`
+- `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`
 
-Packaging and PDF loading require later ADRs before implementation.
+Packaging requires a later ADR before implementation.

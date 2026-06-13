@@ -1,16 +1,22 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { IpcMain, IpcMainInvokeEvent } from "electron/main";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MiktexCompilerAdapter } from "../../src/compiler/compiler-adapter.js";
 import { registerProjectIpc } from "../../src/electron/project-ipc.js";
+import { BUILD_CHANNELS } from "../../src/ipc/channels.js";
 import { PROJECT_CHANNELS } from "../../src/ipc/project-contracts.js";
 
 type IpcHandler = Parameters<IpcMain["handle"]>[1];
 
 const temporaryDirectories: string[] = [];
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const fakeLatexmk = join(currentDirectory, "fixtures", "fake-latexmk.mjs");
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -64,6 +70,47 @@ async function invoke(
 }
 
 describe("project IPC", () => {
+  it("reports unavailable project operations before a project is open", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+
+    const requests = [
+      [PROJECT_CHANNELS.readTextFile, { path: "main.tex" }],
+      [
+        PROJECT_CHANNELS.writeTextFile,
+        {
+          path: "main.tex",
+          content: "content",
+          expectedVersion: "a".repeat(64),
+        },
+      ],
+      [BUILD_CHANNELS.compile, { rootFile: "main.tex" }],
+      [BUILD_CHANNELS.cancel, undefined],
+      [BUILD_CHANNELS.loadPdf, { buildId: "build-1", generation: 1 }],
+      [BUILD_CHANNELS.openPdf, { buildId: "build-1", generation: 1 }],
+      [BUILD_CHANNELS.revealPdf, { buildId: "build-1", generation: 1 }],
+    ] as const;
+
+    for (const [channel, payload] of requests) {
+      await expect(
+        invoke(handlers, channel, event(7), payload),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: { code: "no-project" },
+      });
+    }
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.open, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "cancelled" },
+    });
+  });
+
   it("opens a project and reads only through the active bounded session", async () => {
     const root = await createProject();
     const { handlers, ipcMain } = createFakeIpcMain();
@@ -118,6 +165,14 @@ describe("project IPC", () => {
       error: { code: "unauthorized" },
     });
     await expect(
+      invoke(handlers, PROJECT_CHANNELS.readTextFile, event(7, false), {
+        path: "main.tex",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "unauthorized" },
+    });
+    await expect(
       invoke(handlers, PROJECT_CHANNELS.open, event(7), {
         unexpected: true,
       }),
@@ -134,6 +189,193 @@ describe("project IPC", () => {
       ok: false,
       error: { code: "invalid-request" },
     });
-    expect(warning).toHaveBeenCalledTimes(3);
+    expect(warning).toHaveBeenCalledTimes(4);
+  });
+
+  it("compiles through IPC, returns opaque artifact metadata, and loads bytes", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const openPath = vi.fn(() => Promise.resolve(""));
+    const showItemInFolder = vi.fn();
+    registerProjectIpc({
+      createCompilerAdapter: () =>
+        new MiktexCompilerAdapter({
+          latexmkCommand: {
+            executable: process.execPath,
+            prefixArgs: [fakeLatexmk],
+          },
+          engineExecutable: process.execPath,
+        }),
+      ipcMain,
+      openPath,
+      selectProjectDirectory: () => Promise.resolve(root),
+      showItemInFolder,
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(handlers, PROJECT_CHANNELS.open, event(7));
+
+    const compileResult = await invoke(
+      handlers,
+      BUILD_CHANNELS.compile,
+      event(7),
+      { rootFile: "main.tex" },
+    );
+    expect(compileResult).toMatchObject({
+      ok: true,
+      value: {
+        status: "succeeded",
+        visiblePdf: {
+          fileName: "main.pdf",
+          isCurrent: true,
+        },
+      },
+    });
+    const visiblePdf = (
+      compileResult as {
+        value: { visiblePdf: { buildId: string; generation: number } };
+      }
+    ).value.visiblePdf;
+    const artifactRequest = {
+      buildId: visiblePdf.buildId,
+      generation: visiblePdf.generation,
+    };
+    expect(JSON.stringify(compileResult)).not.toContain(root);
+
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.loadPdf, event(7), artifactRequest),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { data: expect.any(Uint8Array) },
+    });
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.openPdf, event(7), artifactRequest),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.revealPdf, event(7), artifactRequest),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    expect(openPath).toHaveBeenCalledOnce();
+    expect(showItemInFolder).toHaveBeenCalledOnce();
+  });
+
+  it("maps build-session and desktop action failures to typed IPC errors", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      createCompilerAdapter: () =>
+        new MiktexCompilerAdapter({
+          latexmkCommand: {
+            executable: process.execPath,
+            prefixArgs: [fakeLatexmk],
+          },
+          engineExecutable: process.execPath,
+        }),
+      ipcMain,
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(handlers, PROJECT_CHANNELS.open, event(7));
+
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.compile, event(7), {
+        rootFile: "main.bib",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "no-root" },
+    });
+
+    const compileResult = (await invoke(
+      handlers,
+      BUILD_CHANNELS.compile,
+      event(7),
+      { rootFile: "main.tex" },
+    )) as {
+      value: { visiblePdf: { buildId: string; generation: number } };
+    };
+    const artifactRequest = {
+      buildId: compileResult.value.visiblePdf.buildId,
+      generation: compileResult.value.visiblePdf.generation,
+    };
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.openPdf, event(7), artifactRequest),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "external-open-failed" },
+    });
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.revealPdf, event(7), artifactRequest),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "external-open-failed" },
+    });
+  });
+
+  it("reports system viewer errors and cleans up every registered handler", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const removeHandler = vi.spyOn(ipcMain, "removeHandler");
+    const dispose = registerProjectIpc({
+      createCompilerAdapter: () =>
+        new MiktexCompilerAdapter({
+          latexmkCommand: {
+            executable: process.execPath,
+            prefixArgs: [fakeLatexmk],
+          },
+          engineExecutable: process.execPath,
+        }),
+      ipcMain,
+      openPath: () => Promise.resolve("No associated PDF application."),
+      selectProjectDirectory: () => Promise.resolve(root),
+      showItemInFolder: vi.fn(),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(handlers, PROJECT_CHANNELS.open, event(7));
+    const compileResult = (await invoke(
+      handlers,
+      BUILD_CHANNELS.compile,
+      event(7),
+      { rootFile: "main.tex" },
+    )) as {
+      value: { visiblePdf: { buildId: string; generation: number } };
+    };
+
+    await expect(
+      invoke(handlers, BUILD_CHANNELS.openPdf, event(7), {
+        buildId: compileResult.value.visiblePdf.buildId,
+        generation: compileResult.value.visiblePdf.generation,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "external-open-failed",
+        message: "No associated PDF application.",
+      },
+    });
+
+    dispose();
+    expect(removeHandler).toHaveBeenCalledTimes(
+      Object.keys(PROJECT_CHANNELS).length + Object.keys(BUILD_CHANNELS).length,
+    );
+    expect(handlers.size).toBe(0);
+  });
+
+  it("contains unexpected handler failures", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    registerProjectIpc({
+      ipcMain,
+      selectProjectDirectory: () => {
+        throw new Error("Unexpected chooser failure");
+      },
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.open, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "internal" },
+    });
+    expect(error).toHaveBeenCalledOnce();
   });
 });

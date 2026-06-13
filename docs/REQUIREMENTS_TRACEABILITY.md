@@ -182,3 +182,57 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Renderer and editor: `../src/renderer/`
 - Unit, component, integration, and E2E tests: `../tests/`
 - Security decision: `adr/ADR-0006-secure-electron-shell-and-ipc.md`
+
+## Sprint 5
+
+| Requirement    | Sprint 5 evidence                                               | Status                 |
+| -------------- | --------------------------------------------------------------- | ---------------------- |
+| `FR-EDIT-010`  | CodeMirror remains editable while compile IPC is pending        | Current scope complete |
+| `FR-SAVE-003`  | Failed or raced save stops compile with a visible message       | Complete               |
+| `FR-BUILD-001` | Compile action saves modified buffers then requests a build     | Complete               |
+| `FR-BUILD-004` | One session-owned `BuildController` per open project            | Complete               |
+| `FR-BUILD-005` | Existing newest-only controller remains the UI authority        | Complete               |
+| `FR-BUILD-006` | Opaque build ID and generation cross strict IPC                 | Complete               |
+| `FR-BUILD-007` | Controller and renderer reducer reject stale generations        | Complete               |
+| `FR-BUILD-008` | Cancel action reaches the active adapter build                  | Complete               |
+| `FR-BUILD-009` | Existing enforced 120-second timeout remains active             | Complete               |
+| `FR-BUILD-010` | Status, duration, failure, stdout/stderr, and raw log surfaced  | Current UI scope       |
+| `FR-BUILD-011` | UI uses the existing shell-free compiler adapter                | Complete               |
+| `FR-BUILD-012` | Session delegates root and working-directory validation         | Complete               |
+| `FR-BUILD-013` | Generation-isolated `.texpulse/build` output remains default    | Complete               |
+| `FR-BUILD-016` | Integration and E2E retain the previous PDF after failure       | Complete               |
+| `FR-BUILD-017` | Current and last-successful badges are explicit                 | Complete               |
+| `FR-PDF-001`   | Completed bytes render through lazy PDF.js                      | Complete               |
+| `FR-PDF-002`   | Page, scroll, zoom, fit-width, and fit-page controls            | Complete               |
+| `FR-PDF-003`   | Component test preserves page, zoom, and scroll on reload       | Complete               |
+| `FR-PDF-004`   | PDF loading starts only after build completion                  | Complete               |
+| `FR-PDF-005`   | Isolated output and readable-file checks avoid partial loads    | Current scope complete |
+| `FR-PDF-006`   | Revalidated artifact opens through `shell.openPath`             | Complete               |
+| `FR-PDF-007`   | Revalidated artifact reveals through Explorer                   | Complete               |
+| `FR-PDF-008`   | Stale identity and stale reducer tests reject replacement       | Complete               |
+| `FR-DIAG-001`  | Complete log remains on disk; bounded raw display is available  | Complete               |
+| `FR-DIAG-006`  | Raw log remains independent of later parser work                | Complete               |
+| `NFR-PERF-001` | Build work remains asynchronous from CodeMirror input           | Current scope complete |
+| `NFR-PERF-007` | Canvas remains while replacement loads; state is restored       | Current scope complete |
+| `NFR-REL-001`  | Failed build cannot delete or replace the retained PDF          | Complete               |
+| `NFR-REL-002`  | Stale builds and artifact tokens cannot become current          | Complete               |
+| `NFR-REL-003`  | Failure, cancellation, timeout, and missing output remain typed | Current scope complete |
+| `NFR-SEC-004`  | Frozen bridge exposes eight fixed methods                       | Current scope complete |
+| `NFR-SEC-005`  | Strict schemas cover every new request and response             | Complete               |
+| `NFR-SEC-006`  | Artifact paths are canonicalized below generation output        | Current scope complete |
+| `NFR-SEC-007`  | Existing `-no-shell-escape` remains active                      | Complete               |
+| `NFR-SEC-008`  | Existing timeout and cancellation remain active                 | Complete               |
+| `NFR-SEC-009`  | PDF and renderer log copies are bounded                         | Partial; output later  |
+| `NFR-SEC-011`  | CSP permits only the local PDF.js worker                        | Current scope complete |
+| `NFR-PRIV-001` | Source and generated PDF remain local                           | Complete for Sprint 5  |
+| `NFR-PRIV-002` | No analytics or telemetry added                                 | Complete for Sprint 5  |
+| `AS-001`       | Electron edit/save/compile/PDF workflow                         | UI complete            |
+| `AS-002`       | Failed build keeps prior preview and exposes failure log        | Complete               |
+
+### Sprint 5 evidence
+
+- Sprint report: `reports/SPRINT-5.md`
+- Build/PDF session and IPC: `../src/electron/` and `../src/ipc/`
+- PDF.js viewer and workspace state: `../src/renderer/`
+- Unit, component, integration, and Electron E2E tests: `../tests/`
+- PDF/artifact decision: `adr/ADR-0007-pdf-preview-and-artifact-boundary.md`

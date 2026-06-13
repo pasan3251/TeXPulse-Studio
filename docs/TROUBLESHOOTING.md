@@ -84,6 +84,20 @@ Inspect the JSON `failureReason`, `exitCode`, `stdout`, and `stderr`. Successful
 output should exist under
 `<project>\.texpulse\build\generations\<generation>-<build-id>`.
 
+In the desktop editor, open the raw build log. A failed or missing-output build
+keeps the previous successful PDF visible and labels it `Last successful build`.
+
+## PDF preview failed
+
+The viewer loads only a completed, readable generated PDF and limits preview
+input to 100 MiB. Retry the build and inspect the raw log if the output is
+missing or malformed. A PDF.js rendering error does not delete the generated
+file or the previous successful preview.
+
+`Open PDF` requires a Windows application associated with `.pdf`. `Reveal`
+requires Windows Explorer. Both actions revalidate the active generated artifact
+before invoking the operating system.
+
 ## Build timed out
 
 `texpulse-compile` defaults to 120 seconds and exits with code 124 on timeout.

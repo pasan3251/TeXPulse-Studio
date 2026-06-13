@@ -21,7 +21,7 @@ Run the complete current quality gate:
 pnpm check
 ```
 
-For editor work, run the focused renderer and Electron suites:
+For editor/PDF work, run the focused renderer and Electron suites:
 
 ```powershell
 pnpm test:component
@@ -32,7 +32,7 @@ pnpm app:start
 Keep renderer code unprivileged. New capabilities must use narrow typed preload
 methods, validate IPC requests and responses in the main process, and preserve
 project-relative path boundaries. Do not expose `ipcRenderer`, Node globals, or
-absolute project roots to the renderer.
+absolute project or artifact paths to the renderer.
 
 For compiler work, use the fake-process integration suite for deterministic
 automation and label real MiKTeX evidence separately:

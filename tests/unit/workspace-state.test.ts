@@ -5,11 +5,13 @@ import {
   isBufferModified,
   workspaceReducer,
 } from "../../src/renderer/workspace-state.js";
+import type { BuildView } from "../../src/ipc/build-contracts.js";
 
 const project = {
   name: "paper",
   entries: [],
   rootCandidates: [],
+  rootFile: "main.tex",
 };
 
 function file(path: string, content: string, version = "a".repeat(64)) {
@@ -19,6 +21,26 @@ function file(path: string, content: string, version = "a".repeat(64)) {
     version,
     size: content.length,
     modifiedAt: "2026-06-13T12:00:00.000Z",
+  };
+}
+
+function successfulBuild(generation = 1): BuildView {
+  return {
+    buildId: `build-${String(generation)}`,
+    generation,
+    disposition: "current",
+    status: "succeeded",
+    durationMs: 100,
+    failureReason: null,
+    log: "complete",
+    logTruncated: false,
+    visiblePdf: {
+      buildId: `build-${String(generation)}`,
+      generation,
+      fileName: "main.pdf",
+      isCurrent: true,
+      completedAt: "2026-06-13T12:00:00.000Z",
+    },
   };
 }
 
@@ -135,5 +157,73 @@ describe("workspaceReducer", () => {
     });
     expect(state.activePath).toBe("newest.tex");
     expect(state.loadingPath).toBeNull();
+  });
+
+  it("marks the loaded PDF as retained when source changes", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "file-opened",
+      file: file("main.tex", "compiled"),
+    });
+    const build = successfulBuild();
+    state = workspaceReducer(state, { type: "build-finished", build });
+    state = workspaceReducer(state, {
+      type: "pdf-loaded",
+      artifact: build.visiblePdf!,
+      data: new Uint8Array([1, 2, 3]),
+    });
+
+    state = workspaceReducer(state, {
+      type: "content-changed",
+      path: "main.tex",
+      content: "new edit",
+    });
+
+    expect(state.build?.visiblePdf?.isCurrent).toBe(false);
+    expect(state.pdf?.artifact.isCurrent).toBe(false);
+  });
+
+  it("retains the last successful PDF after a failed build", () => {
+    const successful = successfulBuild();
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "build-finished",
+      build: successful,
+    });
+    state = workspaceReducer(state, {
+      type: "pdf-loaded",
+      artifact: successful.visiblePdf!,
+      data: new Uint8Array([1, 2, 3]),
+    });
+    state = workspaceReducer(state, {
+      type: "build-finished",
+      build: {
+        ...successfulBuild(2),
+        status: "failed",
+        failureReason: "latexmk exited with code 3.",
+        visiblePdf: { ...successful.visiblePdf!, isCurrent: false },
+      },
+    });
+
+    expect(state.pdf).toMatchObject({
+      artifact: {
+        buildId: "build-1",
+        generation: 1,
+        isCurrent: false,
+      },
+    });
+    expect(state.logOpen).toBe(true);
+    expect(state.notice).toBe("latexmk exited with code 3.");
+  });
+
+  it("ignores an older build completion", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "build-finished",
+      build: successfulBuild(2),
+    });
+    state = workspaceReducer(state, {
+      type: "build-finished",
+      build: successfulBuild(1),
+    });
+
+    expect(state.build?.generation).toBe(2);
   });
 });

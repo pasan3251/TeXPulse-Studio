@@ -1,6 +1,7 @@
-import { lazy, Suspense, useMemo, useReducer } from "react";
+import { lazy, Suspense, useMemo, useReducer, useRef } from "react";
 
-import type { TeXPulseApi } from "../ipc/project-contracts.js";
+import type { TeXPulseApi } from "../ipc/api-contract.js";
+import { BuildLog } from "./components/BuildLog.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
 import {
   initialWorkspaceState,
@@ -14,12 +15,19 @@ const EditorPane = lazy(async () => {
   return { default: module.EditorPane };
 });
 
+const PdfViewer = lazy(async () => {
+  const module = await import("./components/PdfViewer.js");
+  return { default: module.PdfViewer };
+});
+
 interface AppProps {
   api?: TeXPulseApi;
 }
 
 export function App({ api = window.texpulse }: AppProps) {
   const [state, dispatch] = useReducer(workspaceReducer, initialWorkspaceState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const activeBuffer =
     state.activePath === null ? undefined : state.buffers[state.activePath];
   const modifiedPaths = useMemo(
@@ -82,16 +90,16 @@ export function App({ api = window.texpulse }: AppProps) {
     }
   };
 
-  const saveBuffers = async (buffers: EditorBuffer[]): Promise<void> => {
+  const saveBuffers = async (buffers: EditorBuffer[]): Promise<boolean> => {
     if (buffers.length === 0) {
-      return;
+      return true;
     }
     dispatch({
       type: "save-started",
       paths: buffers.map((buffer) => buffer.path),
     });
 
-    await Promise.all(
+    const results = await Promise.all(
       buffers.map(async (buffer) => {
         const result = await api.writeTextFile({
           path: buffer.path,
@@ -100,21 +108,151 @@ export function App({ api = window.texpulse }: AppProps) {
         });
         if (result.ok) {
           dispatch({ type: "save-succeeded", file: result.value });
+          return {
+            ok: true as const,
+            path: buffer.path,
+            savedContent: result.value.content,
+          };
         } else {
           dispatch({
             type: "operation-failed",
             message: result.error.message,
             path: buffer.path,
           });
+          return { ok: false as const };
         }
       }),
     );
+    if (results.some((result) => !result.ok)) {
+      return false;
+    }
+    return results.every((result) => {
+      if (!result.ok) {
+        return false;
+      }
+      return (
+        stateRef.current.buffers[result.path]?.content === result.savedContent
+      );
+    });
+  };
+
+  const compileProject = async (): Promise<void> => {
+    const rootFile = state.project?.rootFile;
+    if (rootFile === null || rootFile === undefined) {
+      dispatch({
+        type: "build-operation-failed",
+        message: "No LaTeX root file was detected for this project.",
+      });
+      return;
+    }
+
+    dispatch({ type: "build-started" });
+    const buffersToSave = Object.values(stateRef.current.buffers).filter(
+      isBufferModified,
+    );
+    const saved = await saveBuffers(buffersToSave);
+    if (!saved) {
+      dispatch({
+        type: "build-operation-failed",
+        message:
+          "Compile stopped because a save failed or the file changed while saving.",
+      });
+      return;
+    }
+
+    dispatch({ type: "build-compiling" });
+    const compiledContents = new Map(
+      Object.values(stateRef.current.buffers).map((buffer) => [
+        buffer.path,
+        buffer.content,
+      ]),
+    );
+    const result = await api.compileProject({ rootFile });
+    if (!result.ok) {
+      dispatch({
+        type: "build-operation-failed",
+        message: result.error.message,
+      });
+      return;
+    }
+
+    const sourceChanged = Object.values(stateRef.current.buffers).some(
+      (buffer) => compiledContents.get(buffer.path) !== buffer.content,
+    );
+    const build =
+      sourceChanged && result.value.visiblePdf !== null
+        ? {
+            ...result.value,
+            visiblePdf: { ...result.value.visiblePdf, isCurrent: false },
+          }
+        : result.value;
+    dispatch({ type: "build-finished", build });
+    const artifact = build.visiblePdf;
+    if (artifact === null) {
+      return;
+    }
+    const loadedPdf = stateRef.current.pdf;
+    if (
+      loadedPdf !== null &&
+      loadedPdf.artifact.buildId === artifact.buildId &&
+      loadedPdf.artifact.generation === artifact.generation
+    ) {
+      return;
+    }
+
+    dispatch({ type: "pdf-loading" });
+    const pdfResult = await api.loadPdf({
+      buildId: artifact.buildId,
+      generation: artifact.generation,
+    });
+    if (pdfResult.ok) {
+      dispatch({
+        type: "pdf-loaded",
+        artifact,
+        data: pdfResult.value.data,
+      });
+    } else {
+      dispatch({
+        type: "build-operation-failed",
+        message: pdfResult.error.message,
+      });
+    }
+  };
+
+  const performPdfAction = async (action: "open" | "reveal"): Promise<void> => {
+    const artifact = state.pdf?.artifact;
+    if (artifact === undefined) {
+      return;
+    }
+    const request = {
+      buildId: artifact.buildId,
+      generation: artifact.generation,
+    };
+    const result =
+      action === "open"
+        ? await api.openPdf(request)
+        : await api.revealPdf(request);
+    if (!result.ok) {
+      dispatch({
+        type: "build-operation-failed",
+        message: result.error.message,
+      });
+    }
   };
 
   const projectTitle = state.project?.name ?? "No project open";
   const isAnyFileSaving = state.savingPaths.length > 0;
   const isSaving =
     activeBuffer !== undefined && state.savingPaths.includes(activeBuffer.path);
+  const buildBusy = state.buildPhase !== "idle";
+  const buildStatus =
+    state.buildPhase === "saving"
+      ? "Saving before build"
+      : state.buildPhase === "compiling"
+        ? "Compiling"
+        : state.buildPhase === "loading-pdf"
+          ? "Loading PDF"
+          : (state.build?.status ?? "Idle");
 
   return (
     <div className="app-shell">
@@ -132,6 +270,7 @@ export function App({ api = window.texpulse }: AppProps) {
           <button
             type="button"
             className="button secondary"
+            disabled={buildBusy}
             onClick={openProject}
           >
             Open project
@@ -150,7 +289,7 @@ export function App({ api = window.texpulse }: AppProps) {
               }
             }}
           >
-            {isSaving ? "Saving…" : "Save"}
+            {isSaving ? "Saving..." : "Save"}
           </button>
           <button
             type="button"
@@ -163,6 +302,48 @@ export function App({ api = window.texpulse }: AppProps) {
             }}
           >
             Save all
+          </button>
+          <span className="toolbar-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className="button compile"
+            disabled={
+              state.project?.rootFile === null ||
+              state.project === null ||
+              buildBusy
+            }
+            onClick={() => {
+              void compileProject();
+            }}
+          >
+            {buildBusy ? `${buildStatus}...` : "Compile"}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={state.buildPhase !== "compiling"}
+            onClick={() => {
+              void api.cancelBuild().then((result) => {
+                if (!result.ok) {
+                  dispatch({
+                    type: "build-operation-failed",
+                    message: result.error.message,
+                  });
+                }
+              });
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={state.build === null}
+            onClick={() => {
+              dispatch({ type: "log-toggled" });
+            }}
+          >
+            {state.logOpen ? "Hide log" : "Show log"}
           </button>
         </div>
       </header>
@@ -185,69 +366,114 @@ export function App({ api = window.texpulse }: AppProps) {
           />
         )}
 
-        <main className="editor-panel">
-          {activeBuffer === undefined ? (
-            <section className="welcome">
-              <div className="welcome-copy">
-                <p className="eyebrow">Local-first LaTeX workspace</p>
-                <h1>Write clearly. Keep every file yours.</h1>
-                <p>
-                  Open an existing project to browse and edit its source. Build
-                  and PDF preview arrive in the next sprint.
-                </p>
-                <button
-                  type="button"
-                  className="button large"
-                  onClick={openProject}
-                >
-                  Open a project
-                </button>
-              </div>
-              <div className="welcome-card" aria-hidden="true">
-                <span className="code-line short" />
-                <span className="code-line long" />
-                <span className="code-line medium amber" />
-                <span className="code-line long" />
-                <span className="code-line short" />
-              </div>
-            </section>
-          ) : (
-            <>
-              <div className="editor-tabbar">
-                <div className="editor-tab" aria-current="page">
-                  <span>{activeBuffer.path}</span>
-                  {isBufferModified(activeBuffer) ? (
-                    <span className="modified-dot" aria-label="Modified">
-                      ●
-                    </span>
-                  ) : null}
+        <div className={`main-workspace ${state.logOpen ? "with-log" : ""}`}>
+          <div className="content-split">
+            <main className="editor-panel">
+              {activeBuffer === undefined ? (
+                <section className="welcome">
+                  <div className="welcome-copy">
+                    <p className="eyebrow">Local-first LaTeX workspace</p>
+                    <h1>
+                      Write, compile, and inspect without leaving your desk.
+                    </h1>
+                    <p>
+                      Open a project, edit its source, then compile through your
+                      local MiKTeX installation.
+                    </p>
+                    <button
+                      type="button"
+                      className="button large"
+                      onClick={openProject}
+                    >
+                      Open a project
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div className="editor-tabbar">
+                    <div className="editor-tab" aria-current="page">
+                      <span>{activeBuffer.path}</span>
+                      {isBufferModified(activeBuffer) ? (
+                        <span className="modified-dot" aria-label="Modified">
+                          ●
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="editor-loading">Loading editor...</div>
+                    }
+                  >
+                    <EditorPane
+                      buffer={activeBuffer}
+                      onChange={(path, content) => {
+                        dispatch({ type: "content-changed", path, content });
+                      }}
+                      onViewStateChange={(path, cursor, scrollTop) => {
+                        dispatch({
+                          type: "view-state-changed",
+                          path,
+                          cursor,
+                          scrollTop,
+                        });
+                      }}
+                    />
+                  </Suspense>
+                </>
+              )}
+            </main>
+
+            {state.pdf === null ? (
+              <section className="preview-empty" aria-label="PDF preview">
+                <div className="preview-mark" aria-hidden="true">
+                  PDF
                 </div>
-              </div>
+                <strong>No completed PDF yet</strong>
+                <span>
+                  {state.project?.rootFile === null
+                    ? "No LaTeX root file was detected."
+                    : "Compile the selected root to create the preview."}
+                </span>
+              </section>
+            ) : (
               <Suspense
-                fallback={<div className="editor-loading">Loading editor…</div>}
+                fallback={
+                  <div className="preview-empty">Loading PDF viewer...</div>
+                }
               >
-                <EditorPane
-                  buffer={activeBuffer}
-                  onChange={(path, content) => {
-                    dispatch({ type: "content-changed", path, content });
+                <PdfViewer
+                  artifact={state.pdf.artifact}
+                  data={state.pdf.data}
+                  onOpen={() => {
+                    void performPdfAction("open");
                   }}
-                  onViewStateChange={(path, cursor, scrollTop) => {
-                    dispatch({
-                      type: "view-state-changed",
-                      path,
-                      cursor,
-                      scrollTop,
-                    });
+                  onReveal={() => {
+                    void performPdfAction("reveal");
                   }}
                 />
               </Suspense>
-            </>
-          )}
-        </main>
+            )}
+          </div>
+          {state.logOpen && state.build !== null ? (
+            <BuildLog
+              build={state.build}
+              onClose={() => {
+                dispatch({ type: "log-toggled" });
+              }}
+            />
+          ) : null}
+        </div>
       </div>
 
       <footer className="statusbar">
         <span>{state.activePath ?? "Ready"}</span>
+        <span
+          className={`build-status status-${state.build?.status ?? "idle"}`}
+        >
+          Build: {buildStatus}
+        </span>
         <span>
           {modifiedPaths.size === 0
             ? "All changes saved"
@@ -265,7 +491,7 @@ export function App({ api = window.texpulse }: AppProps) {
               dispatch({ type: "notice-dismissed" });
             }}
           >
-            ×
+            x
           </button>
         </div>
       ) : null}

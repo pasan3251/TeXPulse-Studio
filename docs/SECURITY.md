@@ -1,10 +1,11 @@
 # Security
 
-## Sprint 4 posture
+## Sprint 5 posture
 
-Sprint 4 adds the first Electron renderer and keeps it outside the trusted
-computing boundary. It adds no network service, telemetry, remote content,
-compiler UI, or PDF viewer.
+Sprint 5 keeps the Electron renderer outside the trusted computing boundary
+while adding manual compiler control and completed PDF preview. It adds no
+network service, telemetry, remote content, arbitrary filesystem access, or
+general process capability.
 
 The application:
 
@@ -38,7 +39,7 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes only three frozen preload methods, never `ipcRenderer`;
+- exposes eight frozen project/build/PDF preload methods, never `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
@@ -46,13 +47,32 @@ The application:
 - disables DevTools for production and packaged windows; and
 - applies a local-only Content Security Policy with no network connections,
   objects, forms, external bases, inline scripts, or evaluated scripts.
+- permits only a same-origin PDF.js worker through `worker-src 'self'`;
+- returns build metadata and opaque artifact tokens without structured canonical
+  paths;
+- revalidates artifact identity, canonical generation paths, and file type
+  before PDF reads or desktop shell actions;
+- limits PDF preview input to 100 MiB and renderer raw-log display to 2 MiB;
+- loads only completed compiler output into PDF.js;
+- keeps the last successful PDF visible after failure; and
+- uses Electron shell open/reveal only for a revalidated generated PDF.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
 ADR-0006 and must not be widened to scripts.
 
-It is not approved for untrusted TeX input because compiler output is not yet
-bounded and the complete threat model is scheduled for Sprint 10.
+PDF.js 6.0.227 is pinned as a production dependency because the SRS requires a
+local PDF.js viewer. It is lazy-loaded with its local worker and is covered by
+the frozen lockfile and dependency audit.
+
+The raw user-visible compiler log may contain local absolute paths and
+environment details emitted by MiKTeX or `latexmk`. These strings do not become
+filesystem capabilities, and source remains local, but the path-text exposure is
+intentional for unmodified troubleshooting output.
+
+It is not approved for untrusted TeX input because total compiler output and
+generated-file counts are not yet bounded and the complete threat model is
+scheduled for Sprint 10.
 
 ## Product security invariants
 
@@ -76,15 +96,16 @@ bounded and the complete threat model is scheduled for Sprint 10.
 - CI uses a frozen lockfile.
 - Dependency vulnerability review is a release gate under `NFR-SEC-012`.
 - Security findings must not be hidden by disabling tests or lint rules.
-- Covered pure compiler, project, and toolchain modules enforce at least 85%
-  aggregate statement and branch coverage.
+- Covered compiler, project, Electron session/IPC, renderer state, and toolchain
+  modules enforce at least 85% aggregate statement and branch coverage.
 - Electron and renderer dependencies are pinned exactly and audited through the
   same frozen lockfile.
 
 ## Future work
 
-A detailed threat model, trusted-project policy, bounded compiler output, and
-TeX execution review remain required before release. Live file watching,
-external URL handling, PDF loading, and any new preload capability require their
-own validated contracts and tests. ADR-0005 defines the path/link policy;
-ADR-0006 defines the Electron and IPC boundary.
+A detailed threat model, trusted-project policy, bounded total compiler output,
+generation cleanup, and TeX execution review remain required before release.
+Live file watching, external URL handling, and any new preload capability
+require their own validated contracts and tests. ADR-0005 defines the path/link
+policy; ADR-0006 defines the Electron boundary; ADR-0007 defines completed PDF
+loading and artifact actions.

@@ -1,23 +1,22 @@
 # Test Plan
 
-## Sprint 4 scope
+## Sprint 5 scope
 
-Sprint 4 verifies all existing compiler/project controls plus the secure
-BrowserWindow configuration, preload/API contracts, trusted-sender IPC, renderer
-workspace state, project hierarchy, modified indicators, CodeMirror editing,
-versioned saves, external-change notices, and the real Electron open/edit/save
-workflow.
+Sprint 5 verifies all existing controls plus manual save-before-compile,
+build/cancel IPC, opaque completed artifacts, PDF.js rendering, viewer-state
+reload, raw logs, current/retained status, open/reveal actions, failed-build
+retention, and missing-output behavior.
 
 | Check        | Command                 | Current evidence                                      |
 | ------------ | ----------------------- | ----------------------------------------------------- |
 | Formatting   | `pnpm format:check`     | Prettier checks repository text files                 |
 | Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests       |
 | Strict types | `pnpm typecheck`        | Strict main, preload, renderer, and test contracts    |
-| Unit tests   | `pnpm test:unit`        | Core services, window options, tree, workspace state  |
-| Component    | `pnpm test:component`   | Hierarchy, active/modified states, inert link entries |
-| Integration  | `pnpm test:integration` | Project/compiler processes and validated Electron IPC |
+| Unit tests   | `pnpm test:unit`        | Core services, build retention, stale workspace state |
+| Component    | `pnpm test:component`   | Project tree and PDF reload state                     |
+| Integration  | `pnpm test:integration` | Compiler, session, completed artifacts, validated IPC |
 | Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches        |
-| E2E          | `pnpm test:e2e`         | Real Electron open, edit, save, and bridge isolation  |
+| E2E          | `pnpm test:e2e`         | Electron edit, compile, PDF render, retained failure  |
 | Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle     |
 | Aggregate    | `pnpm check`            | Runs every current gate in sequence                   |
 
@@ -36,16 +35,21 @@ workflow.
 - Project tests use isolated temporary directories and cover spaces, Unicode,
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
-- Electron E2E uses an isolated temporary project and a development-only test
-  folder override, verifies Node globals are absent, persists an edit, captures
-  a screenshot, closes Electron, and removes the fixture.
-- Interactive Electron QA covers Save All, stale external writes, notice
-  dismissal, file switching, cursor/scroll restoration, and compact layout.
+- Electron E2E uses an isolated project and development-only folder/compiler
+  overrides, verifies Node globals are absent, persists an edit, renders a valid
+  generated PDF, shows its raw log, retains it after failure, captures a
+  screenshot, closes Electron, and removes the fixture.
+- PDF component tests use controlled PDF.js document/page/render objects and no
+  arbitrary sleeps.
+- The fake compiler emits a structurally valid one-page PDF and can
+  deterministically fail or omit output.
+- The process-tree PID fixture publishes its handoff atomically so coverage runs
+  cannot observe partial JSON.
 - Real MiKTeX smoke evidence is run separately from deterministic automation.
 
 ## Later test levels
 
-Sprint 5 adds deterministic fake-compiler UI tests and PDF rendering checks.
+Sprint 6 adds autosave, debounce, rapid-typing, and rebuild-loop tests.
 Performance benchmarks for 1,000-file projects and measured editor input latency
 remain later release evidence. Real MiKTeX results will always be labeled
 separately and generated PDFs will be inspected.

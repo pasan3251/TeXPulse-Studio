@@ -2,6 +2,7 @@ import type {
   OpenProjectResult,
   ReadTextFileResult,
 } from "../ipc/project-contracts.js";
+import type { BuildView, PdfArtifact } from "../ipc/build-contracts.js";
 
 export type OpenedProject = Extract<OpenProjectResult, { ok: true }>["value"];
 export type OpenedTextFile = Extract<ReadTextFileResult, { ok: true }>["value"];
@@ -22,6 +23,10 @@ export interface WorkspaceState {
   loadingPath: string | null;
   savingPaths: string[];
   notice: string | null;
+  buildPhase: "idle" | "saving" | "compiling" | "loading-pdf";
+  build: BuildView | null;
+  pdf: { artifact: PdfArtifact; data: Uint8Array } | null;
+  logOpen: boolean;
 }
 
 export type WorkspaceAction =
@@ -38,6 +43,13 @@ export type WorkspaceAction =
     }
   | { type: "save-started"; paths: string[] }
   | { type: "save-succeeded"; file: OpenedTextFile }
+  | { type: "build-started" }
+  | { type: "build-compiling" }
+  | { type: "build-finished"; build: BuildView }
+  | { type: "pdf-loading" }
+  | { type: "pdf-loaded"; artifact: PdfArtifact; data: Uint8Array }
+  | { type: "build-operation-failed"; message: string }
+  | { type: "log-toggled" }
   | { type: "operation-failed"; message: string; path?: string }
   | { type: "notice-dismissed" };
 
@@ -48,6 +60,10 @@ export const initialWorkspaceState: WorkspaceState = {
   loadingPath: null,
   savingPaths: [],
   notice: null,
+  buildPhase: "idle",
+  build: null,
+  pdf: null,
+  logOpen: false,
 };
 
 export function workspaceReducer(
@@ -99,12 +115,29 @@ export function workspaceReducer(
       if (buffer === undefined) {
         return state;
       }
+      const pdf =
+        state.pdf === null
+          ? null
+          : {
+              ...state.pdf,
+              artifact: { ...state.pdf.artifact, isCurrent: false },
+            };
+      const build =
+        state.build?.visiblePdf === null ||
+        state.build?.visiblePdf === undefined
+          ? state.build
+          : {
+              ...state.build,
+              visiblePdf: { ...state.build.visiblePdf, isCurrent: false },
+            };
       return {
         ...state,
+        build,
         buffers: {
           ...state.buffers,
           [action.path]: { ...buffer, content: action.content },
         },
+        pdf,
       };
     }
     case "view-state-changed": {
@@ -151,6 +184,67 @@ export function workspaceReducer(
         notice: `Saved ${action.file.path}`,
       };
     }
+    case "build-started":
+      return {
+        ...state,
+        buildPhase: "saving",
+        notice: null,
+      };
+    case "build-compiling":
+      return { ...state, buildPhase: "compiling" };
+    case "build-finished": {
+      if (
+        state.build !== null &&
+        action.build.generation < state.build.generation
+      ) {
+        return state;
+      }
+      const retainedPdf =
+        state.pdf !== null &&
+        action.build.visiblePdf !== null &&
+        state.pdf.artifact.buildId === action.build.visiblePdf.buildId &&
+        state.pdf.artifact.generation === action.build.visiblePdf.generation
+          ? {
+              ...state.pdf,
+              artifact: action.build.visiblePdf,
+            }
+          : state.pdf;
+      return {
+        ...state,
+        buildPhase: "idle",
+        build: action.build,
+        pdf: retainedPdf,
+        logOpen: action.build.status !== "succeeded" || state.logOpen,
+        notice:
+          action.build.status === "succeeded"
+            ? "Build succeeded."
+            : (action.build.failureReason ?? `Build ${action.build.status}.`),
+      };
+    }
+    case "pdf-loading":
+      return { ...state, buildPhase: "loading-pdf" };
+    case "pdf-loaded":
+      if (
+        state.build?.visiblePdf === null ||
+        state.build?.visiblePdf === undefined ||
+        state.build.visiblePdf.buildId !== action.artifact.buildId ||
+        state.build.visiblePdf.generation !== action.artifact.generation
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        buildPhase: "idle",
+        pdf: { artifact: action.artifact, data: action.data },
+      };
+    case "build-operation-failed":
+      return {
+        ...state,
+        buildPhase: "idle",
+        notice: action.message,
+      };
+    case "log-toggled":
+      return { ...state, logOpen: !state.logOpen };
     case "operation-failed":
       return {
         ...state,
