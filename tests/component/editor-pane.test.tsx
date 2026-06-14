@@ -49,6 +49,7 @@ describe("EditorPane diagnostics", () => {
       <EditorPane
         buffer={buffer}
         diagnostics={[diagnostic]}
+        fontSize={15}
         navigationTarget={null}
         onChange={vi.fn()}
         onViewStateChange={vi.fn()}
@@ -67,6 +68,7 @@ describe("EditorPane diagnostics", () => {
       <EditorPane
         buffer={buffer}
         diagnostics={[diagnostic]}
+        fontSize={15}
         navigationTarget={{
           path: "main.tex",
           line: 2,
@@ -92,6 +94,7 @@ describe("EditorPane diagnostics", () => {
       <EditorPane
         buffer={buffer}
         diagnostics={[]}
+        fontSize={15}
         navigationTarget={{
           path: "main.tex",
           line: 3,

@@ -2,14 +2,17 @@
 
 ## Current state
 
-Sprint 8 adds current-build SyncTeX forward and inverse navigation while
-preserving the editor, build, PDF, diagnostic, and project controls:
+Sprint 9 adds persistent settings, first-run toolchain setup, selectable
+recipes, explicit `latexmk` configuration trust, clean builds, and bounded
+auxiliary cleanup while preserving the editor, build, PDF, diagnostic, SyncTeX,
+and project controls:
 
 - `process/`: shell-free child process boundary.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
   isolated doctor self-test.
-- `compiler/`: validated project paths, fixed `latexmk` argument arrays, and
-  cancellable structured compile results.
+- `compiler/`: validated project paths, fixed recipe and clean-build `latexmk`
+  argument arrays, allowlisted auxiliary cleanup, and cancellable structured
+  compile results.
 - `build/`: per-project state machine, generation IDs, newest-only queue,
   debounce foundation, stale-result rejection, timeout, and last-successful
   metadata.
@@ -19,19 +22,22 @@ preserving the editor, build, PDF, diagnostic, and project controls:
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
   project metadata, recent-project storage, and filtered Chokidar events.
+- `settings/`: strict global and project schemas, safe defaults, migration, and
+  atomic application-data persistence.
 - `ipc/`: strict Zod request/response schemas and stable project, build, PDF,
   and SyncTeX channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, a session owning project/build state, and
-  a frozen eleven-method preload bridge.
+  a frozen seventeen-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
   persistence, resizable panes, build controls, source-linked Problems and raw
   log panels, diagnostic and SyncTeX target markers, lazy PDF.js viewer,
-  retained-output status, error boundary, and desktop layout.
+  retained-output status, settings/setup dialog, error boundary, and desktop
+  layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no full settings UI, recovery workflow, or production packaging.
+There is still no abnormal-shutdown recovery workflow or production packaging.
 
 ## System boundaries
 
@@ -124,9 +130,9 @@ relative path, and event kind. The renderer warns without automatically saving,
 reloading, or compiling.
 
 Workspace persistence is keyed by the opaque project ID and contains only
-relative open paths, active path, cursor and scroll views, pane ratio, and
-live-build preferences. Source text, PDF bytes, logs, canonical paths, and build
-state are not stored.
+relative open paths, active path, cursor and scroll views, and pane ratio.
+Source text, PDF bytes, logs, canonical paths, settings, and build state are not
+stored.
 
 ## Sprint 7 diagnostic flow
 
@@ -176,6 +182,29 @@ edit or failed build produces a non-fatal stale message. Inverse results become
 actionable only when their path matches an enumerated project file. The renderer
 receives no canonical source, project, PDF, or SyncTeX path.
 
+## Sprint 9 settings and maintenance flow
+
+```text
+first launch or Settings action
+  -> fixed settings/toolchain preload method
+  -> trusted sender and strict request schema
+  -> global userData store plus project metadata v2
+  -> known migration or safe fallback with visible issues
+  -> isolated real doctor self-test
+  -> renderer receives readiness, paths, versions, and bounded messages
+```
+
+Global settings own tool location, autosave, new-project auto-build default,
+debounce, timeout, editor font size, PDF zoom mode, and setup completion.
+Project settings own root file, recipe, build directory, automatic builds, and
+the explicit `latexmk` configuration trust decision.
+
+Clean build requests use the selected recipe and `latexmk -gg` in a fresh
+generation. Auxiliary cleanup is an application-owned recursive walk limited to
+validated generation directories and known auxiliary suffixes. It skips links
+and preserves PDFs, logs, SyncTeX files, and unknown output. Project-settings
+changes, builds, and cleanup cannot race within one project session.
+
 ## Project flow
 
 ```text
@@ -196,10 +225,12 @@ ignores `.git`, `.texpulse`, `node_modules`, `dist`, `coverage`, and the
 validated project-specific build directory. The flat typed entry list is the
 service foundation for the hierarchical tree in Sprint 4.
 
-Project metadata lives in `.texpulse/project.json` with schema version 1.
-Invalid fields receive safe defaults with issues, while unsupported schema
-versions fall back as a whole. Recent-project storage uses a separate injected
-application-data path.
+Project metadata lives in `.texpulse/project.json` with schema version 2.
+Version 1 migrates with `latexmk` configuration trust disabled. Invalid fields
+receive safe defaults with issues, while unsupported schema versions fall back
+as a whole. Global settings use a separate atomic file under Electron
+`userData`; legacy schema version 0 migrates to version 1. Recent-project
+storage uses a separate injected application-data path.
 
 ## Compiler flow
 
@@ -208,10 +239,12 @@ CLI or desktop `ProjectSession`
   -> per-project build controller
   -> build ID and monotonically increasing generation
   -> newest-only pending request
+  -> current validated global and project settings
   -> validated project, root, and build paths
   -> generation-isolated output directory
   -> Node process runner with shell disabled
-  -> latexmk with timeout and cancellation signal
+  -> latexmk recipe with timeout, cancellation, shell escape disabled,
+     and configuration files disabled unless explicitly trusted
   -> Windows process-tree cleanup with taskkill /T /F
   -> current result or stale result rejected from current state
   -> retained last-successful PDF metadata
@@ -230,7 +263,11 @@ after the self-test, so it does not modify user projects.
 - Compiler commands use executable and argument arrays, never ordinary
   `shell: true`.
 - Shell escape is disabled by default.
+- `latexmk` configuration files are disabled by default and require explicit
+  project trust.
 - Builds support timeout, cancellation, and stale-result rejection.
+- Clean builds retain the normal generation and stale-result controls.
+- Auxiliary cleanup is allowlisted, project-bounded, and never traverses links.
 - Source files remain local and are not silently rewritten.
 - Project-internal links and junctions are visible but not traversed.
 - File replacement requires a matching content version token.
@@ -262,5 +299,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0008-live-build-and-project-watching.md`
 - `adr/ADR-0009-structured-diagnostics.md`
 - `adr/ADR-0010-synctex-navigation-boundary.md`
+- `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`
 
 Packaging requires a later ADR before implementation.

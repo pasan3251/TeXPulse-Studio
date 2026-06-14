@@ -199,6 +199,10 @@ export async function compileProject(
     recipe,
     rootFile: paths.rootFile,
     buildDirectory: paths.buildDirectory,
+    ...(request.allowLatexmkRc === undefined
+      ? {}
+      : { allowLatexmkRc: request.allowLatexmkRc }),
+    ...(request.clean === undefined ? {} : { clean: request.clean }),
   });
   const args = [...(command.prefixArgs ?? []), ...latexmkArgs];
   const processRunner = dependencies.processRunner ?? new NodeProcessRunner();

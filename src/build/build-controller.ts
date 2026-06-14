@@ -188,7 +188,7 @@ export class BuildController {
       generation: activeBuild.generation,
       projectDirectory: this.projectDirectory,
       buildDirectory: generationBuildDirectory,
-      timeoutMs: this.timeoutMs,
+      timeoutMs: activeBuild.input.timeoutMs ?? this.timeoutMs,
     };
     let result: CompileResult;
 

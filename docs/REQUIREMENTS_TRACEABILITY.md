@@ -376,3 +376,64 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Unit, component, integration, Electron E2E, and native MiKTeX evidence:
   `../tests/`
 - Design decision: `adr/ADR-0010-synctex-navigation-boundary.md`
+
+## Sprint 9
+
+| Requirement     | Sprint 9 evidence                                                   | Status                 |
+| --------------- | ------------------------------------------------------------------- | ---------------------- |
+| `FR-ENV-001`    | Settings wizard reports `latexmk` discovery                         | UI complete            |
+| `FR-ENV-002`    | pdfLaTeX, XeLaTeX, and LuaLaTeX paths and versions are displayed    | UI complete            |
+| `FR-ENV-003`    | BibTeX, Biber, MakeIndex, and SyncTeX remain independent results    | UI complete            |
+| `FR-ENV-004`    | Toolchain results show executable paths, versions, and states       | Complete               |
+| `FR-ENV-005`    | Global custom executable directory is persisted and applied         | Complete               |
+| `FR-ENV-006`    | Wizard runs the isolated real doctor fixture                        | Complete               |
+| `FR-ENV-007`    | Missing and unusable tools retain actionable doctor messages        | Complete               |
+| `FR-ENV-008`    | Ready requires passed self-test; skip remains explicit              | Complete               |
+| `FR-EDIT-009`   | Settings control editor font size; word wrapping remains enabled    | Complete               |
+| `FR-SAVE-001`   | Global autosave is configurable and defaults to enabled             | Complete               |
+| `FR-BUILD-009`  | Global timeout setting is validated and applied per request         | Complete               |
+| `FR-BUILD-013`  | Project build directory is configurable with safe default           | Complete               |
+| `FR-BUILD-014`  | Three `latexmk` recipes have unit, E2E, and native evidence         | Complete               |
+| `FR-BUILD-015`  | Default `-norc`, explicit project trust, warning, and ADR           | Complete               |
+| `FR-BUILD-018`  | Clean build uses `-gg` with normal build controls                   | Complete               |
+| `FR-BUILD-019`  | Allowlisted generation cleanup preserves non-auxiliary output       | Complete               |
+| `FR-PDF-002`    | Global default PDF zoom selects fit-width or fit-page               | Complete               |
+| `FR-SET-001`    | Atomic global settings file lives under Electron `userData`         | Complete               |
+| `FR-SET-002`    | Project settings remain in `.texpulse/project.json`                 | Complete               |
+| `FR-SET-003`    | All listed global and project controls are exposed                  | Complete               |
+| `FR-SET-004`    | Strict Zod/global and project metadata validation                   | Complete               |
+| `FR-SET-005`    | Invalid data restores safe defaults with visible notices            | Complete               |
+| `FR-SET-006`    | Global v0 and project v1 migrate to current schemas                 | Complete               |
+| `FR-PACK-003`   | Incomplete first-launch state opens the toolchain setup wizard      | Complete               |
+| `FR-PACK-004`   | Wizard separates app operation from real TeX readiness              | Complete               |
+| `NFR-REL-003`   | Settings, readiness, cleanup, and build failures stay recoverable   | Current scope complete |
+| `NFR-REL-005`   | Schemas, recipes, cleanup, and UI states have deterministic tests   | Complete               |
+| `NFR-SEC-004`   | Frozen preload exposes seventeen fixed methods                      | Current scope complete |
+| `NFR-SEC-005`   | Every new settings/build request and response is strictly validated | Complete               |
+| `NFR-SEC-006`   | Build-directory changes and cleanup retain project boundaries       | Current scope complete |
+| `NFR-SEC-007`   | Shell escape remains disabled for every recipe and trust mode       | Complete               |
+| `NFR-SEC-008`   | Configurable timeout applies to normal and clean builds             | Complete               |
+| `NFR-MAINT-002` | Typed settings, readiness, cleanup, IPC, and UI contracts           | Complete               |
+| `NFR-MAINT-003` | Settings and cleanup are independent modules                        | Complete               |
+| `NFR-MAINT-004` | ADR-0011 records persistence and trust boundaries                   | Complete               |
+| `NFR-MAINT-005` | Unit, component, integration, E2E, and conditional native tests     | Complete               |
+| `NFR-UX-001`    | Dialog controls and maintenance actions are keyboard operable       | Current scope complete |
+| `NFR-UX-002`    | Readiness uses text states in addition to styling                   | Complete               |
+| `NFR-UX-004`    | Settings, readiness, tools, and actions have accessible labels      | Complete               |
+| `NFR-UX-006`    | Recovery and trust messages explain consequences and actions        | Current scope complete |
+| `NFR-PRIV-001`  | Settings and toolchain checks remain local                          | Complete for Sprint 9  |
+| `NFR-PRIV-002`  | No analytics, telemetry, or network service was added               | Complete for Sprint 9  |
+| `AS-005`        | Setup component and IPC report missing readiness without crashing   | Complete               |
+
+### Sprint 9 evidence
+
+- Sprint report: `reports/SPRINT-9.md`
+- Global/project settings and migrations: `../src/settings/` and
+  `../src/project/project-metadata.ts`
+- Settings/setup UI and typed IPC: `../src/renderer/`,
+  `../src/ipc/settings-contracts.ts`, and `../src/electron/`
+- Recipes, trust, clean builds, and cleanup: `../src/compiler/` and
+  `../src/electron/project-session.ts`
+- Unit, component, integration, Electron E2E, and conditional native tests:
+  `../tests/`
+- Design decision: `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`

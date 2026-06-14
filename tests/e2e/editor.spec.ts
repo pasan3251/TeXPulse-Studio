@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -21,6 +28,7 @@ const fakeSynctex = join(
 );
 
 interface BuildTrace {
+  args?: string[];
   source: string;
   startedAt: number;
   endedAt: number;
@@ -50,6 +58,11 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
       TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
       TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
       TEXPULSE_FAKE_DELAY_MS: "1600",
       TEXPULSE_FAKE_TRACE: tracePath,
     },
@@ -68,7 +81,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     await expect(page).toHaveTitle("TeXPulse Studio");
     await page.evaluate(() => {
       for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith("texpulse.workspace.v1.")) {
+        if (key.startsWith("texpulse.workspace.v")) {
           window.localStorage.removeItem(key);
         }
       }
@@ -84,8 +97,12 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
       nodeProcess: "undefined",
       bridgeKeys: [
         "cancelBuild",
+        "checkToolchain",
+        "cleanBuild",
+        "cleanupAuxiliary",
         "compileProject",
         "forwardSync",
+        "getSettings",
         "inverseSync",
         "loadPdf",
         "onProjectFileChanged",
@@ -93,6 +110,8 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "openProject",
         "readTextFile",
         "revealPdf",
+        "saveGlobalSettings",
+        "saveProjectSettings",
         "writeTextFile",
       ],
     });
@@ -180,7 +199,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
       .poll(() =>
         page.evaluate(() => {
           for (const key of Object.keys(window.localStorage)) {
-            if (!key.startsWith("texpulse.workspace.v1.")) {
+            if (!key.startsWith("texpulse.workspace.v")) {
               continue;
             }
             const value = window.localStorage.getItem(key);
@@ -275,6 +294,11 @@ test("shows diagnostics, navigates to the source, and clears fixed problems", as
       TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
       TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
     },
   });
 
@@ -282,7 +306,7 @@ test("shows diagnostics, navigates to the source, and clears fixed problems", as
     const page = await electronApp.firstWindow();
     await page.evaluate(() => {
       for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith("texpulse.workspace.v1.")) {
+        if (key.startsWith("texpulse.workspace.v")) {
           window.localStorage.removeItem(key);
         }
       }
@@ -383,6 +407,11 @@ test("navigates forward to the PDF and inversely to an included source file", as
       TEXPULSE_E2E_NODE: process.execPath,
       TEXPULSE_E2E_PROJECT: projectDirectory,
       TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
     },
   });
 
@@ -390,7 +419,7 @@ test("navigates forward to the PDF and inversely to an included source file", as
     const page = await electronApp.firstWindow();
     await page.evaluate(() => {
       for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith("texpulse.workspace.v1.")) {
+        if (key.startsWith("texpulse.workspace.v")) {
           window.localStorage.removeItem(key);
         }
       }
@@ -434,6 +463,149 @@ test("navigates forward to the PDF and inversely to an included source file", as
     await page.screenshot({
       path: join(screenshotDirectory, "sprint-8-inverse-search.png"),
     });
+  } finally {
+    await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("configures a recipe, performs a clean build, and safely removes auxiliaries", async () => {
+  const projectDirectory = await mkdtemp(
+    join(tmpdir(), "texpulse settings e2e "),
+  );
+  const tracePath = join(projectDirectory, ".texpulse", "build-trace.jsonl");
+  await writeFile(
+    join(projectDirectory, "main.tex"),
+    "\\documentclass{article}\n\\begin{document}\nSettings workflow\n\\end{document}\n",
+  );
+
+  const electronApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
+      TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
+      TEXPULSE_FAKE_TRACE: tracePath,
+    },
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    await page.getByLabel("Auto build").uncheck();
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByLabel("Compile recipe").selectOption("latexmk-xelatex");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Project and build settings" }),
+    ).toBeHidden();
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Clean build" }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect
+      .poll(async () => {
+        const raw = await readFile(tracePath, "utf8");
+        return raw.trim().split(/\r?\n/u).length;
+      })
+      .toBe(2);
+    const traces = (await readFile(tracePath, "utf8"))
+      .trim()
+      .split(/\r?\n/u)
+      .map((line) => JSON.parse(line) as BuildTrace);
+    expect(traces[1]?.args).toContain("-gg");
+    expect(traces[1]?.args).toContain("-xelatex");
+
+    const generationsDirectory = join(
+      projectDirectory,
+      ".texpulse",
+      "build",
+      "generations",
+    );
+    const generations = await readdir(generationsDirectory);
+    const latestGeneration = join(
+      generationsDirectory,
+      generations.sort().at(-1)!,
+    );
+    const auxiliaryPath = join(latestGeneration, "main.aux");
+    const pdfPath = join(latestGeneration, "main.pdf");
+    await writeFile(auxiliaryPath, "generated auxiliary");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Clean auxiliary files" }).click();
+    await expect
+      .poll(() => readFile(auxiliaryPath, "utf8").catch(() => "removed"))
+      .toBe("removed");
+    await expect.poll(() => readFile(pdfPath, "utf8")).toContain("%PDF-1.4");
+
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-9-settings-clean-build.png"),
+    });
+  } finally {
+    await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("reports first-run toolchain readiness only after a self-test", async () => {
+  const projectDirectory = await mkdtemp(join(tmpdir(), "texpulse setup e2e "));
+  await writeFile(
+    join(projectDirectory, "main.tex"),
+    "\\documentclass{article}\\begin{document}Setup\\end{document}",
+  );
+  const electronApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TEXPULSE_E2E_FORCE_SETUP: "1",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
+      TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
+    },
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    const dialog = page.getByRole("dialog", {
+      name: "Prepare TeXPulse Studio",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("Readiness not checked")).toBeVisible();
+    await dialog.getByRole("button", { name: "Run real self-test" }).click();
+    await expect(dialog.getByText("Toolchain ready")).toBeVisible();
+    await expect(dialog.getByText("Self-test: passed")).toBeVisible();
+
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-9-setup-wizard.png"),
+    });
+    await dialog.getByRole("button", { name: "Save settings" }).click();
+    await expect(dialog).toBeHidden();
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });

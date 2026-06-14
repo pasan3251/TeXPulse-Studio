@@ -1,23 +1,24 @@
 # Test Plan
 
-## Sprint 8 scope
+## Sprint 9 scope
 
-Sprint 8 verifies all existing controls plus bounded SyncTeX parsing, shell-free
-invocation, current-artifact enforcement, multi-file and spaces-in-path mapping,
-visible source/PDF targets, and both Electron navigation directions.
+Sprint 9 verifies all existing controls plus settings schemas and migration,
+global/project persistence, honest toolchain readiness, recipe argument arrays,
+explicit `latexmk` configuration trust, clean builds, safe auxiliary cleanup,
+and native engine and bibliography workflows.
 
-| Check        | Command                 | Current evidence                                        |
-| ------------ | ----------------------- | ------------------------------------------------------- |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                   |
-| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests         |
-| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests      |
-| Unit tests   | `pnpm test:unit`        | SyncTeX fixtures, bounds, reducer, and core state       |
-| Component    | `pnpm test:component`   | Source/PDF targets, Problems, tree, and PDF state       |
-| Integration  | `pnpm test:integration` | SyncTeX process/session, compiler, and validated IPC    |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches          |
-| E2E          | `pnpm test:e2e`         | Live build, diagnostics, forward and inverse navigation |
-| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle       |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                     |
+| Check        | Command                 | Current evidence                                       |
+| ------------ | ----------------------- | ------------------------------------------------------ |
+| Formatting   | `pnpm format:check`     | Prettier checks repository text files                  |
+| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests        |
+| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests     |
+| Unit tests   | `pnpm test:unit`        | Settings migration, recipes, cleanup, reducer, core    |
+| Component    | `pnpm test:component`   | Setup/settings, source/PDF targets, Problems, tree     |
+| Integration  | `pnpm test:integration` | Settings stores, cleanup, session, compiler, IPC       |
+| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches         |
+| E2E          | `pnpm test:e2e`         | Existing flows plus setup, settings, clean and cleanup |
+| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle      |
+| Aggregate    | `pnpm check`            | Runs every current gate in sequence                    |
 
 ## Determinism
 
@@ -40,12 +41,13 @@ visible source/PDF targets, and both Electron navigation directions.
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
-  folder/compiler/SyncTeX overrides. It verifies the eleven-method bridge and
-  absent Node globals, rapid typing coalescence, queued handoff, non-overlapping
-  compiler trace intervals, newest-result display, disabled auto-build plus
-  manual compile, responsive editing, stale-result rejection, workspace
-  restoration, minimum-window layout, version-conflict preservation,
-  screenshots, clean shutdown, and fixture removal.
+  folder/compiler/SyncTeX/toolchain overrides. It verifies the seventeen-method
+  bridge and absent Node globals, rapid typing coalescence, queued handoff,
+  non-overlapping compiler trace intervals, newest-result display, disabled
+  auto-build plus manual compile, responsive editing, stale-result rejection,
+  workspace restoration, minimum-window layout, version-conflict preservation,
+  settings persistence, recipe and clean arguments, allowlisted cleanup,
+  first-run readiness states, screenshots, clean shutdown, and fixture removal.
 - Diagnostic golden tests cover undefined commands, missing packages, undefined
   references/citations, box warnings, emergency stops, BibTeX, Biber, timeout,
   cancellation, malformed output, explicit severities, MiKTeX 79-column wraps,
@@ -64,6 +66,17 @@ visible source/PDF targets, and both Electron navigation directions.
   and a multi-file round trip.
 - SyncTeX E2E verifies a visible PDF target and inverse navigation to the
   included source line with an editor marker.
+- Settings tests cover global schema version 0 migration, invalid-data fallback,
+  atomic persistence, project schema version 1 migration with trust disabled,
+  field validation, and global auto-build defaults for new projects.
+- Recipe tests verify pdfLaTeX, XeLaTeX, and LuaLaTeX argument arrays,
+  `-no-shell-escape`, default `-norc`, explicit trust, and clean `-gg`.
+- Auxiliary-cleanup integration covers allowlisted suffixes, preserved
+  PDF/log/SyncTeX/unknown files, nested directories, and skipped links or
+  junctions.
+- Conditional native integration runs only with `TEXPULSE_RUN_NATIVE=1` and
+  compiles pdfLaTeX, XeLaTeX, LuaLaTeX, BibTeX, and Biber fixtures with real
+  MiKTeX.
 - PDF component tests use controlled PDF.js document/page/render objects and no
   arbitrary sleeps.
 - The fake compiler emits a structurally valid one-page PDF and can

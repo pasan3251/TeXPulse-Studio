@@ -14,10 +14,8 @@ import type { BuildDiagnostic } from "../ipc/build-contracts.js";
 import { BuildLog } from "./components/BuildLog.js";
 import { ProblemsPanel } from "./components/ProblemsPanel.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
-import {
-  LiveBuildCoordinator,
-  type LiveBuildSettings,
-} from "./live-build-coordinator.js";
+import { SettingsDialog } from "./components/SettingsDialog.js";
+import { LiveBuildCoordinator } from "./live-build-coordinator.js";
 import {
   initialWorkspaceState,
   isBufferModified,
@@ -29,6 +27,12 @@ import {
   loadWorkspacePreferences,
   saveWorkspacePreferences,
 } from "./workspace-persistence.js";
+import { defaultGlobalSettings } from "../settings/settings-types.js";
+import type { GlobalSettings } from "../settings/settings-types.js";
+import type {
+  ProjectSettings,
+  ToolchainReport,
+} from "../ipc/settings-contracts.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -62,7 +66,6 @@ function persistWorkspaceState(
     activePath: state.activePath,
     bufferViews,
     paneRatio: state.paneRatio,
-    settings: state.settings,
   });
 }
 
@@ -78,7 +81,18 @@ export function App({ api = window.texpulse }: AppProps) {
   const diagnosticRequestRef = useRef(0);
   const synctexRequestRef = useRef(0);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(
+    defaultGlobalSettings(),
+  );
+  const globalSettingsRef = useRef(globalSettings);
+  const [settingsIssues, setSettingsIssues] = useState<string[]>([]);
+  const [settingsMode, setSettingsMode] = useState<"settings" | "setup" | null>(
+    null,
+  );
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [toolchain, setToolchain] = useState<ToolchainReport | null>(null);
   stateRef.current = state;
+  globalSettingsRef.current = globalSettings;
 
   const activeBuffer =
     state.activePath === null ? undefined : state.buffers[state.activePath];
@@ -209,7 +223,6 @@ export function App({ api = window.texpulse }: AppProps) {
     const preferences = loadWorkspacePreferences(
       window.localStorage,
       result.value.projectId,
-      result.value.autoBuild,
     );
     const availableFiles = new Set(
       result.value.entries
@@ -251,8 +264,23 @@ export function App({ api = window.texpulse }: AppProps) {
       type: "project-opened",
       project: result.value,
       paneRatio: preferences.paneRatio,
-      settings: preferences.settings,
+      settings: {
+        autosave: globalSettingsRef.current.autosave,
+        autoBuild: result.value.settings.autoBuild,
+        debounceMs: globalSettingsRef.current.debounceMs,
+      },
     });
+    if (result.value.settingsIssues.length > 0) {
+      setSettingsIssues((current) => [
+        ...current,
+        ...result.value.settingsIssues,
+      ]);
+      dispatch({
+        type: "external-change-detected",
+        message:
+          "Project settings were recovered with safe defaults. Open Settings for details.",
+      });
+    }
     dispatch({
       type: "files-restored",
       files,
@@ -261,7 +289,10 @@ export function App({ api = window.texpulse }: AppProps) {
     });
   };
 
-  const requestCompile = async (revision: number): Promise<void> => {
+  const requestCompile = async (
+    revision: number,
+    clean = false,
+  ): Promise<void> => {
     synctexRequestRef.current += 1;
     setSyncBusy(false);
     const rootFile = stateRef.current.project?.rootFile;
@@ -279,7 +310,9 @@ export function App({ api = window.texpulse }: AppProps) {
         buffer.content,
       ]),
     );
-    const result = await api.compileProject({ rootFile });
+    const result = clean
+      ? await api.cleanBuild({ rootFile })
+      : await api.compileProject({ rootFile });
     const coordinator = coordinatorRef.current;
     if (coordinator === null || !coordinator.isCurrentRevision(revision)) {
       return;
@@ -532,6 +565,40 @@ export function App({ api = window.texpulse }: AppProps) {
   }, [api]);
 
   useEffect(() => {
+    let disposed = false;
+    void api.getSettings().then((result) => {
+      if (disposed) {
+        return;
+      }
+      if (!result.ok) {
+        dispatch({
+          type: "operation-failed",
+          message: result.error.message,
+        });
+        return;
+      }
+      setGlobalSettings(result.value.settings);
+      setSettingsIssues(result.value.issues);
+      dispatch({
+        type: "settings-changed",
+        settings: {
+          autosave: result.value.settings.autosave,
+          autoBuild:
+            stateRef.current.project?.settings.autoBuild ??
+            result.value.settings.autoBuild,
+          debounceMs: result.value.settings.debounceMs,
+        },
+      });
+      if (!result.value.settings.setupCompleted) {
+        setSettingsMode("setup");
+      }
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [api]);
+
+  useEffect(() => {
     coordinatorRef.current?.configure(state.settings);
   }, [state.settings]);
 
@@ -621,10 +688,141 @@ export function App({ api = window.texpulse }: AppProps) {
     };
   }, []);
 
-  const updateSettings = (settings: Partial<LiveBuildSettings>): void => {
+  const checkToolchain = async (
+    customBinDirectory: string | null,
+    skipSelfTest = false,
+  ): Promise<void> => {
+    setSettingsBusy(true);
+    const result = await api.checkToolchain({
+      customBinDirectory,
+      ...(skipSelfTest ? { skipSelfTest: true } : {}),
+    });
+    setSettingsBusy(false);
+    if (result.ok) {
+      setToolchain(result.value);
+    } else {
+      dispatch({
+        type: "operation-failed",
+        message: result.error.message,
+      });
+    }
+  };
+
+  const saveSettings = async (
+    requestedGlobal: GlobalSettings,
+    requestedProject: ProjectSettings | null,
+  ): Promise<void> => {
+    setSettingsBusy(true);
+    const globalResult = await api.saveGlobalSettings({
+      ...requestedGlobal,
+      setupCompleted:
+        settingsMode === "setup" ? true : requestedGlobal.setupCompleted,
+    });
+    if (!globalResult.ok) {
+      setSettingsBusy(false);
+      dispatch({
+        type: "operation-failed",
+        message: globalResult.error.message,
+      });
+      return;
+    }
+    if (requestedProject !== null) {
+      const projectResult = await api.saveProjectSettings(requestedProject);
+      if (!projectResult.ok) {
+        setSettingsBusy(false);
+        dispatch({
+          type: "operation-failed",
+          message: projectResult.error.message,
+        });
+        return;
+      }
+      dispatch({
+        type: "project-settings-changed",
+        settings: projectResult.value,
+      });
+    }
+    setGlobalSettings(globalResult.value);
+    setSettingsIssues([]);
     dispatch({
       type: "settings-changed",
-      settings: { ...stateRef.current.settings, ...settings },
+      settings: {
+        autosave: globalResult.value.autosave,
+        autoBuild:
+          requestedProject?.autoBuild ??
+          stateRef.current.project?.settings.autoBuild ??
+          globalResult.value.autoBuild,
+        debounceMs: globalResult.value.debounceMs,
+      },
+    });
+    setSettingsBusy(false);
+    setSettingsMode(null);
+    dispatch({
+      type: "external-change-detected",
+      message: "Settings saved.",
+    });
+  };
+
+  const cleanBuild = async (): Promise<void> => {
+    const coordinator = coordinatorRef.current;
+    if (coordinator === null || !(await savePaths(null, false))) {
+      return;
+    }
+    setSettingsMode(null);
+    await requestCompile(coordinator.currentRevision(), true);
+  };
+
+  const cleanupAuxiliary = async (): Promise<void> => {
+    setSettingsBusy(true);
+    const result = await api.cleanupAuxiliary();
+    setSettingsBusy(false);
+    if (result.ok) {
+      dispatch({
+        type: "external-change-detected",
+        message: `Removed ${String(result.value.removedFiles)} auxiliary files.`,
+      });
+    } else {
+      dispatch({
+        type: "operation-failed",
+        message: result.error.message,
+      });
+    }
+  };
+
+  const updateGlobalQuick = (changes: Partial<GlobalSettings>): void => {
+    const settings = { ...globalSettingsRef.current, ...changes };
+    setGlobalSettings(settings);
+    dispatch({
+      type: "settings-changed",
+      settings: {
+        ...stateRef.current.settings,
+        autosave: settings.autosave,
+        debounceMs: settings.debounceMs,
+      },
+    });
+    void api.saveGlobalSettings(settings).then((result) => {
+      if (!result.ok) {
+        dispatch({
+          type: "operation-failed",
+          message: result.error.message,
+        });
+      }
+    });
+  };
+
+  const updateProjectAutoBuild = (autoBuild: boolean): void => {
+    const settings = stateRef.current.project?.settings;
+    if (settings === undefined) {
+      return;
+    }
+    const updated = { ...settings, autoBuild };
+    dispatch({ type: "project-settings-changed", settings: updated });
+    void api.saveProjectSettings(updated).then((result) => {
+      if (!result.ok) {
+        dispatch({
+          type: "operation-failed",
+          message: result.error.message,
+        });
+      }
     });
   };
 
@@ -695,6 +893,15 @@ export function App({ api = window.texpulse }: AppProps) {
           </button>
           <button
             type="button"
+            className="button secondary"
+            onClick={() => {
+              setSettingsMode("settings");
+            }}
+          >
+            Settings
+          </button>
+          <button
+            type="button"
             className="button"
             disabled={
               activeBuffer === undefined ||
@@ -725,7 +932,7 @@ export function App({ api = window.texpulse }: AppProps) {
               type="checkbox"
               checked={state.settings.autosave}
               onChange={(event) => {
-                updateSettings({ autosave: event.currentTarget.checked });
+                updateGlobalQuick({ autosave: event.currentTarget.checked });
               }}
             />
             Autosave
@@ -734,8 +941,9 @@ export function App({ api = window.texpulse }: AppProps) {
             <input
               type="checkbox"
               checked={state.settings.autoBuild}
+              disabled={state.project === null}
               onChange={(event) => {
-                updateSettings({ autoBuild: event.currentTarget.checked });
+                updateProjectAutoBuild(event.currentTarget.checked);
               }}
             />
             Auto build
@@ -746,7 +954,7 @@ export function App({ api = window.texpulse }: AppProps) {
               aria-label="Automatic build delay"
               value={state.settings.debounceMs}
               onChange={(event) => {
-                updateSettings({
+                updateGlobalQuick({
                   debounceMs: Number(event.currentTarget.value),
                 });
               }}
@@ -889,6 +1097,7 @@ export function App({ api = window.texpulse }: AppProps) {
                     <EditorPane
                       buffer={activeBuffer}
                       diagnostics={activeDiagnostics}
+                      fontSize={globalSettings.editorFontSize}
                       navigationTarget={state.navigationTarget}
                       onChange={(path, content) => {
                         synctexRequestRef.current += 1;
@@ -960,6 +1169,7 @@ export function App({ api = window.texpulse }: AppProps) {
                 <PdfViewer
                   artifact={state.pdf.artifact}
                   data={state.pdf.data}
+                  defaultZoomMode={globalSettings.pdfZoomMode}
                   syncTarget={state.pdfSyncTarget}
                   onOpen={() => {
                     void performPdfAction("open");
@@ -1020,6 +1230,46 @@ export function App({ api = window.texpulse }: AppProps) {
             x
           </button>
         </div>
+      ) : null}
+
+      {settingsMode !== null ? (
+        <SettingsDialog
+          busy={settingsBusy}
+          globalSettings={globalSettings}
+          issues={[...settingsIssues, ...(state.project?.settingsIssues ?? [])]}
+          mode={settingsMode}
+          projectSettings={state.project?.settings ?? null}
+          rootOptions={
+            state.project?.entries
+              .filter(
+                (entry) =>
+                  entry.kind === "file" &&
+                  entry.path.toLowerCase().endsWith(".tex"),
+              )
+              .map((entry) => entry.path) ?? []
+          }
+          toolchain={toolchain}
+          onCheckToolchain={(customBinDirectory) => {
+            void checkToolchain(customBinDirectory);
+          }}
+          onCleanBuild={() => {
+            void cleanBuild();
+          }}
+          onCleanupAuxiliary={() => {
+            void cleanupAuxiliary();
+          }}
+          onClose={() => {
+            setSettingsMode(null);
+          }}
+          onSave={(requestedGlobal, requestedProject) => {
+            void saveSettings(requestedGlobal, requestedProject);
+          }}
+          onSkipSetup={(requestedGlobal, requestedProject) => {
+            void checkToolchain(requestedGlobal.customBinDirectory, true).then(
+              () => saveSettings(requestedGlobal, requestedProject),
+            );
+          }}
+        />
       ) : null}
     </div>
   );

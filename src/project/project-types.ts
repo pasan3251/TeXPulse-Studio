@@ -53,11 +53,12 @@ export type CompileRecipe =
   | "latexmk-xelatex";
 
 export interface ProjectMetadata {
-  schemaVersion: 1;
+  schemaVersion: 2;
   rootFile: string | null;
   recipe: CompileRecipe;
   buildDirectory: string;
   autoBuild: boolean;
+  allowLatexmkRc: boolean;
 }
 
 export interface MetadataLoadResult {

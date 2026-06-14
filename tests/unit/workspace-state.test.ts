@@ -14,6 +14,14 @@ const project = {
   rootCandidates: [],
   rootFile: "main.tex",
   autoBuild: true,
+  settings: {
+    rootFile: "main.tex",
+    recipe: "latexmk-pdf" as const,
+    buildDirectory: ".texpulse/build",
+    autoBuild: true,
+    allowLatexmkRc: false,
+  },
+  settingsIssues: [],
 };
 
 function file(path: string, content: string, version = "a".repeat(64)) {

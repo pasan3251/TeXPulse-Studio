@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { projectSettingsSchema } from "../settings/project-settings.js";
+
 export const openProjectRequestSchema = z.undefined();
 
 export const projectPathRequestSchema = z
@@ -58,6 +60,7 @@ export const apiErrorSchema = z
       "artifact-stale",
       "binary-file",
       "build-failed",
+      "cleanup-busy",
       "cancelled",
       "conflict",
       "external-open-failed",
@@ -97,6 +100,8 @@ export const openProjectResultSchema = z.discriminatedUnion("ok", [
           rootCandidates: z.array(rootCandidateSchema),
           rootFile: z.string().nullable(),
           autoBuild: z.boolean(),
+          settings: projectSettingsSchema,
+          settingsIssues: z.array(z.string().max(4_096)).max(20),
         })
         .strict(),
     })

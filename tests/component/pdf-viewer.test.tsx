@@ -71,6 +71,7 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(1)}
         data={new Uint8Array([1])}
+        defaultZoomMode="fit-width"
         syncTarget={null}
         onOpen={vi.fn()}
         onReveal={vi.fn()}
@@ -97,6 +98,7 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(2)}
         data={new Uint8Array([2])}
+        defaultZoomMode="fit-width"
         syncTarget={null}
         onOpen={vi.fn()}
         onReveal={vi.fn()}
@@ -136,6 +138,7 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(1)}
         data={new Uint8Array([1])}
+        defaultZoomMode="fit-width"
         syncTarget={{
           page: 1,
           x: 72,
@@ -192,6 +195,7 @@ describe("PdfViewer", () => {
       <PdfViewer
         artifact={artifact(1)}
         data={new Uint8Array([1])}
+        defaultZoomMode="fit-width"
         syncTarget={{
           page: 99,
           x: 1,

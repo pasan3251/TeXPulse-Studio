@@ -72,6 +72,21 @@ Open MiKTeX Console and check for updates before the first real compiler smoke
 test. Do not report toolchain readiness until the real self-test defined by the
 SRS succeeds.
 
+## First-run setup reports not ready
+
+The first launch opens the toolchain setup dialog. Run the real self-test and
+inspect each reported executable path, version, and state. Application readiness
+means the editor can start; toolchain readiness additionally requires a
+successful isolated LaTeX compile.
+
+Use the custom executable directory only when the required native Windows tools
+are not discoverable on `PATH`. TeXPulse resolves fixed tool names from that
+directory. Selecting it is a local trust decision because those executables will
+be launched for checks and builds.
+
+`Skip self-test and continue` is explicit. It completes setup without claiming
+that a real compile succeeded.
+
 ## MakeIndex version is unknown
 
 The MiKTeX MakeIndex executable is runnable but does not expose a parseable
@@ -147,7 +162,9 @@ Set a positive timeout explicitly when needed:
 pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 180000
 ```
 
-Do not disable the timeout for unknown or intentionally non-terminating TeX.
+Do not disable the timeout for unknown or intentionally non-terminating TeX. The
+desktop timeout is configured under Settings and is applied to subsequent normal
+and clean builds.
 
 ## Build cancellation
 
@@ -169,6 +186,41 @@ visible conflict first. Turning off automatic build does not disable the manual
 Generated files under `.texpulse`, the configured build directory,
 `node_modules`, `dist`, and `coverage` do not trigger live builds.
 
+The global automatic-build setting is the default for projects without metadata.
+Once project settings are saved, the project's own automatic-build value takes
+precedence.
+
+## The selected recipe is wrong
+
+Open Settings and choose pdfLaTeX, XeLaTeX, or LuaLaTeX for the current project.
+The recipe, root file, build directory, and automatic-build choice are stored in
+`.texpulse/project.json`.
+
+BibTeX and Biber are driven by `latexmk` when the document requests them.
+Confirm the relevant executable is reported by the toolchain check and inspect
+the raw build log when bibliography output is missing.
+
+## `.latexmkrc` is ignored
+
+TeXPulse passes `-norc` by default. Enable `Trust latexmk configuration files`
+for the current project only after reviewing its `.latexmkrc` and any other
+configuration that `latexmk` may load. These files are Perl and may execute
+commands while loading.
+
+This trust option does not enable TeX shell escape. TeXPulse continues to pass
+`-no-shell-escape`.
+
+## Clean build or auxiliary cleanup failed
+
+`Clean build` starts a new generation with the selected recipe and
+`latexmk -gg`. It retains timeout, cancellation, and newest-result controls.
+
+`Clean auxiliary files` removes only recognized auxiliary files inside
+generation directories. It preserves PDFs, logs, SyncTeX data, and unknown
+files; it does not run `latexmk -c` or load project cleanup hooks. Cleanup and
+settings changes are rejected while a build or another maintenance operation is
+active. Wait for the current operation to finish and retry.
+
 ## Project file changed externally
 
 The main process watches the open project and reports added, changed, or deleted
@@ -184,13 +236,13 @@ reconcile the content before retrying.
 ## Workspace state did not restore
 
 After reopening the same project in the same app profile, TeXPulse restores
-available open files, the active file, cursor and scroll views, pane ratio, and
-live-build settings. Missing or renamed files are skipped.
+available open files, the active file, cursor and scroll views, and pane ratio.
+Missing or renamed files are skipped.
 
 Workspace state is stored in validated application-local browser storage keyed
-by an opaque project ID. Source content, PDFs, logs, and build state are not
-stored, so a restored editor may show no preview until the next successful
-build.
+by an opaque project ID. Settings use the main-process global and project
+stores. Source content, PDFs, logs, and build state are not stored, so a
+restored editor may show no preview until the next successful build.
 
 ## Project path is rejected
 
@@ -203,6 +255,10 @@ does not traverse, read through, rename through, or delete through them.
 Project settings live at `.texpulse/project.json`. Invalid JSON, invalid fields,
 or an unsupported schema version return safe defaults with issue messages.
 Correct the metadata instead of bypassing validation.
+
+Schema version 1 project metadata migrates to version 2 with `latexmk`
+configuration trust disabled. Global settings also migrate from the known legacy
+schema. Unsupported or malformed data produces a visible recovery notice.
 
 ## WSL detected
 

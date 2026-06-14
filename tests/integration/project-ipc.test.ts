@@ -12,9 +12,11 @@ import { registerProjectIpc } from "../../src/electron/project-ipc.js";
 import {
   ALL_CHANNELS,
   BUILD_CHANNELS,
+  SETTINGS_CHANNELS,
   SYNCTEX_CHANNELS,
 } from "../../src/ipc/channels.js";
 import { PROJECT_CHANNELS } from "../../src/ipc/project-contracts.js";
+import type { GlobalSettings } from "../../src/settings/settings-types.js";
 
 type IpcHandler = Parameters<IpcMain["handle"]>[1];
 
@@ -93,6 +95,8 @@ describe("project IPC", () => {
         },
       ],
       [BUILD_CHANNELS.compile, { rootFile: "main.tex" }],
+      [BUILD_CHANNELS.clean, { rootFile: "main.tex" }],
+      [BUILD_CHANNELS.cleanupAuxiliary, undefined],
       [BUILD_CHANNELS.cancel, undefined],
       [BUILD_CHANNELS.loadPdf, { buildId: "build-1", generation: 1 }],
       [BUILD_CHANNELS.openPdf, { buildId: "build-1", generation: 1 }],
@@ -105,6 +109,16 @@ describe("project IPC", () => {
           path: "main.tex",
           line: 1,
           column: 1,
+        },
+      ],
+      [
+        SETTINGS_CHANNELS.saveProject,
+        {
+          rootFile: "main.tex",
+          recipe: "latexmk-pdf",
+          buildDirectory: ".texpulse/build",
+          autoBuild: true,
+          allowLatexmkRc: false,
         },
       ],
       [
@@ -133,6 +147,127 @@ describe("project IPC", () => {
       ok: false,
       error: { code: "cancelled" },
     });
+  });
+
+  it("loads and saves global settings and reports toolchain readiness", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+      checkToolchain: () =>
+        Promise.resolve({
+          ready: false,
+          tools: [],
+          issues: [
+            {
+              severity: "error",
+              tool: "latexmk",
+              message: "latexmk was not found.",
+            },
+          ],
+          selfTest: {
+            status: "failed",
+            message: "Required tools are unavailable.",
+          },
+        }),
+    });
+
+    const loaded = (await invoke(
+      handlers,
+      SETTINGS_CHANNELS.get,
+      event(7),
+    )) as { value: { settings: { setupCompleted: boolean } } };
+    expect(loaded.value.settings.setupCompleted).toBe(false);
+
+    await expect(
+      invoke(handlers, SETTINGS_CHANNELS.saveGlobal, event(7), {
+        ...loaded.value.settings,
+        setupCompleted: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { setupCompleted: true },
+    });
+    await expect(
+      invoke(handlers, SETTINGS_CHANNELS.toolchainCheck, event(7), {
+        customBinDirectory: null,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        ready: false,
+        selfTest: { status: "failed" },
+      },
+    });
+  });
+
+  it("reports an unavailable toolchain-check service honestly", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, SETTINGS_CHANNELS.toolchainCheck, event(7), {
+        customBinDirectory: null,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "internal",
+        message: expect.stringContaining("unavailable"),
+      },
+    });
+  });
+
+  it("delegates global settings persistence to the application store", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const settings: GlobalSettings = {
+      schemaVersion: 1,
+      theme: "system",
+      autosave: true,
+      autoBuild: true,
+      debounceMs: 800,
+      compileTimeoutMs: 120_000,
+      customBinDirectory: null,
+      editorFontSize: 15,
+      pdfZoomMode: "fit-width",
+      setupCompleted: false,
+    };
+    const loadGlobalSettings = vi.fn(() =>
+      Promise.resolve({ settings, issues: ["Recovered."] }),
+    );
+    const saveGlobalSettings = vi.fn((value: GlobalSettings) =>
+      Promise.resolve(value),
+    );
+    registerProjectIpc({
+      ipcMain,
+      loadGlobalSettings,
+      saveGlobalSettings,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, SETTINGS_CHANNELS.get, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { issues: ["Recovered."] },
+    });
+    await expect(
+      invoke(handlers, SETTINGS_CHANNELS.saveGlobal, event(7), {
+        ...settings,
+        setupCompleted: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { setupCompleted: true },
+    });
+    expect(loadGlobalSettings).toHaveBeenCalledOnce();
+    expect(saveGlobalSettings).toHaveBeenCalledOnce();
   });
 
   it("opens a project and reads only through the active bounded session", async () => {

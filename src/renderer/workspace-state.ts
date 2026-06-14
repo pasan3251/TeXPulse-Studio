@@ -108,6 +108,10 @@ export type WorkspaceAction =
     }
   | { type: "pane-ratio-changed"; paneRatio: number }
   | { type: "settings-changed"; settings: LiveBuildSettings }
+  | {
+      type: "project-settings-changed";
+      settings: OpenedProject["settings"];
+    }
   | { type: "external-change-detected"; message: string }
   | { type: "operation-failed"; message: string; path?: string }
   | { type: "notice-dismissed" };
@@ -407,6 +411,24 @@ export function workspaceReducer(
       return { ...state, paneRatio: action.paneRatio };
     case "settings-changed":
       return { ...state, settings: action.settings };
+    case "project-settings-changed":
+      if (state.project === null) {
+        return state;
+      }
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          rootFile: action.settings.rootFile,
+          autoBuild: action.settings.autoBuild,
+          settings: action.settings,
+          settingsIssues: [],
+        },
+        settings: {
+          ...state.settings,
+          autoBuild: action.settings.autoBuild,
+        },
+      };
     case "external-change-detected":
       return { ...state, notice: action.message };
     case "operation-failed":

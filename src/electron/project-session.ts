@@ -6,6 +6,7 @@ import { BuildController } from "../build/build-controller.js";
 import type { BuildCompletion } from "../build/build-types.js";
 import type { CompilerAdapter } from "../compiler/compiler-adapter.js";
 import type { CompileRecipe } from "../compiler/compile-types.js";
+import { cleanupAuxiliaryFiles } from "../compiler/auxiliary-cleanup.js";
 import { parseBuildDiagnostics } from "../diagnostics/diagnostic-parser.js";
 import type {
   BuildView,
@@ -14,7 +15,10 @@ import type {
 } from "../ipc/build-contracts.js";
 import type { OpenProjectResult } from "../ipc/project-contracts.js";
 import type { ProjectFileChange } from "../ipc/project-contracts.js";
-import { loadProjectMetadata } from "../project/project-metadata.js";
+import {
+  loadProjectMetadata,
+  saveProjectMetadata,
+} from "../project/project-metadata.js";
 import {
   normalizeProjectPath,
   resolveProjectPath,
@@ -23,6 +27,9 @@ import {
 import { ProjectService } from "../project/project-service.js";
 import { ProjectWatcher } from "../project/project-watcher.js";
 import type { ProjectMetadata } from "../project/project-types.js";
+import { defaultGlobalSettings } from "../settings/settings-types.js";
+import type { GlobalSettings } from "../settings/settings-types.js";
+import type { ProjectSettings } from "../settings/project-settings.js";
 import {
   SynctexService,
   SynctexServiceError,
@@ -42,6 +49,7 @@ type OpenProjectValue = Extract<OpenProjectResult, { ok: true }>["value"];
 export type ProjectSessionErrorCode =
   | "artifact-stale"
   | "build-failed"
+  | "cleanup-busy"
   | "external-open-failed"
   | "no-pdf"
   | "no-root"
@@ -61,13 +69,19 @@ export class ProjectSessionError extends Error {
 }
 
 export class ProjectSession {
+  private maintenanceActive = false;
+
   private constructor(
     private readonly service: ProjectService,
     private readonly controller: BuildController,
-    private readonly metadata: ProjectMetadata,
+    private metadata: ProjectMetadata,
     private readonly projectDescription: OpenProjectValue,
-    private readonly watcher: ProjectWatcher | null,
+    private watcher: ProjectWatcher | null,
     private readonly synctex: SynctexService,
+    private readonly onFileChange:
+      | ((change: ProjectFileChange) => void)
+      | undefined,
+    private readonly getGlobalSettings: () => Promise<GlobalSettings>,
   ) {}
 
   static async open(
@@ -75,6 +89,8 @@ export class ProjectSession {
     adapter: CompilerAdapter,
     onFileChange?: (change: ProjectFileChange) => void,
     synctex: SynctexService = new SynctexService(),
+    getGlobalSettings: () => Promise<GlobalSettings> = () =>
+      Promise.resolve(defaultGlobalSettings()),
   ): Promise<ProjectSession> {
     const service = await ProjectService.open(projectDirectory);
     const [entries, rootCandidates] = await Promise.all([
@@ -82,7 +98,13 @@ export class ProjectSession {
       service.detectRootFiles(),
     ]);
     const fallbackRoot = rootCandidates[0]?.path ?? null;
-    const metadata = await loadProjectMetadata(service.root, fallbackRoot);
+    const [metadata, globalSettings] = await Promise.all([
+      loadProjectMetadata(service.root, fallbackRoot),
+      getGlobalSettings(),
+    ]);
+    if (metadata.source === "default") {
+      metadata.metadata.autoBuild = globalSettings.autoBuild;
+    }
     const rootFile = metadata.metadata.rootFile ?? fallbackRoot;
     const projectId = createHash("sha256")
       .update(pathKey(service.root))
@@ -91,23 +113,7 @@ export class ProjectSession {
     const controller = new BuildController(adapter, {
       projectDirectory: service.root,
     });
-    const watcher =
-      onFileChange === undefined
-        ? null
-        : new ProjectWatcher({
-            root: service.root,
-            buildDirectory: metadata.metadata.buildDirectory,
-            onChange: (change) => {
-              onFileChange({ ...change, projectId });
-            },
-            onError: (error) => {
-              console.error("Project file watcher failed.", error);
-            },
-            readVersion: async (path) =>
-              (await service.readTextFile(path)).version,
-          });
-
-    return new ProjectSession(
+    const session = new ProjectSession(
       service,
       controller,
       metadata.metadata,
@@ -118,10 +124,16 @@ export class ProjectSession {
         rootCandidates,
         rootFile,
         autoBuild: metadata.metadata.autoBuild,
+        settings: toProjectSettings(metadata.metadata),
+        settingsIssues: metadata.issues,
       },
-      watcher,
+      null,
       synctex,
+      onFileChange,
+      getGlobalSettings,
     );
+    session.watcher = session.createWatcher();
+    return session;
   }
 
   describe(): OpenProjectValue {
@@ -143,6 +155,79 @@ export class ProjectSession {
   }
 
   async compile(rootFile: string): Promise<BuildView> {
+    return this.compileWithOptions(rootFile, false);
+  }
+
+  async cleanBuild(rootFile: string): Promise<BuildView> {
+    return this.compileWithOptions(rootFile, true);
+  }
+
+  async updateProjectSettings(
+    settings: ProjectSettings,
+  ): Promise<ProjectSettings> {
+    this.assertBuildIdle(
+      "Wait for the current build to finish or cancel it before changing project settings.",
+    );
+    this.maintenanceActive = true;
+    try {
+      if (settings.rootFile !== null) {
+        if (!settings.rootFile.toLowerCase().endsWith(".tex")) {
+          throw new ProjectSessionError(
+            "no-root",
+            "The selected root file must have a .tex extension.",
+          );
+        }
+        await this.service.readTextFile(settings.rootFile);
+      }
+      normalizeProjectPath(settings.buildDirectory);
+
+      const previousBuildDirectory = this.metadata.buildDirectory;
+      const nextMetadata: ProjectMetadata = {
+        schemaVersion: 2,
+        ...settings,
+      };
+      await saveProjectMetadata(this.service.root, nextMetadata);
+      this.metadata = nextMetadata;
+      this.projectDescription.rootFile = settings.rootFile;
+      this.projectDescription.autoBuild = settings.autoBuild;
+      this.projectDescription.settings = settings;
+      this.projectDescription.settingsIssues = [];
+
+      if (previousBuildDirectory !== settings.buildDirectory) {
+        await this.watcher?.close();
+        this.watcher = this.createWatcher();
+      }
+      return settings;
+    } finally {
+      this.maintenanceActive = false;
+    }
+  }
+
+  async cleanupAuxiliary(): Promise<number> {
+    this.assertBuildIdle(
+      "Wait for the current build to finish or cancel it before cleaning auxiliary files.",
+    );
+    this.maintenanceActive = true;
+    try {
+      return await cleanupAuxiliaryFiles(
+        this.service.root,
+        this.metadata.buildDirectory,
+      );
+    } finally {
+      this.maintenanceActive = false;
+    }
+  }
+
+  private async compileWithOptions(
+    rootFile: string,
+    clean: boolean,
+  ): Promise<BuildView> {
+    if (this.maintenanceActive) {
+      throw new ProjectSessionError(
+        "cleanup-busy",
+        "Wait for auxiliary cleanup to finish before compiling.",
+      );
+    }
     const normalizedRoot = normalizeProjectPath(rootFile);
     if (!normalizedRoot.toLowerCase().endsWith(".tex")) {
       throw new ProjectSessionError(
@@ -151,14 +236,32 @@ export class ProjectSession {
       );
     }
     await this.service.readTextFile(normalizedRoot);
+    const globalSettings = await this.getGlobalSettings();
 
     const ticket = this.controller.requestBuild({
       rootFile: normalizedRoot,
       buildDirectory: this.metadata.buildDirectory,
       recipe: metadataRecipe(this.metadata.recipe),
+      timeoutMs: globalSettings.compileTimeoutMs,
+      allowLatexmkRc: this.metadata.allowLatexmkRc,
+      clean,
+      ...(globalSettings.customBinDirectory === null
+        ? {}
+        : { customBinDirectory: globalSettings.customBinDirectory }),
     });
     const completion = await ticket.completion;
     return this.buildView(ticket.buildId, ticket.generation, completion);
+  }
+
+  private assertBuildIdle(message: string): void {
+    const snapshot = this.controller.getSnapshot();
+    if (
+      this.maintenanceActive ||
+      snapshot.activeBuildId !== null ||
+      snapshot.queuedBuildId !== null
+    ) {
+      throw new ProjectSessionError("cleanup-busy", message);
+    }
   }
 
   cancelBuild(): Promise<boolean> {
@@ -168,6 +271,27 @@ export class ProjectSession {
   async dispose(): Promise<void> {
     await this.cancelBuild();
     await this.watcher?.close();
+  }
+
+  private createWatcher(): ProjectWatcher | null {
+    if (this.onFileChange === undefined) {
+      return null;
+    }
+    return new ProjectWatcher({
+      root: this.service.root,
+      buildDirectory: this.metadata.buildDirectory,
+      onChange: (change) => {
+        this.onFileChange?.({
+          ...change,
+          projectId: this.projectDescription.projectId,
+        });
+      },
+      onError: (error) => {
+        console.error("Project file watcher failed.", error);
+      },
+      readVersion: async (path) =>
+        (await this.service.readTextFile(path)).version,
+    });
   }
 
   async loadPdf(request: PdfArtifactRequest): Promise<{
@@ -441,6 +565,16 @@ function metadataRecipe(recipe: ProjectMetadata["recipe"]): CompileRecipe {
     case "latexmk-pdf":
       return "pdf";
   }
+}
+
+function toProjectSettings(metadata: ProjectMetadata): ProjectSettings {
+  return {
+    rootFile: metadata.rootFile,
+    recipe: metadata.recipe,
+    buildDirectory: metadata.buildDirectory,
+    autoBuild: metadata.autoBuild,
+    allowLatexmkRc: metadata.allowLatexmkRc,
+  };
 }
 
 function pathKey(path: string): string {

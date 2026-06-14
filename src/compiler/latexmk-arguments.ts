@@ -10,14 +10,17 @@ export interface LatexmkArgumentOptions {
   recipe: CompileRecipe;
   rootFile: string;
   buildDirectory: string;
+  allowLatexmkRc?: boolean;
+  clean?: boolean;
 }
 
 export function buildLatexmkArguments(
   options: LatexmkArgumentOptions,
 ): readonly string[] {
   return [
-    "-norc",
+    ...(options.allowLatexmkRc === true ? [] : ["-norc"]),
     "-no-shell-escape",
+    ...(options.clean === true ? ["-gg"] : []),
     RECIPE_ARGUMENTS[options.recipe],
     "-synctex=1",
     "-interaction=nonstopmode",

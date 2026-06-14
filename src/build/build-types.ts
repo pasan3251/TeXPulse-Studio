@@ -16,6 +16,9 @@ export interface BuildInput {
   buildDirectory?: string;
   recipe?: CompileRecipe;
   customBinDirectory?: string;
+  timeoutMs?: number;
+  allowLatexmkRc?: boolean;
+  clean?: boolean;
 }
 
 export interface BuildRequestOptions {

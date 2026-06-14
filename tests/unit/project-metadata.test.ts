@@ -6,13 +6,14 @@ import {
 } from "../../src/project/project-metadata.js";
 
 describe("project metadata", () => {
-  it("accepts the version-one schema", () => {
+  it("accepts the version-two schema", () => {
     const metadata = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       rootFile: "main.tex",
       recipe: "latexmk-xelatex" as const,
       buildDirectory: "build",
       autoBuild: false,
+      allowLatexmkRc: true,
     };
     expect(parseProjectMetadata(metadata)).toEqual({
       metadata,
@@ -28,21 +29,37 @@ describe("project metadata", () => {
       recipe: "shell",
       buildDirectory: "C:\\outside",
       autoBuild: "yes",
+      allowLatexmkRc: "yes",
     });
     expect(result.metadata).toEqual(defaultProjectMetadata());
-    expect(result.issues).toHaveLength(4);
+    expect(result.issues).toHaveLength(5);
+  });
+
+  it("migrates version one with latexmkrc disabled", () => {
+    expect(
+      parseProjectMetadata({
+        schemaVersion: 1,
+        rootFile: "main.tex",
+        recipe: "latexmk-xelatex",
+        buildDirectory: "build",
+        autoBuild: false,
+      }),
+    ).toMatchObject({
+      metadata: {
+        schemaVersion: 2,
+        rootFile: "main.tex",
+        recipe: "latexmk-xelatex",
+        buildDirectory: "build",
+        autoBuild: false,
+        allowLatexmkRc: false,
+      },
+      issues: [expect.stringContaining("migrated")],
+      source: "file",
+    });
   });
 
   it("does not partially trust an unsupported schema version", () => {
-    expect(
-      parseProjectMetadata({
-        schemaVersion: 2,
-        rootFile: "future.tex",
-        recipe: "latexmk-xelatex",
-        buildDirectory: "future-build",
-        autoBuild: false,
-      }),
-    ).toEqual({
+    expect(parseProjectMetadata({ schemaVersion: 99 })).toEqual({
       metadata: defaultProjectMetadata(),
       issues: ["Unsupported or missing project metadata schemaVersion."],
       source: "default",

@@ -21,6 +21,20 @@ export const compileProjectRequestSchema = z
   })
   .strict();
 
+export const cleanBuildRequestSchema = compileProjectRequestSchema;
+export const cleanupAuxiliaryRequestSchema = z.undefined();
+export const cleanupAuxiliaryResultSchema = z.discriminatedUnion("ok", [
+  z
+    .object({
+      ok: z.literal(true),
+      value: z
+        .object({ removedFiles: z.number().int().nonnegative() })
+        .strict(),
+    })
+    .strict(),
+  z.object({ ok: z.literal(false), error: apiErrorSchema }).strict(),
+]);
+
 export const pdfArtifactSchema = z
   .object({
     buildId: buildIdSchema,
@@ -94,6 +108,9 @@ export const pdfActionResultSchema = z.discriminatedUnion("ok", [
 ]);
 
 export type CompileProjectRequest = z.infer<typeof compileProjectRequestSchema>;
+export type CleanupAuxiliaryResult = z.infer<
+  typeof cleanupAuxiliaryResultSchema
+>;
 export type CompileProjectResult = z.infer<typeof compileProjectResultSchema>;
 export type BuildView = z.infer<typeof buildViewSchema>;
 export type BuildDiagnostic = z.infer<typeof buildDiagnosticSchema>;

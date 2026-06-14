@@ -1,11 +1,12 @@
 # Security
 
-## Sprint 8 posture
+## Sprint 9 posture
 
-Sprint 8 keeps the Electron renderer outside the trusted computing boundary
-while adding two narrow SyncTeX navigation capabilities. It adds no network
-service, telemetry, remote content, arbitrary filesystem access, general
-renderer process capability, or production dependency.
+Sprint 9 keeps the Electron renderer outside the trusted computing boundary
+while adding narrow settings, toolchain-check, clean-build, and auxiliary
+cleanup capabilities. It adds no network service, telemetry, remote content,
+arbitrary filesystem access, general renderer process capability, or production
+dependency.
 
 The application:
 
@@ -15,7 +16,8 @@ The application:
 - rejects build paths that lexically or through filesystem links leave the
   project;
 - writes output under `.texpulse/build` by default;
-- passes `-norc` and `-no-shell-escape`;
+- passes `-norc` by default and omits it only after explicit per-project trust;
+- always passes `-no-shell-escape`;
 - reports only output paths that exist;
 - enforces a default 120-second compiler timeout;
 - cancels by build ID through `AbortController`;
@@ -33,14 +35,15 @@ The application:
 - saves through a same-directory temporary file with sync and atomic rename;
 - requires a SHA-256 version token before replacing a file;
 - reports changed or deleted external files explicitly;
-- validates project metadata and safely falls back with issues; and
+- validates and migrates project and global settings, safely falling back with
+  visible issues;
 - ignores generated and dependency directories during project enumeration;
 - enables the Electron sandbox before app readiness;
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes eleven frozen project/build/PDF/SyncTeX/event preload methods, never
-  `ipcRenderer`;
+- exposes seventeen frozen project/build/PDF/SyncTeX/settings/event preload
+  methods, never `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
@@ -91,7 +94,22 @@ The application:
 - removes `SYNCTEX_VIEWER` and `SYNCTEX_EDITOR` before invocation;
 - parses no more than 512 KiB of SyncTeX result text; and
 - reports missing, malformed, failed, or stale navigation non-fatally without
-  repeating canonical paths or child output.
+  repeating canonical paths or child output;
+- stores global settings under Electron `userData` and project settings under
+  validated `.texpulse/project.json`;
+- resolves only fixed executable names from a user-selected custom tool
+  directory and displays the resulting paths and versions;
+- runs toolchain readiness through the isolated doctor fixture rather than a
+  user project;
+- never equates a skipped self-test with a successful compile;
+- treats `.latexmkrc` and other `latexmk` configuration files as executable
+  trusted input and warns before enabling them;
+- performs clean builds through the normal timeout, cancellation, generation,
+  and stale-result controls;
+- deletes only allowlisted auxiliary suffixes under validated generation
+  directories, skips links and junctions, and preserves PDFs, logs, SyncTeX
+  data, and unknown files; and
+- rejects project-settings changes and cleanup while session work could race.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
@@ -120,6 +138,10 @@ are troubleshooting text, not capabilities.
 It is not approved for untrusted TeX input because total compiler output and
 generated-file counts are not yet bounded and the complete threat model is
 scheduled for Sprint 10.
+
+A custom executable directory and enabled `latexmk` configuration are explicit
+local trust decisions. They do not enable TeX shell escape, but they can select
+or execute user-controlled local programs and Perl configuration respectively.
 
 ## Product security invariants
 
@@ -158,4 +180,5 @@ path/link policy; ADR-0006 defines the Electron boundary; ADR-0007 defines
 completed PDF loading and artifact actions; ADR-0008 defines live build and
 project watching; ADR-0009 defines structured diagnostic parsing and source
 links; ADR-0010 defines the SyncTeX process, artifact, path, and renderer
-boundary.
+boundary. ADR-0011 defines settings ownership, toolchain readiness, `latexmk`
+trust, clean-build, and auxiliary-cleanup behavior.

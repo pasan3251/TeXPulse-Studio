@@ -1,12 +1,13 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 8 provides a secure Electron editor with autosave, debounced
+development. Sprint 9 provides a secure Electron editor with autosave, debounced
 live compilation, project change detection, workspace restoration, structured
 source-linked diagnostics, raw build logs, SyncTeX forward/inverse navigation,
-and a PDF.js preview that retains the last successful output when a later build
-fails. Project files and generated artifact paths remain behind a validated
-main-process IPC boundary.
+selectable recipes, persistent settings, first-run toolchain setup, clean-build
+controls, and a PDF.js preview that retains the last successful output when a
+later build fails. Project files and generated artifact paths remain behind a
+validated main-process IPC boundary.
 
 ## Requirements
 
@@ -73,7 +74,7 @@ bounding and the complete threat model remain later hardening work.
 
 ## Desktop editor
 
-The Sprint 8 application:
+The Sprint 9 application:
 
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
@@ -87,6 +88,16 @@ The Sprint 8 application:
   compiling phases;
 - keeps one compiler process active and only the newest pending build;
 - supports disabling automatic build while retaining manual compile;
+- stores global settings under Electron application data and project settings in
+  `.texpulse/project.json`, with validation and migration;
+- provides a first-run toolchain wizard with executable paths, versions, and a
+  real isolated compile self-test;
+- supports a trusted custom executable directory;
+- selects pdfLaTeX, XeLaTeX, or LuaLaTeX recipes per project;
+- configures compile timeout, editor font size, and default PDF zoom;
+- disables `latexmk` configuration files by default and requires explicit
+  per-project trust before loading them;
+- provides a clean build and allowlisted generation auxiliary cleanup;
 - saves modified buffers before a manual compile and stops on save conflict;
 - displays build status and supports cancellation;
 - renders only completed PDFs through PDF.js with page, zoom, fit-width, and
@@ -108,8 +119,8 @@ The Sprint 8 application:
 - opens or reveals only a main-process-revalidated generated PDF;
 - watches the project without following links or generated output and reports
   external changes without replacing local unsaved content;
-- restores open files, active file, cursor/scroll views, pane ratio, and
-  live-build preferences for the same project; and
+- restores open files, active file, cursor/scroll views, and pane ratio for the
+  same project; and
 - denies renderer Node access, arbitrary filesystem access, navigation, popups,
   webviews, and permissions.
 
@@ -117,7 +128,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-eleven-method typed preload bridge.
+seventeen-method typed preload bridge.
 
 ## Project service
 
@@ -150,3 +161,4 @@ The typed modules under `src/project/`:
 - Sprint 6 report: `docs/reports/SPRINT-6.md`
 - Sprint 7 report: `docs/reports/SPRINT-7.md`
 - Sprint 8 report: `docs/reports/SPRINT-8.md`
+- Sprint 9 report: `docs/reports/SPRINT-9.md`

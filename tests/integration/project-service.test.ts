@@ -73,11 +73,12 @@ describe("ProjectService", () => {
       "module",
     );
     await saveProjectMetadata(root, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       rootFile: "main.tex",
       recipe: "latexmk-pdf",
       buildDirectory: process.platform === "win32" ? "BUILD" : "build",
       autoBuild: true,
+      allowLatexmkRc: false,
     });
     const service = await ProjectService.open(root);
 

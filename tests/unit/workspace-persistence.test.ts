@@ -18,7 +18,18 @@ class MemoryStorage {
 }
 
 describe("workspace persistence", () => {
-  it("round-trips only open paths, views, pane geometry, and live settings", () => {
+  it("returns defaults when no workspace record exists", () => {
+    expect(
+      loadWorkspacePreferences(new MemoryStorage(), "0".repeat(16)),
+    ).toEqual({
+      openPaths: [],
+      activePath: null,
+      bufferViews: {},
+      paneRatio: 0.56,
+    });
+  });
+
+  it("round-trips only open paths, views, and pane geometry", () => {
     const storage = new MemoryStorage();
     const projectId = "a".repeat(16);
     const preferences = {
@@ -28,11 +39,6 @@ describe("workspace persistence", () => {
         "main.tex": { cursor: 12, scrollTop: 80 },
       },
       paneRatio: 0.62,
-      settings: {
-        autosave: true,
-        autoBuild: false,
-        debounceMs: 1200,
-      },
     };
 
     expect(saveWorkspacePreferences(storage, projectId, preferences)).toBe(
@@ -44,7 +50,7 @@ describe("workspace persistence", () => {
     );
   });
 
-  it("rejects tampered storage and uses the project auto-build default", () => {
+  it("migrates version-one workspace state without retaining settings", () => {
     const storage = new MemoryStorage();
     storage.setItem(
       `texpulse.workspace.v1.${"b".repeat(16)}`,
@@ -62,17 +68,41 @@ describe("workspace persistence", () => {
       }),
     );
 
-    expect(
-      loadWorkspacePreferences(storage, "b".repeat(16), false),
-    ).toMatchObject({
+    expect(loadWorkspacePreferences(storage, "b".repeat(16))).toMatchObject({
       openPaths: [],
       activePath: null,
       paneRatio: 0.56,
-      settings: {
-        autosave: true,
-        autoBuild: false,
-        debounceMs: 800,
+    });
+  });
+
+  it("restores valid version-one workspace geometry and views", () => {
+    const storage = new MemoryStorage();
+    const projectId = "d".repeat(16);
+    storage.setItem(
+      `texpulse.workspace.v1.${projectId}`,
+      JSON.stringify({
+        schemaVersion: 1,
+        openPaths: ["main.tex"],
+        activePath: "main.tex",
+        bufferViews: {
+          "main.tex": { cursor: 4, scrollTop: 32 },
+        },
+        paneRatio: 0.6,
+        settings: {
+          autosave: false,
+          autoBuild: false,
+          debounceMs: 1200,
+        },
+      }),
+    );
+
+    expect(loadWorkspacePreferences(storage, projectId)).toEqual({
+      openPaths: ["main.tex"],
+      activePath: "main.tex",
+      bufferViews: {
+        "main.tex": { cursor: 4, scrollTop: 32 },
       },
+      paneRatio: 0.6,
     });
   });
 
@@ -98,7 +128,6 @@ describe("workspace persistence", () => {
         activePath: null,
         bufferViews: {},
         paneRatio: 0.56,
-        settings: { autosave: true, autoBuild: true, debounceMs: 800 },
       }),
     ).toBe(false);
     expect(
@@ -107,7 +136,6 @@ describe("workspace persistence", () => {
         activePath: null,
         bufferViews: {},
         paneRatio: 0.99,
-        settings: { autosave: true, autoBuild: true, debounceMs: 800 },
       }),
     ).toBe(false);
   });

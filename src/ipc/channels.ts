@@ -10,10 +10,19 @@ export const PROJECT_EVENTS = {
 
 export const BUILD_CHANNELS = {
   cancel: "build:cancel",
+  clean: "build:clean",
+  cleanupAuxiliary: "build:cleanup-auxiliary",
   compile: "build:compile",
   loadPdf: "build:load-pdf",
   openPdf: "build:open-pdf",
   revealPdf: "build:reveal-pdf",
+} as const;
+
+export const SETTINGS_CHANNELS = {
+  get: "settings:get",
+  saveGlobal: "settings:save-global",
+  saveProject: "settings:save-project",
+  toolchainCheck: "settings:toolchain-check",
 } as const;
 
 export const SYNCTEX_CHANNELS = {
@@ -24,5 +33,6 @@ export const SYNCTEX_CHANNELS = {
 export const ALL_CHANNELS = {
   ...PROJECT_CHANNELS,
   ...BUILD_CHANNELS,
+  ...SETTINGS_CHANNELS,
   ...SYNCTEX_CHANNELS,
 } as const;

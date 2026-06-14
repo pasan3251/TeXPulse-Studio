@@ -16,6 +16,7 @@ import type { DiagnosticTarget, EditorBuffer } from "../workspace-state.js";
 interface EditorPaneProps {
   buffer: EditorBuffer;
   diagnostics: readonly BuildDiagnostic[];
+  fontSize: number;
   navigationTarget: DiagnosticTarget | null;
   onChange: (path: string, content: string) => void;
   onViewStateChange: (path: string, cursor: number, scrollTop: number) => void;
@@ -65,6 +66,7 @@ const syncTargetField = StateField.define({
 export function EditorPane({
   buffer,
   diagnostics,
+  fontSize,
   navigationTarget,
   onChange,
   onViewStateChange,
@@ -104,7 +106,7 @@ export function EditorPane({
                 height: "100%",
                 backgroundColor: "#111827",
                 color: "#e5e7eb",
-                fontSize: "15px",
+                fontSize: `${String(fontSize)}px`,
               },
               ".cm-content": {
                 caretColor: "#f59e0b",
@@ -162,7 +164,7 @@ export function EditorPane({
       view.scrollDOM.removeEventListener("scroll", handleScroll);
       view.destroy();
     };
-  }, [buffer.path]);
+  }, [buffer.path, fontSize]);
 
   useEffect(() => {
     viewRef.current?.dispatch({

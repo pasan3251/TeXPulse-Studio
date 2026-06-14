@@ -102,6 +102,7 @@ if (tracePath !== undefined) {
     tracePath,
     `${JSON.stringify({
       source,
+      args,
       startedAt,
       endedAt: Date.now(),
       status: process.exitCode === undefined ? "succeeded" : "failed",

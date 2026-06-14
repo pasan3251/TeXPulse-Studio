@@ -12,6 +12,8 @@ export interface CompileRequest {
   recipe?: CompileRecipe;
   customBinDirectory?: string;
   timeoutMs?: number;
+  allowLatexmkRc?: boolean;
+  clean?: boolean;
 }
 
 export interface CompileResult {

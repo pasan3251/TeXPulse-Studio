@@ -76,6 +76,10 @@ export class LiveBuildCoordinator {
     return !this.disposed && revision === this.revision;
   }
 
+  currentRevision(): number {
+    return this.revision;
+  }
+
   dispose(): void {
     this.disposed = true;
     this.clearTimer();

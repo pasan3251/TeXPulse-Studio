@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ import type {
   CompileResult,
 } from "../../src/compiler/compile-types.js";
 import { ProjectSession } from "../../src/electron/project-session.js";
+import { defaultGlobalSettings } from "../../src/settings/settings-types.js";
 import { SynctexService } from "../../src/synctex/synctex-service.js";
 
 const temporaryDirectories: string[] = [];
@@ -94,6 +95,10 @@ describe("ProjectSession", () => {
     expect(session.describe()).toMatchObject({
       projectId: expect.stringMatching(/^[a-f0-9]{16}$/u),
       autoBuild: true,
+      settings: {
+        recipe: "latexmk-pdf",
+        allowLatexmkRc: false,
+      },
     });
     await session.writeTextFile(
       "main.tex",
@@ -324,6 +329,86 @@ describe("ProjectSession", () => {
       expect(recordingAdapter.request?.recipe).toBe(expected);
     },
   );
+
+  it("applies saved project and global settings to a clean build", async () => {
+    const project = await createProject();
+    const recordingAdapter = new RecordingAdapter();
+    const session = await ProjectSession.open(
+      project,
+      recordingAdapter,
+      undefined,
+      undefined,
+      () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          theme: "system",
+          autosave: true,
+          autoBuild: true,
+          debounceMs: 800,
+          compileTimeoutMs: 180_000,
+          customBinDirectory: "C:\\custom tools",
+          editorFontSize: 16,
+          pdfZoomMode: "fit-page",
+          setupCompleted: true,
+        }),
+    );
+
+    await session.updateProjectSettings({
+      rootFile: "main.tex",
+      recipe: "latexmk-xelatex",
+      buildDirectory: ".texpulse/output",
+      autoBuild: false,
+      allowLatexmkRc: true,
+    });
+    await session.cleanBuild("main.tex");
+
+    expect(recordingAdapter.request).toMatchObject({
+      recipe: "xelatex",
+      customBinDirectory: "C:\\custom tools",
+      timeoutMs: 180_000,
+      allowLatexmkRc: true,
+      clean: true,
+    });
+    await expect(
+      readFile(join(project, ".texpulse", "project.json"), "utf8"),
+    ).resolves.toContain('"schemaVersion": 2');
+  });
+
+  it("uses the global auto-build default only when project settings are absent", async () => {
+    const project = await createProject();
+    const session = await ProjectSession.open(
+      project,
+      adapter(),
+      undefined,
+      undefined,
+      () =>
+        Promise.resolve({
+          ...defaultGlobalSettings(),
+          autoBuild: false,
+        }),
+    );
+
+    expect(session.describe().settings.autoBuild).toBe(false);
+  });
+
+  it("rejects a build while project settings are being validated and saved", async () => {
+    const project = await createProject();
+    const session = await ProjectSession.open(project, adapter());
+    const update = session.updateProjectSettings({
+      rootFile: "main.tex",
+      recipe: "latexmk-xelatex",
+      buildDirectory: ".texpulse/output",
+      autoBuild: false,
+      allowLatexmkRc: false,
+    });
+
+    await expect(session.compile("main.tex")).rejects.toMatchObject({
+      code: "cleanup-busy",
+    });
+    await expect(update).resolves.toMatchObject({
+      recipe: "latexmk-xelatex",
+    });
+  });
 
   it("describes a project without a detected LaTeX root", async () => {
     const project = await mkdtemp(join(tmpdir(), "texpulse-no-root-"));

@@ -16,6 +16,13 @@ import { PROJECT_EVENTS } from "../ipc/channels.js";
 import { registerProjectIpc } from "./project-ipc.js";
 import { createSecureWindowOptions } from "./window-options.js";
 import { SynctexService } from "../synctex/synctex-service.js";
+import { GlobalSettingsStore } from "../settings/global-settings.js";
+import { defaultGlobalSettings } from "../settings/settings-types.js";
+import { runDoctor } from "../toolchain/doctor.js";
+import type {
+  ToolchainCheckRequest,
+  ToolchainReport,
+} from "../ipc/settings-contracts.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -28,6 +35,11 @@ void app.whenReady().then(async () => {
   configurePermissionPolicy();
 
   const preloadPath = join(currentDirectory, "preload.cjs");
+  const settingsStore = new GlobalSettingsStore(
+    !app.isPackaged && process.env.TEXPULSE_E2E_USER_DATA !== undefined
+      ? process.env.TEXPULSE_E2E_USER_DATA
+      : app.getPath("userData"),
+  );
   mainWindow = new BrowserWindow(
     createSecureWindowOptions(
       preloadPath,
@@ -48,6 +60,24 @@ void app.whenReady().then(async () => {
       shell.showItemInFolder(path);
     },
     trustedWebContentsId: () => mainWindow?.webContents.id ?? null,
+    loadGlobalSettings: async () => {
+      const loaded = await settingsStore.load();
+      if (!app.isPackaged && process.env.TEXPULSE_E2E_FORCE_SETUP === "1") {
+        return {
+          settings: { ...defaultGlobalSettings(), setupCompleted: false },
+          issues: loaded.issues,
+        };
+      }
+      if (!app.isPackaged && process.env.TEXPULSE_E2E_PROJECT !== undefined) {
+        return {
+          settings: { ...loaded.settings, setupCompleted: true },
+          issues: loaded.issues,
+        };
+      }
+      return loaded;
+    },
+    saveGlobalSettings: (settings) => settingsStore.save(settings),
+    checkToolchain,
     selectProjectDirectory: async () => {
       const e2eProject = process.env.TEXPULSE_E2E_PROJECT;
       if (!app.isPackaged && e2eProject !== undefined) {
@@ -110,6 +140,72 @@ function createSynctexService(): SynctexService {
     });
   }
   return new SynctexService();
+}
+
+async function checkToolchain(
+  request: ToolchainCheckRequest,
+): Promise<ToolchainReport> {
+  if (
+    !app.isPackaged &&
+    process.env.TEXPULSE_E2E_LATEXMK !== undefined &&
+    process.env.TEXPULSE_E2E_NODE !== undefined
+  ) {
+    return {
+      ready: true,
+      tools: [
+        "latexmk",
+        "pdflatex",
+        "xelatex",
+        "lualatex",
+        "bibtex",
+        "biber",
+        "makeindex",
+        "synctex",
+      ].map((id) => ({
+        id: id as ToolchainReport["tools"][number]["id"],
+        label: id,
+        state: "available" as const,
+        path: process.execPath,
+        version: "e2e",
+        exitCode: 0,
+        detail: null,
+      })),
+      issues: [],
+      selfTest: {
+        status: request.skipSelfTest === true ? "skipped" : "passed",
+        message:
+          request.skipSelfTest === true
+            ? "Compile self-test was explicitly skipped."
+            : "Real compile self-test succeeded.",
+      },
+    };
+  }
+
+  const report = await runDoctor({
+    fixturePath: join(
+      currentDirectory,
+      "..",
+      "..",
+      "fixtures",
+      "minimal-success",
+      "main.tex",
+    ),
+    ...(request.customBinDirectory === null
+      ? {}
+      : { customBinDirectory: request.customBinDirectory }),
+    ...(request.skipSelfTest === undefined
+      ? {}
+      : { skipSelfTest: request.skipSelfTest }),
+  });
+  return {
+    ready: report.ready,
+    tools: report.probe.tools,
+    issues: report.probe.issues,
+    selfTest: {
+      status: report.selfTest.status,
+      message: report.selfTest.message,
+    },
+  };
 }
 
 function configurePermissionPolicy(): void {

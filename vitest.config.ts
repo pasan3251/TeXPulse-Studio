@@ -7,6 +7,7 @@ export default defineConfig({
       include: [
         "src/build/build-controller.ts",
         "src/compiler/latexmk-arguments.ts",
+        "src/compiler/auxiliary-cleanup.ts",
         "src/compiler/path-validation.ts",
         "src/diagnostics/diagnostic-parser.ts",
         "src/process/environment.ts",
@@ -29,6 +30,7 @@ export default defineConfig({
         "src/toolchain/version-parser.ts",
         "src/synctex/synctex-parser.ts",
         "src/synctex/synctex-service.ts",
+        "src/settings/global-settings.ts",
       ],
       provider: "v8",
       reporter: ["text", "json-summary"],

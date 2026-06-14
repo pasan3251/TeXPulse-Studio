@@ -23,6 +23,7 @@ type ZoomMode = "custom" | "fit-page" | "fit-width";
 interface PdfViewerProps {
   artifact: PdfArtifact;
   data: Uint8Array;
+  defaultZoomMode: Exclude<ZoomMode, "custom">;
   syncTarget: PdfSyncTarget | null;
   onOpen: () => void;
   onReveal: () => void;
@@ -32,6 +33,7 @@ interface PdfViewerProps {
 export function PdfViewer({
   artifact,
   data,
+  defaultZoomMode,
   syncTarget,
   onOpen,
   onReveal,
@@ -43,7 +45,7 @@ export function PdfViewer({
   const scrollPositionRef = useRef({ left: 0, top: 0 });
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [zoomMode, setZoomMode] = useState<ZoomMode>("fit-width");
+  const [zoomMode, setZoomMode] = useState<ZoomMode>(defaultZoomMode);
   const [customScale, setCustomScale] = useState(1);
   const [renderedScale, setRenderedScale] = useState(1);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });

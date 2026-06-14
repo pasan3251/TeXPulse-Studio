@@ -35,11 +35,12 @@ describe("project metadata persistence", () => {
     });
 
     const metadata = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       rootFile: "thesis.tex",
       recipe: "latexmk-lualatex" as const,
       buildDirectory: "generated output",
       autoBuild: false,
+      allowLatexmkRc: true,
     };
     await saveProjectMetadata(root, metadata);
     await expect(loadProjectMetadata(root)).resolves.toEqual({
@@ -53,11 +54,12 @@ describe("project metadata persistence", () => {
     const root = await createProject();
     const metadataDirectory = join(root, ".texpulse");
     await saveProjectMetadata(root, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       rootFile: null,
       recipe: "latexmk-pdf",
       buildDirectory: ".texpulse/build",
       autoBuild: true,
+      allowLatexmkRc: false,
     });
     await writeFile(join(metadataDirectory, "project.json"), "{broken");
 

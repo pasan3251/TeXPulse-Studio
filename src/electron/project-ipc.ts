@@ -8,15 +8,23 @@ import {
   cancelBuildResultSchema,
   compileProjectRequestSchema,
   compileProjectResultSchema,
+  cleanBuildRequestSchema,
+  cleanupAuxiliaryRequestSchema,
+  cleanupAuxiliaryResultSchema,
   loadPdfResultSchema,
   pdfActionResultSchema,
   pdfArtifactRequestSchema,
   type CancelBuildResult,
   type CompileProjectResult,
+  type CleanupAuxiliaryResult,
   type LoadPdfResult,
   type PdfActionResult,
 } from "../ipc/build-contracts.js";
-import { ALL_CHANNELS, BUILD_CHANNELS } from "../ipc/channels.js";
+import {
+  ALL_CHANNELS,
+  BUILD_CHANNELS,
+  SETTINGS_CHANNELS,
+} from "../ipc/channels.js";
 import { SYNCTEX_CHANNELS } from "../ipc/channels.js";
 import {
   type ApiError,
@@ -43,6 +51,24 @@ import {
   type InverseSyncResult,
 } from "../ipc/synctex-contracts.js";
 import { ProjectSession, ProjectSessionError } from "./project-session.js";
+import {
+  getSettingsRequestSchema,
+  getSettingsResultSchema,
+  saveGlobalSettingsRequestSchema,
+  saveGlobalSettingsResultSchema,
+  saveProjectSettingsRequestSchema,
+  saveProjectSettingsResultSchema,
+  toolchainCheckRequestSchema,
+  toolchainCheckResultSchema,
+  type GetSettingsResult,
+  type ProjectSettings,
+  type SaveGlobalSettingsResult,
+  type SaveProjectSettingsResult,
+  type ToolchainCheckRequest,
+  type ToolchainCheckResult,
+} from "../ipc/settings-contracts.js";
+import { defaultGlobalSettings } from "../settings/settings-types.js";
+import type { GlobalSettings } from "../settings/settings-types.js";
 
 export interface ProjectIpcOptions {
   createCompilerAdapter?: () => CompilerAdapter;
@@ -53,6 +79,14 @@ export interface ProjectIpcOptions {
   selectProjectDirectory: () => Promise<string | null>;
   showItemInFolder?: (path: string) => void;
   trustedWebContentsId: () => number | null;
+  loadGlobalSettings?: () => Promise<{
+    settings: GlobalSettings;
+    issues: string[];
+  }>;
+  saveGlobalSettings?: (settings: GlobalSettings) => Promise<GlobalSettings>;
+  checkToolchain?: (
+    request: ToolchainCheckRequest,
+  ) => Promise<Extract<ToolchainCheckResult, { ok: true }>["value"]>;
 }
 
 interface ApiFailure {
@@ -66,6 +100,20 @@ interface ApiFailure {
 
 export function registerProjectIpc(options: ProjectIpcOptions): () => void {
   let projectSession: ProjectSession | null = null;
+  let inMemorySettings = defaultGlobalSettings();
+  const loadGlobalSettings = async () =>
+    options.loadGlobalSettings?.() ?? {
+      settings: inMemorySettings,
+      issues: [],
+    };
+  const saveGlobalSettings = async (settings: GlobalSettings) => {
+    const saved =
+      options.saveGlobalSettings === undefined
+        ? settings
+        : await options.saveGlobalSettings(settings);
+    inMemorySettings = saved;
+    return saved;
+  };
 
   registerHandler(
     options,
@@ -84,11 +132,69 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
         options.notifyProjectFileChange,
         options.createSynctexService?.(),
+        async () => (await loadGlobalSettings()).settings,
       );
       return {
         ok: true,
         value: projectSession.describe(),
       };
+    },
+  );
+
+  registerHandler(
+    options,
+    SETTINGS_CHANNELS.get,
+    getSettingsRequestSchema,
+    getSettingsResultSchema,
+    async (): Promise<GetSettingsResult> => ({
+      ok: true,
+      value: await loadGlobalSettings(),
+    }),
+  );
+
+  registerHandler(
+    options,
+    SETTINGS_CHANNELS.saveGlobal,
+    saveGlobalSettingsRequestSchema,
+    saveGlobalSettingsResultSchema,
+    async (request): Promise<SaveGlobalSettingsResult> => ({
+      ok: true,
+      value: await saveGlobalSettings(request),
+    }),
+  );
+
+  registerHandler(
+    options,
+    SETTINGS_CHANNELS.saveProject,
+    saveProjectSettingsRequestSchema,
+    saveProjectSettingsResultSchema,
+    async (request: ProjectSettings): Promise<SaveProjectSettingsResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before saving project settings.",
+        );
+      }
+      return {
+        ok: true,
+        value: await projectSession.updateProjectSettings(request),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    SETTINGS_CHANNELS.toolchainCheck,
+    toolchainCheckRequestSchema,
+    toolchainCheckResultSchema,
+    async (request): Promise<ToolchainCheckResult> => {
+      if (options.checkToolchain === undefined) {
+        return failure(
+          "internal",
+          "The toolchain self-test service is unavailable.",
+        );
+      }
+      return { ok: true, value: await options.checkToolchain(request) };
     },
   );
 
@@ -104,6 +210,41 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       return {
         ok: true,
         value: await projectSession.readTextFile(request.path),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.clean,
+    cleanBuildRequestSchema,
+    compileProjectResultSchema,
+    async (request): Promise<CompileProjectResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before compiling.");
+      }
+      return {
+        ok: true,
+        value: await projectSession.cleanBuild(request.rootFile),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    BUILD_CHANNELS.cleanupAuxiliary,
+    cleanupAuxiliaryRequestSchema,
+    cleanupAuxiliaryResultSchema,
+    async (): Promise<CleanupAuxiliaryResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before cleaning auxiliary files.",
+        );
+      }
+      return {
+        ok: true,
+        value: { removedFiles: await projectSession.cleanupAuxiliary() },
       };
     },
   );

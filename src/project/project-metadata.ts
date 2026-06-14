@@ -24,11 +24,12 @@ export function defaultProjectMetadata(
   rootFile: string | null = null,
 ): ProjectMetadata {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     rootFile,
     recipe: "latexmk-pdf",
     buildDirectory: ".texpulse/build",
     autoBuild: true,
+    allowLatexmkRc: false,
   };
 }
 
@@ -48,12 +49,17 @@ export function parseProjectMetadata(
 
   const record = value as Record<string, unknown>;
   const metadata = { ...fallback };
-  if (record.schemaVersion !== 1) {
+  if (record.schemaVersion !== 1 && record.schemaVersion !== 2) {
     return {
       metadata: fallback,
       issues: ["Unsupported or missing project metadata schemaVersion."],
       source: "default",
     };
+  }
+  if (record.schemaVersion === 1) {
+    issues.push(
+      "Project settings were migrated to schema version 2; .latexmkrc remains disabled.",
+    );
   }
 
   if (record.rootFile === null) {
@@ -96,6 +102,14 @@ export function parseProjectMetadata(
     metadata.autoBuild = record.autoBuild;
   } else {
     issues.push("autoBuild must be a boolean.");
+  }
+
+  if (record.schemaVersion === 2) {
+    if (typeof record.allowLatexmkRc === "boolean") {
+      metadata.allowLatexmkRc = record.allowLatexmkRc;
+    } else {
+      issues.push("allowLatexmkRc must be a boolean.");
+    }
   }
 
   return { metadata, issues, source: "file" };
