@@ -67,7 +67,7 @@ MiKTeX and Perl are not bundled.
 
 Recommended files for the GitHub release:
 
-- `TeXPulse Studio-Setup-0.1.0-rc.1-x64.exe`
+- `TeXPulse-Studio-Setup-0.1.0-rc.1-x64.exe`
 - `release-manifest.json`
 - `v0.1.0-rc.1-source.zip`
 
