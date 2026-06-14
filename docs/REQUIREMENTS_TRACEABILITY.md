@@ -666,7 +666,7 @@ production dependency.
 | `NFR-SEC-006`   | Copy/reveal paths are canonicalized; links and self-descendant copies are rejected    | Complete               |
 | `NFR-PRIV-001`  | Explorer, compilation, and PDF rendering remain local                                 | Complete for Sprint 15 |
 | `NFR-PRIV-002`  | No analytics, telemetry, updater, network service, or production dependency was added | Complete for Sprint 15 |
-| `NFR-MAINT-005` | Unit, component, integration, Electron, native, and installed-app checks are recorded | Complete               |
+| `NFR-MAINT-005` | E2E waits observe rendered PDFs and completed mutations; all quality checks recorded  | Complete               |
 | `NFR-UX-001`    | Top actions and context-menu items are keyboard-operable named buttons/menu items     | Current scope complete |
 | `NFR-UX-004`    | Explorer actions, icons, menus, and PDF controls retain accessible names              | Complete               |
 | `NFR-UX-005`    | Context-menu delete continues through the existing confirmation dialog                | Complete               |

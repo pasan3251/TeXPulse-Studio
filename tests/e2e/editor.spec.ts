@@ -559,6 +559,7 @@ test("shows diagnostics, navigates to the source, and clears fixed problems", as
 });
 
 test("navigates forward to the PDF and inversely to an included source file", async () => {
+  test.setTimeout(60_000);
   const projectDirectory = await mkdtemp(
     join(tmpdir(), "texpulse synctex e2e "),
   );
@@ -604,12 +605,17 @@ test("navigates forward to the PDF and inversely to an included source file", as
     await page.getByLabel("Auto build").uncheck();
     await page.getByRole("button", { name: "Compile", exact: true }).click();
     await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect(page.getByLabel("PDF page 1")).toBeVisible();
 
     await page.getByRole("button", { name: /intro\.tex/i }).click();
     const editor = page.getByLabel("Editor for chapters/intro.tex");
     await editor.click();
     await page.keyboard.press("Control+End");
-    await page.getByRole("button", { name: "Forward search" }).click();
+    const forwardSearch = page.getByRole("button", {
+      name: "Forward search",
+    });
+    await expect(forwardSearch).toBeEnabled();
+    await forwardSearch.click();
     await expect(
       page.getByLabel("Forward search target on page 1"),
     ).toBeVisible();
@@ -907,6 +913,10 @@ test("creates, manages, exports, and reopens a project through recent projects",
       .getByLabel("Project-relative path")
       .fill("chapters/kept.tex");
     await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("dialog", { name: "Create file" }),
+    ).toBeHidden();
+    await expect(page.getByLabel("Editor for chapters/kept.tex")).toBeVisible();
     await page
       .getByRole("navigation", { name: "Created Project files" })
       .dispatchEvent("contextmenu", { clientX: 120, clientY: 500 });
