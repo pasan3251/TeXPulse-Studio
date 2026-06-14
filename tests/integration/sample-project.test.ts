@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ensureSampleProject } from "../../src/project/sample-project.js";
+import {
+  createProjectFromTemplate,
+  ensureSampleProject,
+} from "../../src/project/sample-project.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -71,6 +74,23 @@ describe("sample project", () => {
     await mkdir(join(target, "main.tex"));
     await expect(ensureSampleProject(source, target)).rejects.toThrow(
       /Sample destination is invalid/u,
+    );
+  });
+
+  it("creates a new project only at a missing destination", async () => {
+    const source = await createDirectory("texpulse-template-source-");
+    const targetParent = await createDirectory("texpulse-template-target-");
+    const target = join(targetParent, "New Project");
+    await writeFile(join(source, "main.tex"), "Template source\n");
+
+    await expect(createProjectFromTemplate(source, target)).resolves.toBe(
+      target,
+    );
+    await expect(readFile(join(target, "main.tex"), "utf8")).resolves.toBe(
+      "Template source\n",
+    );
+    await expect(createProjectFromTemplate(source, target)).rejects.toThrow(
+      /already exists/u,
     );
   });
 });

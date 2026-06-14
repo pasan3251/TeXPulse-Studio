@@ -5,6 +5,7 @@ import {
   isBufferModified,
   workspaceReducer,
 } from "../../src/renderer/workspace-state.js";
+import type { WorkspaceState } from "../../src/renderer/workspace-state.js";
 import type { BuildView } from "../../src/ipc/build-contracts.js";
 
 const project = {
@@ -542,5 +543,115 @@ describe("workspaceReducer", () => {
 
     expect(state.notice).toBe("Build cancelled.");
     expect(state.logOpen).toBe(true);
+  });
+
+  it("remaps open buffers on rename and removes them after confirmed deletion", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "project-opened",
+      project: {
+        ...project,
+        entries: [
+          {
+            path: "chapters",
+            kind: "directory",
+            size: 0,
+            modifiedAt: "2026-06-13T12:00:00.000Z",
+          },
+          {
+            path: "chapters/intro.tex",
+            kind: "file",
+            size: 5,
+            modifiedAt: "2026-06-13T12:00:00.000Z",
+          },
+        ],
+      },
+    });
+    state = workspaceReducer(state, {
+      type: "file-loading",
+      path: "chapters/intro.tex",
+    });
+    state = workspaceReducer(state, {
+      type: "file-opened",
+      file: file("chapters/intro.tex", "intro"),
+    });
+    state = workspaceReducer(state, {
+      type: "entry-renamed",
+      sourcePath: "chapters",
+      destinationPath: "sections",
+      project: {
+        ...project,
+        entries: [
+          {
+            path: "sections/intro.tex",
+            kind: "file",
+            size: 5,
+            modifiedAt: "2026-06-13T12:00:00.000Z",
+          },
+        ],
+      },
+    });
+    expect(state.activePath).toBe("sections/intro.tex");
+    expect(state.buffers["sections/intro.tex"]?.path).toBe(
+      "sections/intro.tex",
+    );
+
+    state = workspaceReducer(state, {
+      type: "entry-deleted",
+      path: "sections",
+      project: { ...project, entries: [] },
+    });
+    expect(state.activePath).toBeNull();
+    expect(state.buffers).toEqual({});
+  });
+
+  it("preserves unrelated active work while remapping pending folder paths", () => {
+    const main = file("main.tex", "main");
+    const intro = file("chapters/intro.tex", "intro");
+    let state: WorkspaceState = {
+      ...initialWorkspaceState,
+      project,
+      buffers: {
+        "main.tex": {
+          ...main,
+          savedContent: main.content,
+          cursor: 0,
+          scrollTop: 0,
+        },
+        "chapters/intro.tex": {
+          ...intro,
+          savedContent: intro.content,
+          cursor: 0,
+          scrollTop: 0,
+        },
+      },
+      activePath: "main.tex",
+      loadingPath: "chapters/intro.tex",
+      savingPaths: ["main.tex", "chapters/intro.tex"],
+    };
+
+    state = workspaceReducer(state, {
+      type: "entry-renamed",
+      sourcePath: "chapters",
+      destinationPath: "sections",
+      project,
+    });
+    expect(state).toMatchObject({
+      activePath: "main.tex",
+      loadingPath: "sections/intro.tex",
+      savingPaths: ["main.tex", "sections/intro.tex"],
+    });
+    expect(state.buffers["main.tex"]?.path).toBe("main.tex");
+
+    state = workspaceReducer(state, {
+      type: "entry-deleted",
+      path: "sections",
+      project,
+    });
+    expect(state).toMatchObject({
+      activePath: "main.tex",
+      loadingPath: null,
+      savingPaths: ["main.tex"],
+    });
+    expect(Object.keys(state.buffers)).toEqual(["main.tex"]);
   });
 });

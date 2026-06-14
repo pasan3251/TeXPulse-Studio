@@ -75,6 +75,29 @@ describe("GlobalSettingsStore", () => {
     });
   });
 
+  it("preserves the settings schema shipped by the previous beta", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "texpulse-settings-"));
+    temporaryDirectories.push(directory);
+    const settings = {
+      ...defaultGlobalSettings(),
+      autosave: false,
+      debounceMs: 1200,
+      editorFontSize: 18,
+      pdfZoomMode: "fit-page" as const,
+      setupCompleted: true,
+    };
+    await writeFile(
+      join(directory, "settings.json"),
+      `${JSON.stringify(settings, null, 2)}\n`,
+    );
+
+    await expect(new GlobalSettingsStore(directory).load()).resolves.toEqual({
+      settings,
+      issues: [],
+      source: "file",
+    });
+  });
+
   it("does not hide unexpected settings read failures", async () => {
     const directory = await mkdtemp(join(tmpdir(), "texpulse-settings-"));
     temporaryDirectories.push(directory);

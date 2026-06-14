@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, dirname, extname, join } from "node:path";
 
 import {
   app,
@@ -22,6 +23,8 @@ import { runDoctor } from "../toolchain/doctor.js";
 import { RecoveryStore } from "../recovery/recovery-store.js";
 import { ApplicationLog } from "../support/application-log.js";
 import { ensureSampleProject } from "../project/sample-project.js";
+import { createProjectFromTemplate } from "../project/sample-project.js";
+import { RecentProjectsStore } from "../project/recent-projects.js";
 import {
   isAllowedRendererNavigation,
   isExternalUrl,
@@ -49,6 +52,9 @@ void app.whenReady().then(async () => {
   const settingsStore = new GlobalSettingsStore(userDataDirectory);
   const recoveryStore = new RecoveryStore(userDataDirectory);
   const applicationLog = new ApplicationLog(userDataDirectory);
+  const recentProjectsStore = new RecentProjectsStore(
+    join(userDataDirectory, "recent-projects.json"),
+  );
   applicationLog.record("info", "application_started", {
     packaged: app.isPackaged,
     version: app.getVersion(),
@@ -66,6 +72,28 @@ void app.whenReady().then(async () => {
   });
 
   disposeProjectIpc = registerProjectIpc({
+    createProjectDirectory: async () => {
+      const e2eProject = process.env.TEXPULSE_E2E_NEW_PROJECT;
+      let targetPath =
+        !app.isPackaged && e2eProject !== undefined ? e2eProject : null;
+      if (targetPath === null) {
+        if (mainWindow === null) {
+          return null;
+        }
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: join(app.getPath("documents"), "TeXPulse Project"),
+          title: "Create LaTeX project",
+        });
+        targetPath = result.canceled ? null : result.filePath;
+      }
+      if (targetPath === null) {
+        return null;
+      }
+      return createProjectFromTemplate(
+        applicationResourcePath("sample-project"),
+        targetPath,
+      );
+    },
     createCompilerAdapter,
     createSynctexService,
     ipcMain,
@@ -110,6 +138,25 @@ void app.whenReady().then(async () => {
         applicationResourcePath("sample-project"),
         join(userDataDirectory, "sample-project"),
       ),
+    loadRecentProjects: async () => {
+      const loaded = await recentProjectsStore.load();
+      return loaded.projects.map((project) => ({
+        id: recentProjectId(project.path),
+        name: basename(project.path),
+        displayPath: basename(project.path),
+        lastOpenedAt: project.lastOpenedAt,
+      }));
+    },
+    recordRecentProject: async (path) => {
+      await recentProjectsStore.add(path);
+    },
+    resolveRecentProject: async (id) => {
+      const loaded = await recentProjectsStore.load();
+      return (
+        loaded.projects.find((project) => recentProjectId(project.path) === id)
+          ?.path ?? null
+      );
+    },
     showItemInFolder: (path) => {
       shell.showItemInFolder(path);
     },
@@ -146,6 +193,26 @@ void app.whenReady().then(async () => {
         title: "Open LaTeX project",
       });
       return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+    selectProjectExportPath: async (projectName) => {
+      const e2ePath = process.env.TEXPULSE_E2E_EXPORT_PATH;
+      if (!app.isPackaged && e2ePath !== undefined) {
+        return e2ePath;
+      }
+      if (mainWindow === null) {
+        return null;
+      }
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `${projectName}.zip`,
+        filters: [{ name: "ZIP archives", extensions: ["zip"] }],
+        title: "Export LaTeX project",
+      });
+      if (result.canceled || result.filePath === undefined) {
+        return null;
+      }
+      return extname(result.filePath).toLowerCase() === ".zip"
+        ? result.filePath
+        : `${result.filePath}.zip`;
     },
   });
 
@@ -310,4 +377,10 @@ function urlScheme(targetUrl: string): string {
   } catch {
     return "invalid";
   }
+}
+
+function recentProjectId(path: string): string {
+  const key =
+    process.platform === "win32" ? path.toLocaleLowerCase("en-US") : path;
+  return createHash("sha256").update(key).digest("hex").slice(0, 16);
 }

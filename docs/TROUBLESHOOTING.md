@@ -56,10 +56,10 @@ working directory.
 
 ## Windows warns about the installer
 
-The 0.1.0 beta is unsigned. Windows SmartScreen or antivirus reputation checks
-may warn because the executable has no trusted publisher certificate and little
-download reputation. Verify that the installer came from the expected release
-source before running it.
+The 0.1.0 release candidate is unsigned. Windows SmartScreen or antivirus
+reputation checks may warn because the executable has no trusted publisher
+certificate and little download reputation. Verify the installer SHA-256 against
+`output/release-candidate/release-manifest.json` before running it.
 
 Do not disable antivirus globally. A maintainer can scan a local artifact with:
 
@@ -72,9 +72,9 @@ A clean scan is not a substitute for code signing or release provenance.
 
 ## Installer or uninstall failed
 
-The beta uses an assisted per-user NSIS installer and allows a custom
-installation directory. It does not require MiKTeX to be installed in the same
-directory.
+The release candidate uses an assisted per-user NSIS installer and allows a
+custom installation directory. It does not require MiKTeX to be installed in the
+same directory.
 
 Uninstall removes the application, shortcuts, and installed resources.
 Application data is preserved intentionally, including settings, logs, recovery
@@ -136,6 +136,43 @@ The copy is created only when missing. Existing sample edits are preserved
 across restarts, reinstalls, and uninstall. To obtain the original text again,
 move or remove the application-data `sample-project` directory while TeXPulse
 Studio is closed, then reopen the sample.
+
+## A new project could not be created
+
+`Create a project` uses a native save destination and requires that the selected
+directory does not already exist. Choose a new directory name. TeXPulse copies
+only the fixed bundled `main.tex`; it will not merge into or overwrite an
+existing directory.
+
+If creation fails, confirm the parent directory is writable and that no file,
+directory, link, or junction already occupies the destination.
+
+## A project file action was rejected
+
+File and folder actions accept project-relative paths only. They cannot escape
+the open project or traverse links or junctions. Renaming or deleting an open
+file also carries its latest version token, so an external edit causes a
+conflict instead of silent data loss.
+
+Wait for compilation or cleanup to finish before changing project entries.
+Deletion always requires the `Delete permanently` confirmation; folders remove
+their nested content after that confirmation.
+
+## ZIP export is missing files
+
+ZIP export intentionally includes regular source/project files only. It skips
+links and excludes `.git`, `.texpulse`, `node_modules`, `coverage`, `dist`, and
+the configured build directory. Save editor changes before exporting.
+
+An export failure leaves the project unchanged. Choose a writable destination
+outside the project when practical and ensure no directory occupies the target
+ZIP path.
+
+## A recent project no longer opens
+
+Recent entries are revalidated by the main process. If a project was moved,
+deleted, or replaced by a link, open its new folder through `Open project`.
+Opening it successfully refreshes the bounded recent-project list.
 
 ## MakeIndex version is unknown
 

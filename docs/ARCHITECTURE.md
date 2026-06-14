@@ -2,8 +2,8 @@
 
 ## Current state
 
-Sprint 11 adds the Windows packaging and onboarding boundary while preserving
-the editor, build, PDF, diagnostic, SyncTeX, settings, recovery, support, and
+Sprint 12 hardens the complete Windows release candidate while preserving the
+editor, build, PDF, diagnostic, SyncTeX, settings, recovery, support, and
 security controls:
 
 - `process/`: shell-free child process boundary with timeout, cancellation,
@@ -21,7 +21,8 @@ security controls:
 - `synctex/`: bounded result parsing and shell-free forward/inverse invocation.
 - `project/`: canonical project roots, non-traversable link policy, ignored
   output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
-  project metadata, recent-project storage, and filtered Chokidar events.
+  project metadata, recent-project storage, fixed-template creation, source-only
+  streaming ZIP export, and filtered Chokidar events.
 - `settings/`: strict global and project schemas, safe defaults, migration, and
   atomic application-data persistence.
 - `recovery/`: atomic, bounded, project-ID-keyed unsaved-buffer snapshots.
@@ -31,10 +32,11 @@ security controls:
   and SyncTeX channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, packaged/development resource resolution,
-  a session owning project/build state, and a frozen twenty-three-method preload
+  a session owning project/build state, and a frozen thirty-one-method preload
   bridge.
 - `packaging`: Electron Builder x64 ASAR output, assisted per-user NSIS
-  installer, metadata/icon resources, and a packaged lifecycle harness.
+  installer, metadata/icon resources, tagged source and artifact provenance, and
+  a packaged clean/upgrade lifecycle harness.
 - `resources/`: fixed bundled sample source used by the doctor and copied once
   into application data as an editable project.
 - `renderer/`: React workspace state, deterministic project hierarchy,
@@ -45,8 +47,8 @@ security controls:
   layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-The beta has no updater, bundled TeX distribution, code-signing certificate, or
-cross-platform package.
+The release candidate has no updater, bundled TeX distribution, code-signing
+certificate, or cross-platform package.
 
 ## System boundaries
 
@@ -258,6 +260,43 @@ application data during uninstall. MiKTeX and Perl remain external
 prerequisites. The package contains no updater or network service. The beta is
 unsigned; signing and release reputation require a later operational decision.
 
+## Sprint 12 project and release flow
+
+```text
+renderer project action
+  -> one of eight fixed project/recent/export preload methods
+  -> trusted sender and strict request/response schema
+  -> idle ProjectSession with watcher paused for mutation
+  -> canonical ProjectService path and version checks
+  -> refreshed bounded project description and restarted watcher
+
+source-only export
+  -> main-process native save destination
+  -> canonical project enumeration without following links
+  -> exclude .git, .texpulse, dependencies, distribution, coverage, and build output
+  -> streaming stored ZIP entries with CRC-32 and temporary-file replacement
+
+release candidate
+  -> complete deterministic, Electron, native, and installed suites
+  -> tagged source archive plus installer/application SHA-256 manifest
+```
+
+Project creation accepts no renderer-selected destination or template. The main
+process selects the destination and copies the fixed bundled `main.tex` only
+into a missing directory. Recent projects cross the renderer boundary as bounded
+opaque IDs plus basename-only labels; canonical paths remain entirely in the
+main process. File deletion requires explicit modal confirmation, and folder
+mutation never traverses links or junctions.
+
+ZIP export uses a small application-owned classic ZIP writer instead of a new
+runtime dependency. It writes only regular project files, skips links, and
+excludes generated and dependency directories by default. Export runs only while
+the build/session maintenance boundary is idle.
+
+The release performance suite measures the 1,000-file project path, editor
+reducer latency, and repeated-build heap behavior. The packaged suite verifies a
+clean application profile and the previous beta's schema-version-1 settings.
+
 ## Project flow
 
 ```text
@@ -365,3 +404,4 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`
 - `adr/ADR-0012-security-recovery-and-support-data.md`
 - `adr/ADR-0013-windows-packaging-and-sample-project.md`
+- `adr/ADR-0014-project-management-and-release-provenance.md`

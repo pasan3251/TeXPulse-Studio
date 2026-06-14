@@ -109,6 +109,56 @@ describe("ProjectSession", () => {
     await session.dispose();
   });
 
+  it("remaps the configured root when its containing folder is renamed", async () => {
+    const project = await createProject();
+    await mkdir(join(project, "source"));
+    await writeFile(
+      join(project, "source", "paper.tex"),
+      "\\documentclass{article}\n\\begin{document}\nRoot\n\\end{document}\n",
+    );
+    const session = await ProjectSession.open(project, adapter());
+    await session.updateProjectSettings({
+      ...session.describe().settings,
+      rootFile: "source/paper.tex",
+    });
+
+    const description = await session.renameEntry("source", "chapters");
+
+    expect(description.rootFile).toBe("chapters/paper.tex");
+    expect(description.settings.rootFile).toBe("chapters/paper.tex");
+    await session.dispose();
+  });
+
+  it("remaps an exact root rename and falls back from unavailable metadata", async () => {
+    const project = await createProject();
+    await mkdir(join(project, ".texpulse"), { recursive: true });
+    await writeFile(
+      join(project, ".texpulse", "project.json"),
+      `${JSON.stringify({
+        schemaVersion: 2,
+        rootFile: "missing.tex",
+        recipe: "latexmk-pdf",
+        buildDirectory: ".texpulse/build",
+        autoBuild: true,
+        allowLatexmkRc: false,
+      })}\n`,
+    );
+    const session = await ProjectSession.open(project, adapter());
+
+    expect(session.describe()).toMatchObject({
+      rootFile: "main.tex",
+      settingsIssues: [
+        expect.stringContaining("Configured root file was unavailable"),
+      ],
+    });
+    const description = await session.renameEntry("main.tex", "paper.tex");
+    expect(description.rootFile).toBe("paper.tex");
+    await expect(
+      readFile(join(project, ".texpulse", "project.json"), "utf8"),
+    ).resolves.toContain('"rootFile": "paper.tex"');
+    await session.dispose();
+  });
+
   it("loads only a completed PDF and retains it when the next build fails", async () => {
     const project = await createProject();
     const session = await ProjectSession.open(project, adapter());
@@ -418,6 +468,14 @@ describe("ProjectSession", () => {
     });
 
     await expect(session.compile("main.tex")).rejects.toMatchObject({
+      code: "cleanup-busy",
+    });
+    await expect(session.createDirectory("chapters")).rejects.toMatchObject({
+      code: "cleanup-busy",
+    });
+    await expect(
+      session.exportProject(join(project, "project.zip")),
+    ).rejects.toMatchObject({
       code: "cleanup-busy",
     });
     await expect(update).resolves.toMatchObject({

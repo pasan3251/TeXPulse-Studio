@@ -75,7 +75,7 @@ if (
   const outputDirectory = outdirArgument.slice("-outdir=".length);
   const baseName = basename(rootFile, extname(rootFile));
   await mkdir(outputDirectory, { recursive: true });
-  if (!args.includes("--fake-no-pdf")) {
+  if (!args.includes("--fake-no-pdf") && !source.includes("TEXPULSE_NO_PDF")) {
     await writeFile(
       join(outputDirectory, `${baseName}.pdf`),
       createMinimalPdf("TeXPulse Sprint 7"),

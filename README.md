@@ -1,8 +1,8 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 11 provides an installable Windows beta plus a secure
-Electron editor with autosave, debounced live compilation, project change
+development. Sprint 12 provides an installable Windows release candidate plus a
+secure Electron editor with autosave, debounced live compilation, project change
 detection, workspace restoration, structured source-linked diagnostics, raw
 build logs, SyncTeX forward/inverse navigation, selectable recipes, persistent
 settings, first-run toolchain setup, clean-build controls, bounded compiler
@@ -11,7 +11,11 @@ preview that retains the last successful output when a later build fails.
 Project files and generated artifact paths remain behind a validated
 main-process IPC boundary.
 
-## Installed beta requirements
+It also creates projects from a minimal template, manages project files and
+folders with confirmed destructive actions, remembers recent projects, and
+exports source-only ZIP archives.
+
+## Installed requirements
 
 - Windows 11 x64
 - MiKTeX with `latexmk`
@@ -22,9 +26,9 @@ self-test before reporting compilation readiness.
 
 ## Install
 
-Run the generated assisted installer under `output/package`. The beta installer
-is unsigned, so Windows SmartScreen may show a reputation warning. Verify the
-artifact source before continuing.
+Run the generated assisted installer under `output/package`. The release
+candidate installer is unsigned, so Windows SmartScreen may show a reputation
+warning. Verify the artifact against the release manifest before continuing.
 
 After setup, choose `Open sample project` from the welcome screen, edit
 `main.tex`, and compile. The editable copy is stored under TeXPulse Studio's
@@ -35,7 +39,7 @@ application data and is preserved during uninstall.
 - Node.js 24.x
 - pnpm 10.12.1 through Corepack
 - Git
-- The installed beta requirements above
+- The installed requirements above
 
 ## Development setup
 
@@ -59,8 +63,8 @@ pnpm audit:dependencies
 ```
 
 The aggregate command runs formatting, linting, strict type checking, unit,
-component, integration, coverage, and Electron E2E tests, then creates the
-production main, renderer, and preload bundles.
+component, integration, performance, coverage, and Electron E2E tests, then
+creates the production main, renderer, and preload bundles.
 
 Build and verify Windows packages:
 
@@ -68,11 +72,14 @@ Build and verify Windows packages:
 pnpm package:dir
 pnpm package:win
 pnpm test:packaged
+pnpm release:manifest
 ```
 
 The packaged lifecycle installs to a path containing spaces, uses a clean app
 profile, runs the real MiKTeX self-test, edits and compiles the bundled sample,
-captures high-DPI evidence, reopens the edit, and uninstalls.
+captures high-DPI evidence, verifies previous-beta settings, reopens the edit,
+and uninstalls. The release manifest records the tagged source archive,
+installer, packaged application archive, tool versions, and SHA-256 hashes.
 
 ## Toolchain doctor
 
@@ -107,13 +114,19 @@ still runs with the local user's permissions and is not OS-sandboxed.
 
 ## Desktop editor
 
-The Sprint 11 application:
+The Sprint 12 release candidate:
 
 - installs through an assisted per-user NSIS installer;
 - preserves application data during uninstall;
 - resolves bundled resources in development and packaged layouts;
 - opens an editable bundled sample without exposing an arbitrary path API;
 - opens an existing local project folder;
+- creates a project from the fixed minimal template;
+- creates, renames, moves, and deletes project entries through validated IPC,
+  with explicit confirmation before deletion;
+- remembers recent projects through opaque renderer IDs;
+- exports a local ZIP while excluding build output, metadata, dependencies, and
+  version-control data;
 - renders the bounded project entry list as a hierarchy;
 - edits valid UTF-8 project text with LaTeX highlighting, undo/redo, find, and
   replace;
@@ -171,7 +184,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-twenty-three-method typed preload bridge.
+thirty-one-method typed preload bridge.
 
 ## Project service
 
@@ -184,7 +197,9 @@ The typed modules under `src/project/`:
 - atomically replace saved files where the platform supports rename;
 - rank likely LaTeX root files;
 - validate `.texpulse/project.json`; and
-- persist a bounded recent-project list at an injected application-data path.
+- persist a bounded recent-project list at an injected application-data path;
+  and
+- stream source-only ZIP exports without adding a production dependency.
 
 ## Documentation
 
@@ -208,4 +223,7 @@ The typed modules under `src/project/`:
 - Sprint 9 report: `docs/reports/SPRINT-9.md`
 - Sprint 10 report: `docs/reports/SPRINT-10.md`
 - Sprint 11 report: `docs/reports/SPRINT-11.md`
+- Sprint 12 report: `docs/reports/SPRINT-12.md`
+- Release-candidate checklist: `docs/RELEASE_CANDIDATE_CHECKLIST.md`
+- Deferred issues: `docs/DEFERRED_ISSUES.md`
 - Release notes: `docs/RELEASE_NOTES.md`

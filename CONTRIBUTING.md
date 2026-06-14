@@ -28,6 +28,7 @@ For Windows packaging work, run:
 pnpm package:dir
 pnpm package:win
 pnpm test:packaged
+pnpm release:manifest
 ```
 
 The packaged lifecycle requires the supported MiKTeX and Perl toolchain. It
@@ -35,6 +36,10 @@ installs into an isolated path containing spaces, uses a clean application
 profile, exercises the sample project through a real compile and PDF preview,
 then uninstalls. Do not claim signing or SmartScreen reputation when the
 artifact is unsigned.
+
+Release-candidate work must also run `pnpm test:performance`. Generate the
+release manifest only from a clean tagged worktree after the installer has been
+verified.
 
 For editor/PDF work, run the focused renderer and Electron suites:
 

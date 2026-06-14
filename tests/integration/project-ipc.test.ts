@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -88,6 +88,20 @@ describe("project IPC", () => {
     });
 
     const requests = [
+      [PROJECT_CHANNELS.createDirectory, { path: "chapters" }],
+      [
+        PROJECT_CHANNELS.createTextFile,
+        { path: "chapters/intro.tex", content: "" },
+      ],
+      [
+        PROJECT_CHANNELS.renameEntry,
+        {
+          sourcePath: "main.tex",
+          destinationPath: "paper.tex",
+        },
+      ],
+      [PROJECT_CHANNELS.deleteEntry, { path: "main.tex", recursive: false }],
+      [PROJECT_CHANNELS.exportZip, undefined],
       [PROJECT_CHANNELS.readTextFile, { path: "main.tex" }],
       [
         PROJECT_CHANNELS.writeTextFile,
@@ -164,6 +178,23 @@ describe("project IPC", () => {
     ).resolves.toMatchObject({
       ok: false,
       error: { code: "cancelled" },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.create, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "project-create-failed" },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.getRecent, event(7)),
+    ).resolves.toEqual({ ok: true, value: [] });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.openRecent, event(7), {
+        id: "a".repeat(16),
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "not-found" },
     });
   });
 
@@ -361,6 +392,213 @@ describe("project IPC", () => {
     });
     expect(prepareSampleProject).toHaveBeenCalledOnce();
     expect(selectProjectDirectory).not.toHaveBeenCalled();
+  });
+
+  it("creates a project through a fixed main-process destination", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const createProjectDirectory = vi.fn(() => Promise.resolve(root));
+    const recordRecentProject = vi.fn(() => Promise.resolve());
+    registerProjectIpc({
+      createProjectDirectory,
+      ipcMain,
+      recordRecentProject,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.create, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { rootFile: "main.tex" },
+    });
+    expect(createProjectDirectory).toHaveBeenCalledOnce();
+    expect(recordRecentProject).toHaveBeenCalledWith(root);
+  });
+
+  it("reports project creation cancellation and preparation failures", async () => {
+    const cancelled = createFakeIpcMain();
+    registerProjectIpc({
+      createProjectDirectory: () => Promise.resolve(null),
+      ipcMain: cancelled.ipcMain,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+    await expect(
+      invoke(cancelled.handlers, PROJECT_CHANNELS.create, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "cancelled" },
+    });
+
+    const failed = createFakeIpcMain();
+    registerProjectIpc({
+      createProjectDirectory: () =>
+        Promise.reject(new Error("Template copy failed.")),
+      ipcMain: failed.ipcMain,
+      selectProjectDirectory: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+    await expect(
+      invoke(failed.handlers, PROJECT_CHANNELS.create, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "project-create-failed",
+        message: "Template copy failed.",
+      },
+    });
+  });
+
+  it("opens recent projects and performs validated project mutations and export", async () => {
+    const root = await createProject();
+    const exportDirectory = await mkdtemp(join(tmpdir(), "texpulse-export-"));
+    temporaryDirectories.push(exportDirectory);
+    const exportPath = join(exportDirectory, "project.zip");
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain,
+      loadRecentProjects: () =>
+        Promise.resolve([
+          {
+            id: "a".repeat(16),
+            name: "paper",
+            displayPath: root,
+            lastOpenedAt: "2026-06-14T00:00:00.000Z",
+          },
+        ]),
+      resolveRecentProject: (id) =>
+        Promise.resolve(id === "a".repeat(16) ? root : null),
+      selectProjectDirectory: () => Promise.resolve(null),
+      selectProjectExportPath: () => Promise.resolve(exportPath),
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.getRecent, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: [{ id: "a".repeat(16), name: "paper" }],
+    });
+    await invoke(handlers, PROJECT_CHANNELS.openRecent, event(7), {
+      id: "a".repeat(16),
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.createDirectory, event(7), {
+        path: "chapters",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        entries: expect.arrayContaining([
+          expect.objectContaining({ path: "chapters" }),
+        ]),
+      },
+    });
+    await invoke(handlers, PROJECT_CHANNELS.createTextFile, event(7), {
+      path: "chapters/intro.tex",
+      content: "Intro",
+    });
+    const read = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.readTextFile,
+      event(7),
+      { path: "chapters/intro.tex" },
+    )) as { value: { version: string } };
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.renameEntry, event(7), {
+        sourcePath: "chapters/intro.tex",
+        destinationPath: "chapters/body.tex",
+        expectedVersion: read.value.version,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        entries: expect.arrayContaining([
+          expect.objectContaining({ path: "chapters/body.tex" }),
+        ]),
+      },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.deleteEntry, event(7), {
+        path: "chapters/body.tex",
+        recursive: false,
+        expectedVersion: read.value.version,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.exportZip, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { saved: true, files: 1 },
+    });
+    expect((await readFile(exportPath)).readUInt32LE(0)).toBe(0x04034b50);
+  });
+
+  it("handles recent-record failure and export unavailable, cancellation, and failure", async () => {
+    const root = await createProject();
+    const logEvent = vi.fn();
+    const unavailable = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain: unavailable.ipcMain,
+      logEvent,
+      recordRecentProject: () =>
+        Promise.reject(new Error("Recent store unavailable.")),
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(unavailable.handlers, PROJECT_CHANNELS.open, event(7));
+    expect(logEvent).toHaveBeenCalledWith(
+      "warn",
+      "recent_project_record_failed",
+      expect.objectContaining({ error: "Recent store unavailable." }),
+    );
+    await expect(
+      invoke(unavailable.handlers, PROJECT_CHANNELS.exportZip, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "project-export-failed" },
+    });
+
+    const cancelled = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain: cancelled.ipcMain,
+      selectProjectDirectory: () => Promise.resolve(root),
+      selectProjectExportPath: () => Promise.resolve(null),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(cancelled.handlers, PROJECT_CHANNELS.open, event(7));
+    await expect(
+      invoke(cancelled.handlers, PROJECT_CHANNELS.exportZip, event(7)),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        saved: false,
+        files: 0,
+        skippedLinks: 0,
+        totalBytes: 0,
+      },
+    });
+
+    const failed = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain: failed.ipcMain,
+      selectProjectDirectory: () => Promise.resolve(root),
+      selectProjectExportPath: () =>
+        Promise.reject(new Error("Destination unavailable.")),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(failed.handlers, PROJECT_CHANNELS.open, event(7));
+    await expect(
+      invoke(failed.handlers, PROJECT_CHANNELS.exportZip, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "project-export-failed",
+        message: expect.stringContaining("Destination unavailable."),
+      },
+    });
   });
 
   it("reports an unavailable sample without opening a chooser", async () => {

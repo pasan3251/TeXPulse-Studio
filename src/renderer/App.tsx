@@ -14,6 +14,10 @@ import type { BuildDiagnostic } from "../ipc/build-contracts.js";
 import { BuildLog } from "./components/BuildLog.js";
 import { ProblemsPanel } from "./components/ProblemsPanel.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
+import {
+  ProjectActionDialog,
+  type ProjectActionKind,
+} from "./components/ProjectActionDialog.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
 import { RecoveryDialog } from "./components/RecoveryDialog.js";
 import { LiveBuildCoordinator } from "./live-build-coordinator.js";
@@ -38,6 +42,7 @@ import {
   MAX_RECOVERY_BUFFERS,
   type RecoverySnapshot,
 } from "../ipc/recovery-contracts.js";
+import type { RecentProjectsResult } from "../ipc/project-contracts.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -57,6 +62,16 @@ type RecoveryState =
   | null
   | { projectId: string; status: "active" | "loading"; snapshot: null }
   | { projectId: string; status: "review"; snapshot: RecoverySnapshot };
+
+type RecentProject = Extract<
+  RecentProjectsResult,
+  { ok: true }
+>["value"][number];
+
+interface PendingProjectAction {
+  kind: ProjectActionKind;
+  initialPath: string;
+}
 
 function persistWorkspaceState(
   storage: Pick<Storage, "setItem">,
@@ -104,6 +119,13 @@ export function App({ api = window.texpulse }: AppProps) {
   const [toolchain, setToolchain] = useState<ToolchainReport | null>(null);
   const [recovery, setRecovery] = useState<RecoveryState>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(
+    null,
+  );
+  const [projectAction, setProjectAction] =
+    useState<PendingProjectAction | null>(null);
+  const [projectActionBusy, setProjectActionBusy] = useState(false);
   stateRef.current = state;
   globalSettingsRef.current = globalSettings;
 
@@ -206,7 +228,20 @@ export function App({ api = window.texpulse }: AppProps) {
     return operation;
   };
 
-  const openProject = async (sample = false): Promise<void> => {
+  const refreshRecentProjects = async (): Promise<void> => {
+    const result = await api.getRecentProjects();
+    if (result.ok) {
+      setRecentProjects(result.value);
+    }
+  };
+
+  const openProject = async (
+    source:
+      | "choose"
+      | "create"
+      | "sample"
+      | { recentProjectId: string } = "choose",
+  ): Promise<void> => {
     coordinatorRef.current?.cancelPending();
     synctexRequestRef.current += 1;
     setSyncBusy(false);
@@ -219,9 +254,14 @@ export function App({ api = window.texpulse }: AppProps) {
     }
 
     const requestId = ++openRequestRef.current;
-    const result = sample
-      ? await api.openSampleProject()
-      : await api.openProject();
+    const result =
+      source === "sample"
+        ? await api.openSampleProject()
+        : source === "create"
+          ? await api.createProject()
+          : typeof source === "object"
+            ? await api.openRecentProject({ id: source.recentProjectId })
+            : await api.openProject();
     if (requestId !== openRequestRef.current) {
       return;
     }
@@ -234,6 +274,9 @@ export function App({ api = window.texpulse }: AppProps) {
       }
       return;
     }
+    setSelectedEntryPath(null);
+    setProjectAction(null);
+    void refreshRecentProjects();
 
     const preferences = loadWorkspacePreferences(
       window.localStorage,
@@ -608,6 +651,18 @@ export function App({ api = window.texpulse }: AppProps) {
     return () => {
       coordinator.dispose();
       coordinatorRef.current = null;
+    };
+  }, [api]);
+
+  useEffect(() => {
+    let disposed = false;
+    void api.getRecentProjects().then((result) => {
+      if (!disposed && result.ok) {
+        setRecentProjects(result.value);
+      }
+    });
+    return () => {
+      disposed = true;
     };
   }, [api]);
 
@@ -1011,6 +1066,136 @@ export function App({ api = window.texpulse }: AppProps) {
     });
   };
 
+  const beginProjectAction = (kind: ProjectActionKind): void => {
+    const selected = selectedEntryPath;
+    const entry = stateRef.current.project?.entries.find(
+      (candidate) => candidate.path === selected,
+    );
+    const parent =
+      entry?.kind === "directory"
+        ? entry.path
+        : selected === null
+          ? ""
+          : parentProjectPath(selected);
+    const initialPath =
+      kind === "create-file"
+        ? `${parent === "" ? "" : `${parent}/`}new-file.tex`
+        : kind === "create-folder"
+          ? `${parent === "" ? "" : `${parent}/`}new-folder`
+          : (selected ?? "");
+    if ((kind === "rename" || kind === "delete") && selected === null) {
+      return;
+    }
+    setProjectAction({ kind, initialPath });
+  };
+
+  const confirmProjectAction = async (path: string): Promise<void> => {
+    const action = projectAction;
+    const project = stateRef.current.project;
+    if (action === null || project === null) {
+      return;
+    }
+    if (!(await savePaths(null, false))) {
+      dispatch({
+        type: "operation-failed",
+        message:
+          "Project file change stopped because current changes could not save.",
+      });
+      return;
+    }
+
+    setProjectActionBusy(true);
+    const sourcePath = selectedEntryPath;
+    const selectedEntry = project.entries.find(
+      (entry) => entry.path === sourcePath,
+    );
+    const expectedVersion =
+      sourcePath === null
+        ? undefined
+        : stateRef.current.buffers[sourcePath]?.version;
+    const result =
+      action.kind === "create-file"
+        ? await api.createTextFile({ path, content: "" })
+        : action.kind === "create-folder"
+          ? await api.createDirectory({ path })
+          : action.kind === "rename" && sourcePath !== null
+            ? await api.renameEntry({
+                sourcePath,
+                destinationPath: path,
+                ...(expectedVersion === undefined ? {} : { expectedVersion }),
+              })
+            : sourcePath !== null
+              ? await api.deleteEntry({
+                  path: sourcePath,
+                  recursive: selectedEntry?.kind === "directory",
+                  ...(expectedVersion === undefined ? {} : { expectedVersion }),
+                })
+              : null;
+    setProjectActionBusy(false);
+    if (result === null) {
+      return;
+    }
+    if (!result.ok) {
+      dispatch({ type: "operation-failed", message: result.error.message });
+      return;
+    }
+
+    if (action.kind === "rename" && sourcePath !== null) {
+      dispatch({
+        type: "entry-renamed",
+        sourcePath,
+        destinationPath: path,
+        project: result.value,
+      });
+      setSelectedEntryPath(path);
+    } else if (action.kind === "delete" && sourcePath !== null) {
+      dispatch({
+        type: "entry-deleted",
+        path: sourcePath,
+        project: result.value,
+      });
+      setSelectedEntryPath(null);
+    } else {
+      dispatch({ type: "project-refreshed", project: result.value });
+      setSelectedEntryPath(path);
+      if (action.kind === "create-file") {
+        await openFile(path);
+      }
+    }
+    setProjectAction(null);
+    dispatch({
+      type: "external-change-detected",
+      message:
+        action.kind === "delete"
+          ? `Deleted ${sourcePath ?? path}.`
+          : action.kind === "rename"
+            ? `Moved ${sourcePath ?? ""} to ${path}.`
+            : `Created ${path}.`,
+    });
+  };
+
+  const exportProject = async (): Promise<void> => {
+    if (!(await savePaths(null, false))) {
+      dispatch({
+        type: "operation-failed",
+        message:
+          "Project export stopped because current changes could not save.",
+      });
+      return;
+    }
+    setProjectActionBusy(true);
+    const result = await api.exportProject();
+    setProjectActionBusy(false);
+    dispatch({
+      type: result.ok ? "external-change-detected" : "operation-failed",
+      message: result.ok
+        ? result.value.saved
+          ? `Exported ${String(result.value.files)} source files to ZIP.`
+          : "Project export was cancelled."
+        : result.error.message,
+    });
+  };
+
   const projectTitle = state.project?.name ?? "No project open";
   const isAnyFileSaving = state.savingPaths.length > 0;
   const isSaving =
@@ -1073,10 +1258,20 @@ export function App({ api = window.texpulse }: AppProps) {
             className="button secondary"
             disabled={buildBusy || isAnyFileSaving}
             onClick={() => {
-              void openProject();
+              void openProject("choose");
             }}
           >
             Open project
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={buildBusy || isAnyFileSaving}
+            onClick={() => {
+              void openProject("create");
+            }}
+          >
+            New project
           </button>
           <button
             type="button"
@@ -1209,11 +1404,28 @@ export function App({ api = window.texpulse }: AppProps) {
           <ProjectExplorer
             project={state.project}
             activePath={state.activePath}
+            selectedPath={selectedEntryPath}
             modifiedPaths={modifiedPaths}
             loadingPath={state.loadingPath}
+            onCreateFile={() => {
+              beginProjectAction("create-file");
+            }}
+            onCreateFolder={() => {
+              beginProjectAction("create-folder");
+            }}
+            onDelete={() => {
+              beginProjectAction("delete");
+            }}
+            onExport={() => {
+              void exportProject();
+            }}
             onOpenFile={(path) => {
               void openFile(path);
             }}
+            onRename={() => {
+              beginProjectAction("rename");
+            }}
+            onSelectEntry={setSelectedEntryPath}
           />
         )}
 
@@ -1255,12 +1467,42 @@ export function App({ api = window.texpulse }: AppProps) {
                         type="button"
                         className="button large secondary"
                         onClick={() => {
-                          void openProject(true);
+                          void openProject("create");
+                        }}
+                      >
+                        Create a project
+                      </button>
+                      <button
+                        type="button"
+                        className="button large secondary"
+                        onClick={() => {
+                          void openProject("sample");
                         }}
                       >
                         Open sample project
                       </button>
                     </div>
+                    {recentProjects.length > 0 ? (
+                      <div className="recent-projects">
+                        <h2>Recent projects</h2>
+                        {recentProjects.map((project) => (
+                          <button
+                            key={project.id}
+                            type="button"
+                            className="recent-project"
+                            title={project.displayPath}
+                            onClick={() => {
+                              void openProject({
+                                recentProjectId: project.id,
+                              });
+                            }}
+                          >
+                            <strong>{project.name}</strong>
+                            <span>{project.displayPath}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </section>
               ) : (
@@ -1489,8 +1731,26 @@ export function App({ api = window.texpulse }: AppProps) {
           }}
         />
       ) : null}
+      {projectAction !== null ? (
+        <ProjectActionDialog
+          action={projectAction.kind}
+          busy={projectActionBusy}
+          initialPath={projectAction.initialPath}
+          onCancel={() => {
+            setProjectAction(null);
+          }}
+          onConfirm={(path) => {
+            void confirmProjectAction(path);
+          }}
+        />
+      ) : null}
     </div>
   );
+}
+
+function parentProjectPath(path: string): string {
+  const separator = path.lastIndexOf("/");
+  return separator === -1 ? "" : path.slice(0, separator);
 }
 
 function sourcePosition(

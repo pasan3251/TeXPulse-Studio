@@ -9,11 +9,19 @@ import type {
 } from "./build-contracts.js";
 import type { GlobalSettings } from "../settings/settings-types.js";
 import type {
+  CreateProjectEntryRequest,
+  CreateTextFileRequest,
+  DeleteProjectEntryRequest,
+  ExportProjectResult,
   OpenProjectResult,
+  OpenRecentProjectRequest,
+  ProjectMutationResult,
   ProjectFileChange,
   ProjectPathRequest,
   ProjectWriteRequest,
   ReadTextFileResult,
+  RecentProjectsResult,
+  RenameProjectEntryRequest,
   WriteTextFileResult,
 } from "./project-contracts.js";
 import type {
@@ -40,9 +48,27 @@ import type {
 } from "./recovery-contracts.js";
 
 export interface TeXPulseApi {
+  createProject(): Promise<OpenProjectResult>;
+  createDirectory(
+    request: CreateProjectEntryRequest,
+  ): Promise<ProjectMutationResult>;
+  createTextFile(
+    request: CreateTextFileRequest,
+  ): Promise<ProjectMutationResult>;
+  deleteEntry(
+    request: DeleteProjectEntryRequest,
+  ): Promise<ProjectMutationResult>;
+  exportProject(): Promise<ExportProjectResult>;
+  getRecentProjects(): Promise<RecentProjectsResult>;
   openProject(): Promise<OpenProjectResult>;
+  openRecentProject(
+    request: OpenRecentProjectRequest,
+  ): Promise<OpenProjectResult>;
   openSampleProject(): Promise<OpenProjectResult>;
   readTextFile(request: ProjectPathRequest): Promise<ReadTextFileResult>;
+  renameEntry(
+    request: RenameProjectEntryRequest,
+  ): Promise<ProjectMutationResult>;
   writeTextFile(request: ProjectWriteRequest): Promise<WriteTextFileResult>;
   compileProject(request: CompileProjectRequest): Promise<CompileProjectResult>;
   cleanBuild(request: CompileProjectRequest): Promise<CompileProjectResult>;

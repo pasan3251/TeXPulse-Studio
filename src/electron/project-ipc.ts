@@ -30,16 +30,30 @@ import {
 import { SYNCTEX_CHANNELS } from "../ipc/channels.js";
 import {
   type ApiError,
+  createProjectEntryRequestSchema,
+  createProjectRequestSchema,
+  createTextFileRequestSchema,
+  deleteProjectEntryRequestSchema,
+  exportProjectRequestSchema,
+  exportProjectResultSchema,
+  getRecentProjectsRequestSchema,
   openProjectRequestSchema,
   openProjectResultSchema,
+  openRecentProjectRequestSchema,
   openSampleProjectRequestSchema,
+  projectMutationResultSchema,
   PROJECT_CHANNELS,
   projectPathRequestSchema,
   projectWriteRequestSchema,
+  recentProjectsResultSchema,
   readTextFileResultSchema,
+  renameProjectEntryRequestSchema,
   writeTextFileResultSchema,
+  type ExportProjectResult,
   type OpenProjectResult,
+  type ProjectMutationResult,
   type ReadTextFileResult,
+  type RecentProjectsResult,
   type WriteTextFileResult,
   type ProjectFileChange,
 } from "../ipc/project-contracts.js";
@@ -94,13 +108,25 @@ import {
 } from "../ipc/recovery-contracts.js";
 
 export interface ProjectIpcOptions {
+  createProjectDirectory?: () => Promise<string | null>;
   createCompilerAdapter?: () => CompilerAdapter;
   createSynctexService?: () => SynctexService;
   ipcMain: Pick<IpcMain, "handle" | "removeHandler">;
   openPath?: (path: string) => Promise<string>;
   notifyProjectFileChange?: (change: ProjectFileChange) => void;
   prepareSampleProject?: () => Promise<string>;
+  loadRecentProjects?: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      displayPath: string;
+      lastOpenedAt: string;
+    }>
+  >;
+  recordRecentProject?: (path: string) => Promise<void>;
+  resolveRecentProject?: (id: string) => Promise<string | null>;
   selectProjectDirectory: () => Promise<string | null>;
+  selectProjectExportPath?: (projectName: string) => Promise<string | null>;
   showItemInFolder?: (path: string) => void;
   trustedWebContentsId: () => number | null;
   loadGlobalSettings?: () => Promise<{
@@ -159,6 +185,14 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       options.createSynctexService?.(),
       async () => (await loadGlobalSettings()).settings,
     );
+    await options
+      .recordRecentProject?.(selectedDirectory)
+      .catch((error: unknown) => {
+        options.logEvent?.("warn", "recent_project_record_failed", {
+          error:
+            error instanceof Error ? error.message : "Unknown recent error.",
+        });
+      });
     options.logEvent?.("info", "project_opened", {
       projectId: projectSession.describe().projectId,
     });
@@ -167,6 +201,46 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       value: projectSession.describe(),
     };
   };
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.create,
+    createProjectRequestSchema,
+    openProjectResultSchema,
+    async (): Promise<OpenProjectResult> => {
+      if (options.createProjectDirectory === undefined) {
+        return failure(
+          "project-create-failed",
+          "New-project creation is unavailable.",
+        );
+      }
+      try {
+        const selectedDirectory = await options.createProjectDirectory();
+        if (selectedDirectory === null) {
+          return failure("cancelled", "Project creation was cancelled.");
+        }
+        return openProjectDirectory(selectedDirectory);
+      } catch (error) {
+        return failure(
+          "project-create-failed",
+          error instanceof Error
+            ? error.message
+            : "The new project could not be created.",
+        );
+      }
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.getRecent,
+    getRecentProjectsRequestSchema,
+    recentProjectsResultSchema,
+    async (): Promise<RecentProjectsResult> => ({
+      ok: true,
+      value: (await options.loadRecentProjects?.()) ?? [],
+    }),
+  );
 
   registerHandler(
     options,
@@ -184,6 +258,25 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
 
   registerHandler(
     options,
+    PROJECT_CHANNELS.openRecent,
+    openRecentProjectRequestSchema,
+    openProjectResultSchema,
+    async (request): Promise<OpenProjectResult> => {
+      const selectedDirectory = await options.resolveRecentProject?.(
+        request.id,
+      );
+      if (selectedDirectory === null || selectedDirectory === undefined) {
+        return failure(
+          "not-found",
+          "The recent project is no longer available. Remove it from the recent-project list or open it again.",
+        );
+      }
+      return openProjectDirectory(selectedDirectory);
+    },
+  );
+
+  registerHandler(
+    options,
     PROJECT_CHANNELS.openSample,
     openSampleProjectRequestSchema,
     openProjectResultSchema,
@@ -193,6 +286,136 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       }
       const selectedDirectory = await options.prepareSampleProject();
       return openProjectDirectory(selectedDirectory);
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.createDirectory,
+    createProjectEntryRequestSchema,
+    projectMutationResultSchema,
+    async (request): Promise<ProjectMutationResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before creating a folder.",
+        );
+      }
+      return {
+        ok: true,
+        value: await projectSession.createDirectory(request.path),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.createTextFile,
+    createTextFileRequestSchema,
+    projectMutationResultSchema,
+    async (request): Promise<ProjectMutationResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before creating a file.");
+      }
+      return {
+        ok: true,
+        value: await projectSession.createTextFile(
+          request.path,
+          request.content,
+        ),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.renameEntry,
+    renameProjectEntryRequestSchema,
+    projectMutationResultSchema,
+    async (request): Promise<ProjectMutationResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before renaming or moving an entry.",
+        );
+      }
+      return {
+        ok: true,
+        value: await projectSession.renameEntry(
+          request.sourcePath,
+          request.destinationPath,
+          request.expectedVersion,
+        ),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.deleteEntry,
+    deleteProjectEntryRequestSchema,
+    projectMutationResultSchema,
+    async (request): Promise<ProjectMutationResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before deleting an entry.",
+        );
+      }
+      return {
+        ok: true,
+        value: await projectSession.deleteEntry(
+          request.path,
+          request.recursive,
+          request.expectedVersion,
+        ),
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.exportZip,
+    exportProjectRequestSchema,
+    exportProjectResultSchema,
+    async (): Promise<ExportProjectResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before exporting a ZIP archive.",
+        );
+      }
+      if (options.selectProjectExportPath === undefined) {
+        return failure(
+          "project-export-failed",
+          "Project export is unavailable.",
+        );
+      }
+      try {
+        const destination = await options.selectProjectExportPath(
+          projectSession.describe().name,
+        );
+        if (destination === null) {
+          return {
+            ok: true,
+            value: {
+              saved: false,
+              files: 0,
+              skippedLinks: 0,
+              totalBytes: 0,
+            },
+          };
+        }
+        const summary = await projectSession.exportProject(destination);
+        return { ok: true, value: { saved: true, ...summary } };
+      } catch (error) {
+        return failure(
+          "project-export-failed",
+          error instanceof Error
+            ? `Project export failed: ${error.message}`
+            : "Project export failed unexpectedly.",
+        );
+      }
     },
   );
 

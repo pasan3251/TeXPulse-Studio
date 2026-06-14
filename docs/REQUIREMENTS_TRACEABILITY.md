@@ -528,3 +528,54 @@ sprint assignments are authoritative in `docs/SRS.md`.
   `../tests/packaged/`
 - Windows packaging decision:
   `adr/ADR-0013-windows-packaging-and-sample-project.md`
+
+## Sprint 12
+
+| Requirement     | Sprint 12 evidence                                                                     | Status                          |
+| --------------- | -------------------------------------------------------------------------------------- | ------------------------------- |
+| `FR-PROJ-002`   | Minimal-template project creation through fixed main-process destination selection     | Complete                        |
+| `FR-PROJ-004`   | Validated file/folder create, rename/move, and confirmed delete UI                     | Complete                        |
+| `FR-PROJ-007`   | Persisted bounded recent-project list exposed through opaque IDs                       | Complete                        |
+| `FR-PROJ-012`   | Link-safe ZIP export excludes generated, metadata, dependency, and VCS directories     | Complete                        |
+| `FR-SET-006`    | Installed suite preserves the previous beta's schema-version-1 settings                | Complete                        |
+| `FR-PACK-006`   | RC notes, checklist, deferred issues, architecture, testing, security, troubleshooting | Complete for release candidate  |
+| `NFR-PERF-002`  | Release performance gate measures reducer input latency against the 50 ms target       | Complete on reference host      |
+| `NFR-PERF-004`  | Real doctor and installed minimal sample timings are recorded in the sprint report     | Complete on reference host      |
+| `NFR-PERF-005`  | Release performance gate enumerates and builds the hierarchy for 1,000 source files    | Complete on reference host      |
+| `NFR-REL-005`   | Mutation, ZIP, performance, traceability, Electron, and packaged tests                 | Complete                        |
+| `NFR-SEC-001`   | SRS-matched release security and threat-model review                                   | Complete for Sprint 12          |
+| `NFR-SEC-004`   | Frozen bridge contains thirty-one fixed typed methods                                  | Complete for release candidate  |
+| `NFR-SEC-005`   | New project, mutation, recent, and export requests/responses use strict schemas        | Complete                        |
+| `NFR-SEC-006`   | Project service validates mutations; ZIP export does not follow links                  | Complete                        |
+| `NFR-SEC-012`   | Frozen install and high-severity dependency audit remain release gates                 | Complete for release candidate  |
+| `NFR-SEC-013`   | Collaboration and multi-user compilation remain rejected pending separate design       | Explicitly rejected for release |
+| `NFR-COMP-005`  | Compiler remains behind `CompilerAdapter`; TeX Live implementation is deferred         | Architecture complete; deferred |
+| `NFR-MAINT-004` | ADR-0014 records project-management and release-provenance decisions                   | Complete                        |
+| `NFR-MAINT-005` | New tests use controlled state, observable files, and bounded waits                    | Complete                        |
+| `NFR-MAINT-006` | `AGENTS.md` includes performance, packaged, and provenance commands                    | Complete                        |
+| `NFR-UX-001`    | Project lifecycle actions and dialogs are keyboard operable                            | Complete                        |
+| `NFR-UX-003`    | Project dialogs set and trap logical focus                                             | Complete                        |
+| `NFR-UX-004`    | Project actions, recent projects, and dialogs have accessible names                    | Complete                        |
+| `NFR-UX-005`    | File/folder deletion requires a named modal confirmation                               | Complete                        |
+| `NFR-PRIV-001`  | Project mutation, recent storage, ZIP, and release evidence remain local               | Complete for Sprint 12          |
+| `NFR-PRIV-002`  | No analytics, telemetry, updater, or network service was added                         | Complete for Sprint 12          |
+| `AS-010`        | Installed clean-profile sample edit, real compile, PDF preview, and reopen workflow    | Complete on supported test host |
+
+### Sprint 12 evidence
+
+- Sprint report: `reports/SPRINT-12.md`
+- Project creation/export services and typed IPC: `../src/project/`,
+  `../src/electron/`, and `../src/ipc/`
+- Project-management renderer flow: `../src/renderer/`
+- Release performance and traceability gates: `../tests/performance/` and
+  `../tests/unit/requirements-traceability.test.ts`
+- Development and installed release-candidate lifecycle tests: `../tests/e2e/`
+  and `../tests/packaged/`
+- Release charter and explicitly deferred issues:
+  `RELEASE_CANDIDATE_CHECKLIST.md` and `DEFERRED_ISSUES.md`
+- Design decision: `adr/ADR-0014-project-management-and-release-provenance.md`
+
+The automated traceability test confirms that every one of the 145 unique SRS
+requirement and acceptance-scenario IDs appears in this document. The Sprint 12
+review found no mandatory requirement without an implemented, SRS-deferred, or
+explicitly rejected disposition.

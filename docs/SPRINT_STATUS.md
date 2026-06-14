@@ -14,7 +14,8 @@
 | Sprint 9      | Complete on 2026-06-14 | Recipes, settings, setup wizard, clean builds           |
 | Sprint 10     | Complete on 2026-06-14 | Security, output bounds, recovery, support logs         |
 | Sprint 11     | Complete on 2026-06-14 | Windows packaging and first-run sample workflow         |
-| Sprints 12-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 12     | Complete on 2026-06-14 | Release-candidate hardening and full product validation |
+| Sprints 13-14 | Not started            | Optional post-release work; see `docs/SRS.md`           |
 
 ## Completed scope
 
@@ -86,17 +87,26 @@ lifecycle test covering a clean profile, spaces in the installation path, real
 MiKTeX setup and compilation, high-DPI PDF preview, reopen persistence, and
 uninstall. See `reports/SPRINT-11.md`.
 
+Sprint 12 completes template project creation, validated project file/folder
+actions with confirmed deletion, bounded recent-project reopening, source-only
+ZIP export, configured-root remapping after moves, 1,000-file/editor/repeated
+build performance checks, requirement-ID completeness enforcement, accessibility
+checks, previous-beta settings verification, expanded native fixtures,
+release-candidate provenance tooling, complete regression and installed
+lifecycle evidence, explicit deferred-issue review, and the `v0.1.0-rc.1`
+release-candidate tag. See `reports/SPRINT-12.md`.
+
 ## Current environment limitation
 
-The beta installer is unsigned and may trigger Windows SmartScreen or antivirus
-reputation warnings. The local Microsoft Defender custom scan reported no
-matching detection. Code-signing and reputation validation remain release work.
-MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
-does not report a parseable version. TeX still runs with the local user's
-permissions: output quotas are checked after process exit, so transient resource
-use remains possible until timeout. Custom executables and trusted `latexmk`
-configuration remain explicit local trust decisions. Recovery is limited to 20
-buffers, 2 MiB per buffer, and 10 MiB total. Automatic external-file reload,
-side-by-side comparison, and merge actions remain future work. MiKTeX and Perl
-are not bundled, application data is preserved on uninstall, and automatic
-updates remain deferred.
+The release-candidate installer is unsigned and may trigger Windows SmartScreen
+or antivirus reputation warnings. The local Microsoft Defender custom scan
+reported no matching detection. Code-signing and reputation validation remain
+release work. MiKTeX reports that updates have not yet been checked. MakeIndex
+is runnable but does not report a parseable version. TeX still runs with the
+local user's permissions: output quotas are checked after process exit, so
+transient resource use remains possible until timeout. Custom executables and
+trusted `latexmk` configuration remain explicit local trust decisions. Recovery
+is limited to 20 buffers, 2 MiB per buffer, and 10 MiB total. Automatic
+external-file reload, side-by-side comparison, and merge actions remain future
+work. MiKTeX and Perl are not bundled, application data is preserved on
+uninstall, and automatic updates remain deferred.

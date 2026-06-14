@@ -27,6 +27,8 @@ nativeDescribe("native MiKTeX recipes", () => {
     ["minimal-success", "lualatex"],
     ["bibliography-bibtex", "pdf"],
     ["bibliography-biber", "pdf"],
+    ["image-assets", "pdf"],
+    ["spaces-in-path/project with spaces", "pdf"],
   ] as const)(
     "compiles the %s fixture with the %s recipe",
     async (fixture, recipe) => {

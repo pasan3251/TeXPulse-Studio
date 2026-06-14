@@ -103,8 +103,14 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "clearLocalData",
         "clearRecovery",
         "compileProject",
+        "createDirectory",
+        "createProject",
+        "createTextFile",
+        "deleteEntry",
+        "exportProject",
         "exportSupportLog",
         "forwardSync",
+        "getRecentProjects",
         "getRecovery",
         "getSettings",
         "inverseSync",
@@ -112,8 +118,10 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "onProjectFileChanged",
         "openPdf",
         "openProject",
+        "openRecentProject",
         "openSampleProject",
         "readTextFile",
+        "renameEntry",
         "revealPdf",
         "saveGlobalSettings",
         "saveProjectSettings",
@@ -721,5 +729,161 @@ test("reports first-run toolchain readiness only after a self-test", async () =>
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("creates, manages, exports, and reopens a project through recent projects", async () => {
+  const testDirectory = await mkdtemp(join(tmpdir(), "texpulse rc e2e "));
+  const chooserProject = join(testDirectory, "chooser project");
+  const createdProject = join(testDirectory, "Created Project");
+  const exportPath = join(testDirectory, "created-project.zip");
+  const userDataDirectory = join(testDirectory, "user data");
+  await mkdir(chooserProject);
+  await writeFile(
+    join(chooserProject, "main.tex"),
+    "\\documentclass{article}\\begin{document}Chooser\\end{document}",
+  );
+
+  const launch = () =>
+    electron.launch({
+      args: ["."],
+      chromiumSandbox: true,
+      cwd: repositoryRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        TEXPULSE_E2E_EXPORT_PATH: exportPath,
+        TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+        TEXPULSE_E2E_NEW_PROJECT: createdProject,
+        TEXPULSE_E2E_NODE: process.execPath,
+        TEXPULSE_E2E_PROJECT: chooserProject,
+        TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+        TEXPULSE_E2E_USER_DATA: userDataDirectory,
+      },
+    });
+
+  const firstApp = await launch();
+  try {
+    const page = await firstApp.firstWindow();
+    await page.getByRole("button", { name: "Create a project" }).click();
+    await expect(page.getByLabel("Editor for main.tex")).toContainText(
+      "Welcome to TeXPulse Studio",
+    );
+
+    await page.getByRole("button", { name: "New folder" }).click();
+    const folderDialog = page.getByRole("dialog", { name: "Create folder" });
+    await expect(
+      folderDialog.getByLabel("Project-relative path"),
+    ).toBeFocused();
+    await folderDialog.getByLabel("Project-relative path").fill("chapters");
+    await page.keyboard.press("Enter");
+    await expect(folderDialog).toBeHidden();
+
+    await page.getByRole("button", { name: "New file" }).click();
+    const fileDialog = page.getByRole("dialog", { name: "Create file" });
+    await fileDialog
+      .getByLabel("Project-relative path")
+      .fill("chapters/intro.tex");
+    await page.keyboard.press("Enter");
+    const editor = page.getByLabel("Editor for chapters/intro.tex");
+    await expect(editor).toBeVisible();
+    await editor.click();
+    await page.keyboard.insertText("Release candidate source\n");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+
+    await page.getByRole("button", { name: "Rename" }).click();
+    const renameDialog = page.getByRole("dialog", {
+      name: "Rename or move entry",
+    });
+    await renameDialog
+      .getByLabel("Project-relative path")
+      .fill("chapters/body.tex");
+    await renameDialog.getByRole("button", { name: "Apply change" }).click();
+    await expect(page.getByLabel("Editor for chapters/body.tex")).toBeVisible();
+
+    await page.getByRole("button", { name: "Delete" }).click();
+    const deleteDialog = page.getByRole("dialog", {
+      name: "Delete project entry",
+    });
+    await expect(
+      deleteDialog.getByRole("button", { name: "Delete permanently" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(deleteDialog).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: /body\.tex/u }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Delete" }).click();
+    await page
+      .getByRole("dialog", { name: "Delete project entry" })
+      .getByRole("button", { name: "Delete permanently" })
+      .click();
+    await expect(page.getByRole("button", { name: /body\.tex/u })).toHaveCount(
+      0,
+    );
+
+    await page.getByRole("button", { name: "chapters" }).click();
+    await page.getByRole("button", { name: "New file" }).click();
+    await page
+      .getByRole("dialog", { name: "Create file" })
+      .getByLabel("Project-relative path")
+      .fill("chapters/kept.tex");
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Export ZIP" }).click();
+    await expect(
+      page.getByText(/Exported 2 source files to ZIP/u),
+    ).toBeVisible();
+
+    const zip = await readFile(exportPath);
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.toString("utf8")).toContain("main.tex");
+    expect(zip.toString("utf8")).toContain("chapters/kept.tex");
+    expect(zip.toString("utf8")).not.toContain(".texpulse/");
+
+    const accessibility = await page.evaluate(() => {
+      const ids = [...document.querySelectorAll<HTMLElement>("[id]")].map(
+        (element) => element.id,
+      );
+      const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+      const unnamedButtons = [
+        ...document.querySelectorAll<HTMLButtonElement>("button"),
+      ].filter(
+        (button) =>
+          (button.getAttribute("aria-label") ?? "").trim() === "" &&
+          button.innerText.trim() === "" &&
+          (button.title ?? "").trim() === "",
+      ).length;
+      return { duplicateIds: [...new Set(duplicateIds)], unnamedButtons };
+    });
+    expect(accessibility).toEqual({ duplicateIds: [], unnamedButtons: 0 });
+
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        "sprint-12-project-release-candidate.png",
+      ),
+    });
+  } finally {
+    await firstApp.close();
+  }
+
+  const secondApp = await launch();
+  try {
+    const page = await secondApp.firstWindow();
+    const recentProject = page.getByRole("button", {
+      name: /Created Project/u,
+    });
+    await expect(recentProject).toBeVisible();
+    await expect(recentProject).not.toContainText(testDirectory);
+    await recentProject.click();
+    await expect(page.getByLabel("Editor for chapters/kept.tex")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /kept\.tex/u }),
+    ).toBeVisible();
+  } finally {
+    await secondApp.close();
+    await rm(testDirectory, { recursive: true, force: true });
   }
 });

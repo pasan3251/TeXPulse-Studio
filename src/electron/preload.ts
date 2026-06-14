@@ -15,9 +15,14 @@ import type {
   PdfArtifactRequest,
 } from "../ipc/build-contracts.js";
 import type {
+  CreateProjectEntryRequest,
+  CreateTextFileRequest,
+  DeleteProjectEntryRequest,
+  OpenRecentProjectRequest,
   ProjectFileChange,
   ProjectPathRequest,
   ProjectWriteRequest,
+  RenameProjectEntryRequest,
 } from "../ipc/project-contracts.js";
 import { projectFileChangeSchema } from "../ipc/project-contracts.js";
 import type {
@@ -32,10 +37,23 @@ import type {
 import type { SaveRecoveryRequest } from "../ipc/recovery-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
+  createProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.create),
+  createDirectory: (request: CreateProjectEntryRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.createDirectory, request),
+  createTextFile: (request: CreateTextFileRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.createTextFile, request),
+  deleteEntry: (request: DeleteProjectEntryRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.deleteEntry, request),
+  exportProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.exportZip),
+  getRecentProjects: () => ipcRenderer.invoke(PROJECT_CHANNELS.getRecent),
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
+  openRecentProject: (request: OpenRecentProjectRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.openRecent, request),
   openSampleProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.openSample),
   readTextFile: (request: ProjectPathRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.readTextFile, request),
+  renameEntry: (request: RenameProjectEntryRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.renameEntry, request),
   writeTextFile: (request: ProjectWriteRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.writeTextFile, request),
   compileProject: (request: CompileProjectRequest) =>

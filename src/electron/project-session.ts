@@ -28,6 +28,8 @@ import {
 import { ProjectService } from "../project/project-service.js";
 import { ProjectWatcher } from "../project/project-watcher.js";
 import type { ProjectMetadata } from "../project/project-types.js";
+import { exportProjectZip } from "../project/zip-export.js";
+import type { ProjectZipSummary } from "../project/zip-export.js";
 import { defaultGlobalSettings } from "../settings/settings-types.js";
 import type { GlobalSettings } from "../settings/settings-types.js";
 import type { ProjectSettings } from "../settings/project-settings.js";
@@ -108,7 +110,19 @@ export class ProjectSession {
     if (metadata.source === "default") {
       metadata.metadata.autoBuild = globalSettings.autoBuild;
     }
-    const rootFile = metadata.metadata.rootFile ?? fallbackRoot;
+    const configuredRoot = metadata.metadata.rootFile;
+    const configuredRootExists =
+      configuredRoot !== null &&
+      entries.some(
+        (entry) => entry.kind === "file" && entry.path === configuredRoot,
+      );
+    const rootFile = configuredRootExists ? configuredRoot : fallbackRoot;
+    if (configuredRoot !== null && !configuredRootExists) {
+      metadata.issues.push(
+        `Configured root file was unavailable: ${configuredRoot}.`,
+      );
+      metadata.metadata.rootFile = rootFile;
+    }
     const projectId = createHash("sha256")
       .update(pathKey(service.root))
       .digest("hex")
@@ -159,6 +173,64 @@ export class ProjectSession {
     );
     this.watcher?.recordInternalWrite(snapshot.path, snapshot.version);
     return snapshot;
+  }
+
+  createDirectory(path: string): Promise<OpenProjectValue> {
+    return this.mutateProject(() => this.service.createDirectory(path));
+  }
+
+  createTextFile(path: string, content: string): Promise<OpenProjectValue> {
+    return this.mutateProject(() =>
+      this.service.createTextFile(path, content).then(() => undefined),
+    );
+  }
+
+  renameEntry(
+    sourcePath: string,
+    destinationPath: string,
+    expectedVersion?: string,
+  ): Promise<OpenProjectValue> {
+    const source = normalizeProjectPath(sourcePath);
+    const destination = normalizeProjectPath(destinationPath);
+    return this.mutateProject(async () => {
+      await this.service.renameEntry(source, destination, expectedVersion);
+      const rootFile = this.metadata.rootFile;
+      if (
+        rootFile !== null &&
+        (rootFile === source || rootFile.startsWith(`${source}/`))
+      ) {
+        this.metadata = {
+          ...this.metadata,
+          rootFile: `${destination}${rootFile.slice(source.length)}`,
+        };
+        await saveProjectMetadata(this.service.root, this.metadata);
+      }
+    });
+  }
+
+  deleteEntry(
+    path: string,
+    recursive: boolean,
+    expectedVersion?: string,
+  ): Promise<OpenProjectValue> {
+    return this.mutateProject(() =>
+      this.service.deleteEntry(path, {
+        recursive,
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
+      }),
+    );
+  }
+
+  async exportProject(destinationPath: string): Promise<ProjectZipSummary> {
+    this.assertBuildIdle(
+      "Wait for the current build to finish or cancel it before exporting the project.",
+    );
+    this.maintenanceActive = true;
+    try {
+      return await exportProjectZip(this.service.root, destinationPath);
+    } finally {
+      this.maintenanceActive = false;
+    }
   }
 
   async compile(rootFile: string): Promise<BuildView> {
@@ -275,6 +347,53 @@ export class ProjectSession {
     ) {
       throw new ProjectSessionError("cleanup-busy", message);
     }
+  }
+
+  private async mutateProject(
+    operation: () => Promise<void>,
+  ): Promise<OpenProjectValue> {
+    this.assertBuildIdle(
+      "Wait for the current build to finish or cancel it before changing project files.",
+    );
+    this.maintenanceActive = true;
+    const watcher = this.watcher;
+    this.watcher = null;
+    try {
+      await watcher?.close();
+      await operation();
+      await this.refreshProjectDescription();
+      return this.describe();
+    } finally {
+      try {
+        this.watcher = this.createWatcher();
+      } finally {
+        this.maintenanceActive = false;
+      }
+    }
+  }
+
+  private async refreshProjectDescription(): Promise<void> {
+    const [entries, rootCandidates] = await Promise.all([
+      this.service.listEntries(),
+      this.service.detectRootFiles(),
+    ]);
+    const configuredRoot = this.metadata.rootFile;
+    const rootFile =
+      configuredRoot !== null &&
+      entries.some(
+        (entry) => entry.kind === "file" && entry.path === configuredRoot,
+      )
+        ? configuredRoot
+        : (rootCandidates[0]?.path ?? null);
+    if (this.metadata.rootFile !== rootFile) {
+      this.metadata = { ...this.metadata, rootFile };
+      await saveProjectMetadata(this.service.root, this.metadata);
+    }
+    this.projectDescription.entries = entries;
+    this.projectDescription.rootCandidates = rootCandidates;
+    this.projectDescription.rootFile = rootFile;
+    this.projectDescription.settings = toProjectSettings(this.metadata);
+    this.projectDescription.settingsIssues = [];
   }
 
   cancelBuild(): Promise<boolean> {

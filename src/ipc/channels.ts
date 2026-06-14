@@ -1,7 +1,15 @@
 export const PROJECT_CHANNELS = {
+  create: "project:create",
+  createDirectory: "project:create-directory",
+  createTextFile: "project:create-text-file",
+  deleteEntry: "project:delete-entry",
+  exportZip: "project:export-zip",
+  getRecent: "project:get-recent",
   open: "project:open",
+  openRecent: "project:open-recent",
   openSample: "project:open-sample",
   readTextFile: "project:read-text-file",
+  renameEntry: "project:rename-entry",
   writeTextFile: "project:write-text-file",
 } as const;
 

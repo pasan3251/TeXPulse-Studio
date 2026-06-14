@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { copyFile, lstat, mkdir } from "node:fs/promises";
+import { copyFile, lstat, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const SAMPLE_FILES = ["main.tex"] as const;
@@ -35,6 +35,36 @@ export async function ensureSampleProject(
     );
   }
 
+  return targetDirectory;
+}
+
+export async function createProjectFromTemplate(
+  sourceDirectory: string,
+  targetDirectory: string,
+): Promise<string> {
+  const existing = await optionalStat(targetDirectory);
+  if (existing !== null) {
+    throw new Error("The selected project location already exists.");
+  }
+
+  await mkdir(targetDirectory);
+  try {
+    for (const fileName of SAMPLE_FILES) {
+      const sourcePath = join(sourceDirectory, fileName);
+      const sourceStat = await lstat(sourcePath);
+      if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+        throw new Error(`Bundled project template is invalid: ${fileName}`);
+      }
+      await copyFile(
+        sourcePath,
+        join(targetDirectory, fileName),
+        constants.COPYFILE_EXCL,
+      );
+    }
+  } catch (error) {
+    await rm(targetDirectory, { recursive: true, force: true });
+    throw error;
+  }
   return targetDirectory;
 }
 

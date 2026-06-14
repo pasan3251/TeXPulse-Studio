@@ -56,6 +56,7 @@ pnpm typecheck
 pnpm test:unit
 pnpm test:component
 pnpm test:integration
+pnpm test:performance
 pnpm test:coverage
 pnpm test:e2e
 pnpm test:packaged
@@ -63,6 +64,7 @@ pnpm audit:dependencies
 pnpm build
 pnpm package:dir
 pnpm package:win
+pnpm release:manifest
 pnpm check
 pnpm app:start
 pnpm texpulse-doctor -- --custom-bin <directory>
@@ -73,10 +75,11 @@ pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 compilation, newest-result PDF rendering, manual build, restoration, minimum
 window layout, external-conflict preservation, structured diagnostic display,
 raw-log access, source navigation, retained PDF behavior, fix-error cleanup,
-sample onboarding, and abnormal-shutdown recovery without automatic source
-overwrite. `pnpm test:packaged` additionally installs the NSIS beta into a path
-with spaces, uses a clean profile, runs the real MiKTeX self-test, edits and
-compiles the sample, reopens it, and uninstalls.
+sample onboarding, project creation/mutation/export/recent reopening, and
+abnormal-shutdown recovery without automatic source overwrite.
+`pnpm test:packaged` additionally installs the NSIS release candidate into a
+path with spaces, uses clean and previous-beta profiles, runs the real MiKTeX
+self-test, edits and compiles the sample, reopens it, and uninstalls.
 
 The compiler service enforces timeout, cancellation, process-tree cleanup, an 8
 MiB aggregate process-output limit, generated-output quotas, and an
@@ -94,7 +97,7 @@ matching editor-originated writes. Watcher events are validated, project-scoped
 notices and never direct save or compile triggers.
 
 The renderer is sandboxed with Node integration disabled. Its frozen preload
-bridge exposes twenty-three fixed
+bridge exposes thirty-one fixed
 project/build/PDF/SyncTeX/settings/recovery/event methods. PDF paths remain in
 the main process as actionable values, and renderer PDF loads require an active
 opaque artifact token. Raw compiler logs may contain local path text.
@@ -109,9 +112,10 @@ They are limited to enumerated project-relative source links, 200 items, 4,096
 message characters, and 2,048 excerpt characters. Parser failure must preserve
 the raw log, and stale or edited source must not retain current diagnostics.
 
-The Windows beta is packaged with Electron Builder and an assisted per-user NSIS
-installer. MiKTeX and Perl are not bundled. The unsigned beta preserves
-application data on uninstall and may trigger Windows reputation warnings.
+The Windows release candidate is packaged with Electron Builder and an assisted
+per-user NSIS installer. MiKTeX and Perl are not bundled. The unsigned release
+candidate preserves application data on uninstall and may trigger Windows
+reputation warnings.
 
 ## Completion checklist
 

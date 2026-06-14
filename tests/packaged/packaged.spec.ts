@@ -5,9 +5,12 @@ import { _electron as electron, expect, test } from "@playwright/test";
 
 const executablePath = requiredEnvironment("TEXPULSE_PACKAGED_EXECUTABLE");
 const userDataDirectory = requiredEnvironment("TEXPULSE_PACKAGED_USER_DATA");
+const upgradeUserDataDirectory = requiredEnvironment(
+  "TEXPULSE_PACKAGED_UPGRADE_USER_DATA",
+);
 const evidenceDirectory = requiredEnvironment("TEXPULSE_PACKAGED_OUTPUT");
 
-test("installed beta completes the sample workflow and reopens cleanly", async () => {
+test("installed release candidate completes the sample workflow and reopens cleanly", async () => {
   const launch = () =>
     electron.launch({
       executablePath,
@@ -46,8 +49,14 @@ test("installed beta completes the sample workflow and reopens cleanly", async (
       "clearLocalData",
       "clearRecovery",
       "compileProject",
+      "createDirectory",
+      "createProject",
+      "createTextFile",
+      "deleteEntry",
+      "exportProject",
       "exportSupportLog",
       "forwardSync",
+      "getRecentProjects",
       "getRecovery",
       "getSettings",
       "inverseSync",
@@ -55,8 +64,10 @@ test("installed beta completes the sample workflow and reopens cleanly", async (
       "onProjectFileChanged",
       "openPdf",
       "openProject",
+      "openRecentProject",
       "openSampleProject",
       "readTextFile",
+      "renameEntry",
       "revealPdf",
       "saveGlobalSettings",
       "saveProjectSettings",
@@ -92,14 +103,31 @@ test("installed beta completes the sample workflow and reopens cleanly", async (
     await expect(page.getByLabel("PDF page 1")).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByText("Loading PDF...")).toBeHidden({
+      timeout: 30_000,
+    });
+    const clippedPdfControls = await page.evaluate(() => {
+      const viewportWidth = document.documentElement.clientWidth;
+      return [
+        ...document.querySelectorAll<HTMLElement>(
+          ".pdf-header button, .pdf-toolbar button, .sync-hint",
+        ),
+      ]
+        .filter((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left < 0 || bounds.right > viewportWidth;
+        })
+        .map((element) => element.innerText.trim());
+    });
+    expect(clippedPdfControls).toEqual([]);
 
     await mkdir(evidenceDirectory, { recursive: true });
     await page.screenshot({
-      path: join(evidenceDirectory, "sprint-11-packaged-high-dpi.png"),
+      path: join(evidenceDirectory, "sprint-12-packaged-high-dpi.png"),
     });
     await copyNewestPdf(
       join(actualUserDataDirectory, "sample-project", ".texpulse", "build"),
-      join(evidenceDirectory, "sprint-11-packaged-sample.pdf"),
+      join(evidenceDirectory, "sprint-12-packaged-sample.pdf"),
     );
   } finally {
     await firstApp.close();
@@ -113,16 +141,42 @@ test("installed beta completes the sample workflow and reopens cleanly", async (
     ).toHaveCount(0);
     await page.getByRole("button", { name: "Open sample project" }).click();
     await expect(page.getByTestId("code-editor")).toContainText(
-      "Packaged Sprint 11 verification",
+      "Packaged release-candidate verification",
     );
   } finally {
     await secondApp.close();
   }
 });
 
+test("installed release candidate preserves previous-beta settings", async () => {
+  const electronApp = await electron.launch({
+    executablePath,
+    args: [`--user-data-dir=${upgradeUserDataDirectory}`],
+    chromiumSandbox: true,
+    cwd: dirname(executablePath),
+    env: { ...process.env, NODE_ENV: "production" },
+    timeout: 30_000,
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    await expect(
+      page.getByRole("dialog", { name: "Prepare TeXPulse Studio" }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Autosave")).not.toBeChecked();
+    await expect(page.getByLabel("Auto build")).not.toBeChecked();
+    await expect(page.getByLabel("Automatic build delay")).toHaveValue("1200");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByLabel("Editor font size")).toHaveValue("18");
+    await expect(page.getByLabel("Default PDF zoom")).toHaveValue("fit-page");
+  } finally {
+    await electronApp.close();
+  }
+});
+
 const sampleSource = String.raw`\documentclass{article}
 \begin{document}
-Packaged Sprint 11 verification
+Packaged release-candidate verification
 \end{document}
 `;
 

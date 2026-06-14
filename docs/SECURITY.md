@@ -1,12 +1,12 @@
 # Security
 
-## Sprint 11 posture
+## Sprint 12 posture
 
-Sprint 11 keeps the Electron renderer outside the trusted computing boundary
-while adding an ASAR-packaged Windows application, assisted per-user NSIS
-installer, fixed bundled sample, and installed lifecycle testing. It adds no
-network service, telemetry, remote content, arbitrary renderer filesystem
-access, bundled TeX distribution, updater, or production dependency. The
+Sprint 12 keeps the Electron renderer outside the trusted computing boundary
+while completing project creation, file/folder mutation, recent projects,
+source-only ZIP export, and release-candidate verification. It adds no network
+service, telemetry, remote content, arbitrary renderer filesystem access,
+bundled TeX distribution, updater, or production dependency. The
 implementation-matched threat model remains `THREAT_MODEL.md`.
 
 The application:
@@ -51,7 +51,7 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes twenty-three frozen project/build/PDF/SyncTeX/settings/recovery/event
+- exposes thirty-one frozen project/build/PDF/SyncTeX/settings/recovery/event
   preload methods, never `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
@@ -141,7 +141,23 @@ The application:
 - does not bundle MiKTeX, Perl, credentials, analytics, an updater, or source
   projects; and
 - preserves application data during uninstall instead of deleting user edits,
-  settings, recovery, or logs without a separate user action.
+  settings, recovery, or logs without a separate user action;
+- selects new-project and ZIP destinations in the main process rather than
+  accepting renderer-provided absolute paths;
+- creates a project only at a missing destination from the fixed bundled
+  regular-file template;
+- validates every project mutation through the canonical project service, pauses
+  the watcher during mutation, and rejects mutation while a build or maintenance
+  operation is active;
+- requires content-version checks before renaming or deleting an open file;
+- requires explicit modal confirmation before project deletion;
+- exposes recent projects through bounded opaque IDs and re-resolves each ID in
+  the main process before opening;
+- exports only regular files, skips links and junctions, excludes metadata,
+  generated, dependency, coverage, distribution, and VCS directories, and
+  replaces the destination through a temporary ZIP file; and
+- records release provenance as a tagged source archive plus installer and ASAR
+  SHA-256 values without embedding credentials.
 
 CodeMirror injects runtime styles, so the CSP currently permits inline styles.
 Inline and evaluated scripts remain disallowed. This exception is documented in
@@ -211,14 +227,15 @@ or execute user-controlled local programs and Perl configuration respectively.
 
 ## Future work
 
-Code signing, SmartScreen reputation, update integrity/rollback, and a separate
-clean Windows account or VM require release-candidate review. Automatic
-external-file reload/merge and any new preload or external-URL capability
-require their own validated contracts and tests. ADR-0005 defines the path/link
-policy; ADR-0006 defines the Electron boundary; ADR-0007 defines completed PDF
-loading and artifact actions; ADR-0008 defines live build and project watching;
-ADR-0009 defines structured diagnostic parsing and source links; ADR-0010
-defines the SyncTeX process, artifact, path, and renderer boundary; ADR-0011
-defines settings, toolchain readiness, `latexmk` trust, and cleanup; ADR-0012
-defines output bounds, recovery, support data, and navigation denial; ADR-0013
-defines Windows packaging, resources, onboarding, and uninstall behavior.
+Code signing, SmartScreen reputation, update integrity/rollback, and repeat
+validation on additional clean Windows accounts or VMs remain release
+operations. Automatic external-file reload/merge and any new preload or
+external-URL capability require their own validated contracts and tests.
+ADR-0005 defines the path/link policy; ADR-0006 defines the Electron boundary;
+ADR-0007 defines completed PDF loading and artifact actions; ADR-0008 defines
+live build and project watching; ADR-0009 defines structured diagnostic parsing
+and source links; ADR-0010 defines the SyncTeX process, artifact, path, and
+renderer boundary; ADR-0011 defines settings, toolchain readiness, `latexmk`
+trust, and cleanup; ADR-0012 defines output bounds, recovery, support data, and
+navigation denial; ADR-0013 defines Windows packaging, resources, onboarding,
+and uninstall behavior.

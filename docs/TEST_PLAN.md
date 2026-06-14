@@ -1,12 +1,12 @@
 # Test Plan
 
-## Sprint 11 scope
+## Sprint 12 scope
 
-Sprint 11 verifies all existing controls plus Windows package generation,
-development and packaged resource layouts, first-run onboarding, the editable
-sample project, clean-profile persistence, installation under a path containing
-spaces, high-DPI rendering, real packaged compilation/PDF preview, and uninstall
-behavior.
+Sprint 12 verifies the complete offline release candidate: all existing
+controls, project creation and file management, recent reopening, source-only
+ZIP export, 1,000-file and editor-latency performance, repeated-build memory,
+accessibility, previous-beta settings compatibility, tagged provenance, packaged
+real compilation/PDF preview, and uninstall behavior.
 
 | Check        | Command                   | Current evidence                                      |
 | ------------ | ------------------------- | ----------------------------------------------------- |
@@ -16,14 +16,16 @@ behavior.
 | Unit tests   | `pnpm test:unit`          | Bounds, retention, logging, navigation, reducer, core |
 | Component    | `pnpm test:component`     | Recovery, settings, editor, PDF, Problems, tree       |
 | Integration  | `pnpm test:integration`   | Recovery, process, output, session, compiler, IPC     |
+| Performance  | `pnpm test:performance`   | 1,000 files, input latency, repeated-build heap       |
 | Coverage     | `pnpm test:coverage`      | Enforces 85% aggregate statements and branches        |
 | E2E          | `pnpm test:e2e`           | Existing flows plus abnormal-shutdown recovery        |
 | Build        | `pnpm build`              | Main, renderer chunks, and sandbox preload bundle     |
-| Aggregate    | `pnpm check`              | Runs every current gate in sequence                   |
+| Aggregate    | `pnpm check`              | Runs deterministic, performance, E2E, and build gates |
 | Audit        | `pnpm audit:dependencies` | Fails on known high or critical findings              |
 | Unpacked app | `pnpm package:dir`        | Windows x64 ASAR development package                  |
 | Installer    | `pnpm package:win`        | Assisted per-user NSIS installer                      |
 | Packaged E2E | `pnpm test:packaged`      | Install, real compile, reopen, uninstall              |
+| Provenance   | `pnpm release:manifest`   | Tagged source, installer, ASAR hashes and toolchain   |
 
 ## Determinism
 
@@ -47,20 +49,30 @@ behavior.
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
   folder/compiler/SyncTeX/toolchain overrides. It verifies the complete
-  twenty-three-method bridge and absent Node globals, rapid typing coalescence,
+  thirty-one-method bridge and absent Node globals, rapid typing coalescence,
   queued handoff, non-overlapping compiler trace intervals, newest-result
   display, disabled auto-build plus manual compile, responsive editing,
   stale-result rejection, workspace restoration, minimum-window layout,
   version-conflict preservation, settings persistence, recipe and clean
-  arguments, allowlisted cleanup, first-run readiness states, screenshots, clean
-  shutdown, and fixture removal.
+  arguments, allowlisted cleanup, first-run readiness states, template project
+  creation, mutation with confirmed deletion, artifact-free ZIP export, opaque
+  recent reopening, accessibility checks, screenshots, clean shutdown, and
+  fixture removal.
 - The packaged Electron test uses the installed executable rather than
   development Electron. It installs into a path containing spaces, redirects
   Electron user data to a clean temporary profile, confirms the sandboxed
-  twenty-three-method bridge, runs the real MiKTeX self-test, opens the fixed
+  thirty-one-method bridge, runs the real MiKTeX self-test, opens the fixed
   sample, disables automation, edits and saves, compiles, renders the PDF,
-  captures a 150% scale screenshot, closes, reopens, verifies the edit, and
-  uninstalls.
+  captures a 150% scale screenshot, closes, reopens, verifies the edit, loads a
+  previous-beta settings profile without data loss, and uninstalls.
+- The performance suite creates 1,000 ordinary source files, bounds synchronous
+  hierarchy construction, measures the editor reducer's p95 input path against
+  50 ms, and observes heap after 500 completed builds with exposed GC.
+- The traceability test parses all SRS requirement and acceptance-scenario IDs
+  and requires each to appear in the traceability matrix.
+- Project export integration verifies ZIP signatures, source entries, and
+  exclusion of `.git`, `.texpulse`, `node_modules`, `dist`, `coverage`, and the
+  configured build directory.
 - The package harness confirms that the executable is removed while settings and
   the edited sample remain after uninstall. Test-owned preserved data is removed
   after the assertion.
@@ -112,8 +124,8 @@ behavior.
   PDF/log/SyncTeX/unknown files, nested directories, and skipped links or
   junctions.
 - Conditional native integration runs only with `TEXPULSE_RUN_NATIVE=1` and
-  compiles pdfLaTeX, XeLaTeX, LuaLaTeX, BibTeX, and Biber fixtures with real
-  MiKTeX.
+  compiles pdfLaTeX, XeLaTeX, LuaLaTeX, BibTeX, Biber, image-asset, and
+  spaces-in-path fixtures with real MiKTeX.
 - PDF component tests use controlled PDF.js document/page/render objects and no
   arbitrary sleeps.
 - The fake compiler emits a structurally valid one-page PDF and can
@@ -122,12 +134,12 @@ behavior.
   cannot observe partial JSON.
 - Real MiKTeX smoke evidence is run separately from deterministic automation.
 
-## Later test levels
+## Remaining operational test levels
 
-Performance benchmarks for 1,000-file projects and measured editor input latency
-remain later release evidence. Code-signing, SmartScreen reputation, and a
-separate clean Windows account or VM remain release-candidate evidence. Real
-MiKTeX results are labeled separately and generated PDFs are inspected.
+Code-signing and SmartScreen publisher reputation cannot be validated without a
+certificate. Additional clean Windows accounts or VMs remain useful
+cross-environment release observations. Real MiKTeX results are labeled
+separately and generated PDFs are inspected.
 
 ## Clean-state procedure
 
@@ -138,4 +150,6 @@ MiKTeX results are labeled separately and generated PDFs are inspected.
    available.
 5. Run `pnpm package:dir`, `pnpm package:win`, and `pnpm test:packaged` on the
    supported Windows host.
-6. Record the result in the sprint report.
+6. Tag the verified source and run `pnpm release:manifest` from a clean
+   worktree.
+7. Record the result in the sprint report.

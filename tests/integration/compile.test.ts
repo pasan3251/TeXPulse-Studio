@@ -19,6 +19,14 @@ const minimalFixture = join(
   "minimal-success",
   "main.tex",
 );
+const noPdfFixture = join(
+  currentDirectory,
+  "..",
+  "..",
+  "fixtures",
+  "no-pdf-output",
+  "main.tex",
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -134,7 +142,7 @@ describe("compileProject", () => {
   it("rejects a successful exit that produced no PDF", async () => {
     const project = await mkdtemp(join(tmpdir(), "texpulse no pdf "));
     temporaryDirectories.push(project);
-    await copyFile(minimalFixture, join(project, "main.tex"));
+    await copyFile(noPdfFixture, join(project, "main.tex"));
 
     const result = await compileProject(
       {
@@ -144,7 +152,7 @@ describe("compileProject", () => {
       {
         latexmkCommand: {
           executable: process.execPath,
-          prefixArgs: [fakeLatexmk, "--fake-no-pdf"],
+          prefixArgs: [fakeLatexmk],
         },
         engineExecutable: process.execPath,
       },

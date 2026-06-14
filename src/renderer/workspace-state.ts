@@ -64,6 +64,18 @@ export type WorkspaceAction =
       paneRatio?: number;
       settings?: LiveBuildSettings;
     }
+  | { type: "project-refreshed"; project: OpenedProject }
+  | {
+      type: "entry-renamed";
+      sourcePath: string;
+      destinationPath: string;
+      project: OpenedProject;
+    }
+  | {
+      type: "entry-deleted";
+      path: string;
+      project: OpenedProject;
+    }
   | {
       type: "files-restored";
       files: OpenedTextFile[];
@@ -152,6 +164,68 @@ export function workspaceReducer(
         settings:
           action.settings ?? defaultLiveBuildSettings(action.project.autoBuild),
       };
+    case "project-refreshed":
+      return invalidateProjectOutput({ ...state, project: action.project });
+    case "entry-renamed": {
+      const buffers: Record<string, EditorBuffer> = {};
+      for (const buffer of Object.values(state.buffers)) {
+        const path = remapEntryPath(
+          buffer.path,
+          action.sourcePath,
+          action.destinationPath,
+        );
+        buffers[path] = { ...buffer, path };
+      }
+      return invalidateProjectOutput({
+        ...state,
+        project: action.project,
+        buffers,
+        activePath:
+          state.activePath === null
+            ? null
+            : remapEntryPath(
+                state.activePath,
+                action.sourcePath,
+                action.destinationPath,
+              ),
+        loadingPath:
+          state.loadingPath === null
+            ? null
+            : remapEntryPath(
+                state.loadingPath,
+                action.sourcePath,
+                action.destinationPath,
+              ),
+        savingPaths: state.savingPaths.map((path) =>
+          remapEntryPath(path, action.sourcePath, action.destinationPath),
+        ),
+      });
+    }
+    case "entry-deleted": {
+      const buffers = Object.fromEntries(
+        Object.entries(state.buffers).filter(
+          ([path]) => !isEntryOrChild(path, action.path),
+        ),
+      );
+      return invalidateProjectOutput({
+        ...state,
+        project: action.project,
+        buffers,
+        activePath:
+          state.activePath !== null &&
+          !isEntryOrChild(state.activePath, action.path)
+            ? state.activePath
+            : (Object.keys(buffers)[0] ?? null),
+        loadingPath:
+          state.loadingPath !== null &&
+          isEntryOrChild(state.loadingPath, action.path)
+            ? null
+            : state.loadingPath,
+        savingPaths: state.savingPaths.filter(
+          (path) => !isEntryOrChild(path, action.path),
+        ),
+      });
+    }
     case "files-restored": {
       const buffers = { ...state.buffers };
       for (const file of action.files) {
@@ -483,4 +557,47 @@ export function workspaceReducer(
 
 export function isBufferModified(buffer: EditorBuffer): boolean {
   return buffer.content !== buffer.savedContent;
+}
+
+function invalidateProjectOutput(state: WorkspaceState): WorkspaceState {
+  return {
+    ...state,
+    build:
+      state.build === null
+        ? null
+        : {
+            ...state.build,
+            diagnostics: [],
+            visiblePdf:
+              state.build.visiblePdf === null
+                ? null
+                : { ...state.build.visiblePdf, isCurrent: false },
+          },
+    pdf:
+      state.pdf === null
+        ? null
+        : {
+            ...state.pdf,
+            artifact: { ...state.pdf.artifact, isCurrent: false },
+          },
+    navigationTarget: null,
+    pdfSyncTarget: null,
+    problemsOpen: false,
+  };
+}
+
+function remapEntryPath(
+  path: string,
+  sourcePath: string,
+  destinationPath: string,
+): string {
+  return path === sourcePath
+    ? destinationPath
+    : path.startsWith(`${sourcePath}/`)
+      ? `${destinationPath}${path.slice(sourcePath.length)}`
+      : path;
+}
+
+function isEntryOrChild(path: string, entryPath: string): boolean {
+  return path === entryPath || path.startsWith(`${entryPath}/`);
 }

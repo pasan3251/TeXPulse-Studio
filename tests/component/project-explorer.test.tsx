@@ -2,9 +2,9 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectExplorer } from "../../src/renderer/components/ProjectExplorer.js";
 
@@ -23,7 +23,20 @@ const project = {
     { path: "linked", kind: "link" as const, size: 0, modifiedAt },
   ],
   rootCandidates: [],
+  projectId: "a".repeat(16),
+  rootFile: "main.tex",
+  autoBuild: true,
+  settings: {
+    rootFile: "main.tex",
+    recipe: "latexmk-pdf" as const,
+    buildDirectory: ".texpulse/build",
+    autoBuild: true,
+    allowLatexmkRc: false,
+  },
+  settingsIssues: [],
 };
+
+afterEach(cleanup);
 
 describe("ProjectExplorer", () => {
   it("renders hierarchy, active file, modified marker, and inert links", async () => {
@@ -33,9 +46,16 @@ describe("ProjectExplorer", () => {
       <ProjectExplorer
         project={project}
         activePath="main.tex"
+        selectedPath="main.tex"
         modifiedPaths={new Set(["chapters/intro.tex"])}
         loadingPath={null}
+        onCreateFile={vi.fn()}
+        onCreateFolder={vi.fn()}
+        onDelete={vi.fn()}
+        onExport={vi.fn()}
         onOpenFile={onOpenFile}
+        onRename={vi.fn()}
+        onSelectEntry={vi.fn()}
       />,
     );
 
@@ -48,5 +68,32 @@ describe("ProjectExplorer", () => {
 
     await user.click(intro);
     expect(onOpenFile).toHaveBeenCalledWith("chapters/intro.tex");
+  });
+
+  it("exposes named project actions and selectable folders", async () => {
+    const user = userEvent.setup();
+    const onCreateFile = vi.fn();
+    const onSelectEntry = vi.fn();
+    render(
+      <ProjectExplorer
+        project={project}
+        activePath={null}
+        selectedPath={null}
+        modifiedPaths={new Set()}
+        loadingPath={null}
+        onCreateFile={onCreateFile}
+        onCreateFolder={vi.fn()}
+        onDelete={vi.fn()}
+        onExport={vi.fn()}
+        onOpenFile={vi.fn()}
+        onRename={vi.fn()}
+        onSelectEntry={onSelectEntry}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "New file" }));
+    await user.click(screen.getByRole("button", { name: "chapters" }));
+    expect(onCreateFile).toHaveBeenCalledOnce();
+    expect(onSelectEntry).toHaveBeenCalledWith("chapters");
   });
 });

@@ -184,6 +184,17 @@ button {
   background: #202c42;
 }
 
+.button.danger {
+  border-color: #b94a4a;
+  color: #fff1f1;
+  background: #8f3131;
+}
+
+.button.danger:hover:not(:disabled) {
+  border-color: #df6666;
+  background: #aa3d3d;
+}
+
 .button.large {
   min-height: 42px;
   padding: 0 20px;
@@ -203,14 +214,17 @@ button {
 }
 
 .project-panel {
+  display: grid;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  grid-template-rows: auto auto minmax(0, 1fr);
   border-right: 1px solid #243047;
   background: #10182a;
 }
 
 .project-panel.empty {
+  display: block;
   padding: 22px 18px;
   color: #7f8da4;
   font-size: 13px;
@@ -243,8 +257,39 @@ button {
   white-space: nowrap;
 }
 
+.project-actions {
+  display: flex;
+  gap: 5px;
+  padding: 8px;
+  border-bottom: 1px solid #1e293b;
+  flex-wrap: wrap;
+}
+
+.project-actions button {
+  min-height: 25px;
+  padding: 0 7px;
+  border: 1px solid #334155;
+  border-radius: 5px;
+  color: #aab6c8;
+  background: #172033;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.project-actions button:hover:not(:disabled),
+.project-actions button:focus-visible {
+  border-color: #52627b;
+  color: #f8fafc;
+  outline: none;
+}
+
+.project-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .project-tree {
-  height: calc(100% - 70px);
+  min-height: 0;
   overflow: auto;
   padding: 10px 0 24px;
 }
@@ -283,6 +328,11 @@ button.tree-row:hover {
   color: #fff7df;
   background: linear-gradient(90deg, rgb(245 158 11 / 16%), transparent);
   box-shadow: inset 2px 0 #f59e0b;
+}
+
+.tree-row.selected:not(.active) {
+  color: #e2e8f0;
+  background: rgb(148 163 184 / 10%);
 }
 
 .tree-row.static {
@@ -413,6 +463,44 @@ button.tree-row:hover {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.recent-projects {
+  display: grid;
+  gap: 7px;
+  margin-top: 30px;
+}
+
+.recent-projects h2 {
+  margin: 0 0 3px;
+  color: #dbe4f0;
+  font-size: 12px;
+}
+
+.recent-project {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid #2d3a52;
+  border-radius: 7px;
+  color: #dbe4f0;
+  background: #10182a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-project:hover,
+.recent-project:focus-visible {
+  border-color: #7b5b22;
+  outline: none;
+}
+
+.recent-project span {
+  overflow: hidden;
+  color: #7f8da4;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-tabbar {
@@ -571,6 +659,7 @@ button.tree-row:hover {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
   padding: 12px 14px;
   border-bottom: 1px solid #243047;
   background: #10182a;
@@ -621,7 +710,10 @@ button.tree-row:hover {
 }
 
 .pdf-actions {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-inline-start: auto;
 }
 
 .pdf-toolbar {
@@ -631,6 +723,7 @@ button.tree-row:hover {
   color: #93a1b5;
   background: #0f1728;
   font-size: 10px;
+  flex-wrap: wrap;
 }
 
 .toolbar-spacer {
@@ -640,7 +733,6 @@ button.tree-row:hover {
 .sync-hint {
   margin-left: 4px;
   color: #718096;
-  white-space: nowrap;
 }
 
 .icon-button {
@@ -1020,6 +1112,56 @@ button.tree-row:hover {
   color: #dbe4f0;
   background: #10182a;
   box-shadow: 0 28px 90px rgb(0 0 0 / 55%);
+}
+
+.project-action-dialog {
+  display: grid;
+  width: min(520px, calc(100vw - 32px));
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid #475569;
+  border-radius: 14px;
+  color: #dbe4f0;
+  background: #10182a;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 55%);
+}
+
+.project-action-dialog h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.project-action-dialog p {
+  margin: 0;
+  color: #aab6c8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.project-action-dialog label {
+  display: grid;
+  gap: 6px;
+  color: #9eabc0;
+  font-size: 10px;
+}
+
+.project-action-dialog input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #3a465d;
+  border-radius: 7px;
+  color: #e2e8f0;
+  background: #0d1424;
+  font: inherit;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .recovery-dialog > header,

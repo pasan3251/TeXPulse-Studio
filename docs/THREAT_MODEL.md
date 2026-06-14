@@ -37,7 +37,7 @@ Assumptions:
 - the user controls the opened project and installed native toolchain;
 - no cloud service, analytics, collaboration, remote compilation, update
   service, or multi-user execution exists;
-- packaging and installer behavior begin in Sprint 11; and
+- project creation and ZIP destinations are selected by the main process; and
 - explicitly selected custom tools and trusted `latexmk` configuration are
   user-approved local code execution.
 
@@ -54,7 +54,7 @@ Out of scope:
 flowchart LR
   U["Local user"] --> R["Sandboxed renderer"]
   P["Untrusted project files"] --> M["Privileged Electron main process"]
-  R -->|"22 fixed validated methods"| L["Context-isolated preload"]
+  R -->|"31 fixed validated methods"| L["Context-isolated preload"]
   L -->|"Strict IPC schemas and sender checks"| M
   M --> F["Canonical project service"]
   M --> B["Build controller"]
@@ -110,13 +110,14 @@ encrypt data at rest.
 | TM-001 | TeX or configuration executes arbitrary commands                 | `-no-shell-escape`; `-norc` by default; explicit trust warning; fixed executable discovery; argument arrays; no ordinary shell                                                                           | Medium when the user explicitly trusts custom tools or `latexmk` Perl configuration                      |
 | TM-002 | Runaway compiler exhausts CPU, memory, output capture, or disk   | Configurable timeout; cancellation; Windows process-tree cleanup; 8 MiB aggregate process capture; 4,096 files, 128 MiB per file, and 512 MiB accepted-generation quotas; maximum 8 retained generations | Medium: quotas are checked after process exit, so transient resource use remains possible before timeout |
 | TM-003 | Traversal, links, or malformed paths escape the project          | Canonical project root; relative path normalization; component `lstat`; no internal link/junction traversal; validated generated paths                                                                   | Low                                                                                                      |
-| TM-004 | Renderer compromise reaches filesystem or native processes       | Sandbox; no Node integration; context isolation; web security; 22 fixed methods; sender/frame validation; strict schemas; local CSP                                                                      | Low                                                                                                      |
+| TM-004 | Renderer compromise reaches filesystem or native processes       | Sandbox; no Node integration; context isolation; web security; 31 fixed methods; sender/frame validation; strict schemas; local CSP                                                                      | Low                                                                                                      |
 | TM-005 | Malicious or stale PDF abuses preview or replaces current output | Completed-output loading only; 100 MiB PDF limit; local pinned PDF.js worker; opaque artifact identity; current-generation revalidation; retained last-successful output                                 | Low                                                                                                      |
 | TM-006 | Recovery data overwrites source or is poisoned                   | Project-ID and path validation; strict schema; 20-buffer, 2 MiB-buffer, 10 MiB-total limits; explicit review; restore to dirty editor state only; version-token save                                     | Low                                                                                                      |
 | TM-007 | Logs leak source or local paths                                  | Structured event allowlist; no document content by default; 1 MiB current plus one rotated log; bounded values; user-initiated export; home/project path redaction; local-only storage                   | Medium because native raw compiler logs intentionally retain local troubleshooting text                  |
 | TM-008 | Races or stale results corrupt files or visible output           | SHA-256 version tokens; atomic replacement; build IDs and monotonic generations; newest-only queue; renderer revision checks                                                                             | Low                                                                                                      |
 | TM-009 | Dependency supply-chain vulnerability enters release             | Exact dependency versions; frozen lockfile; lifecycle-script allowlist; `pnpm audit --audit-level high` in CI                                                                                            | Medium because audits cannot detect every compromised or unknown package issue                           |
 | TM-010 | External navigation or popup opens an unsafe URL                 | Renderer navigation and popup requests are denied; unexpected scheme is logged without retaining the full URL; CSP blocks network connections                                                            | Low                                                                                                      |
+| TM-011 | Project mutation or export escapes the project or leaks output   | Main-process destinations; canonical relative mutation paths; version tokens; paused watcher; idle-session requirement; link-safe ZIP enumeration; generated/dependency/VCS exclusions                   | Low                                                                                                      |
 
 ## Abuse cases
 
@@ -133,11 +134,16 @@ encrypt data at rest.
   explicit review and does not write the project until the user saves.
 - An attempted popup or external navigation is denied rather than delegated to
   the operating system.
+- A mutation containing traversal, a stale file version, or a link component is
+  rejected before data changes.
+- A ZIP export skips links and generated/dependency directories and never
+  accepts an absolute renderer-provided destination.
 
 ## Security requirements and verification
 
-- `NFR-SEC-001` through `NFR-SEC-012`: Electron controls, path checks, process
-  policy, output bounds, URL denial, CSP, and dependency audit.
+- `NFR-SEC-001` through `NFR-SEC-013`: Electron controls, path checks, process
+  policy, output bounds, URL denial, CSP, dependency audit, and explicit
+  rejection of unsandboxed multi-user compilation.
 - `NFR-PRIV-001` through `NFR-PRIV-004`: local operation, no analytics or
   uploads, and practical support-export redaction.
 - `FR-REC-001` through `FR-REC-008`: bounded recovery, explicit review,
@@ -153,8 +159,8 @@ a rendered PDF are reviewed separately.
 
 ## Residual risks and follow-up
 
-- TeX executes with the desktop user's permissions. Sprint 10 does not add an OS
-  sandbox, restricted token, VM, or filesystem quota.
+- TeX executes with the desktop user's permissions. The release candidate does
+  not add an OS sandbox, restricted token, VM, or filesystem quota.
 - Generated-output quotas reject and remove output after the compiler exits;
   they do not prevent transient disk growth during the compile.
 - Enabling custom executables or `latexmk` configuration expands the trusted
@@ -162,5 +168,8 @@ a rendered PDF are reviewed separately.
 - Recovery and application logs are local plaintext files protected by the
   user's Windows profile permissions.
 - MiKTeX package installation and update behavior is outside the application.
-- Packaging, installer, signing, installed-path, and clean-profile risks are
-  deferred to Sprint 11 and require separate review.
+- The installer remains unsigned. SmartScreen reputation and signed-artifact
+  operations require a future certificate and controlled signing environment.
+- Classic NSIS output embeds build metadata, so the tagged source archive and
+  recorded artifact hashes are the provenance controls; byte-identical installer
+  rebuilds are not claimed.
