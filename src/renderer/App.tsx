@@ -13,7 +13,10 @@ import type { TeXPulseApi } from "../ipc/api-contract.js";
 import type { BuildDiagnostic } from "../ipc/build-contracts.js";
 import { BuildLog } from "./components/BuildLog.js";
 import { ProblemsPanel } from "./components/ProblemsPanel.js";
-import { ProjectExplorer } from "./components/ProjectExplorer.js";
+import {
+  ProjectExplorer,
+  type ProjectClipboard,
+} from "./components/ProjectExplorer.js";
 import {
   ProjectActionDialog,
   type ProjectActionKind,
@@ -47,6 +50,7 @@ import type {
   RecentProjectsResult,
 } from "../ipc/project-contracts.js";
 import { formatGitStatus } from "./git-status-label.js";
+import { selectBuildRoot } from "./build-root.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -75,6 +79,7 @@ type RecentProject = Extract<
 interface PendingProjectAction {
   kind: ProjectActionKind;
   initialPath: string;
+  sourcePath: string | null;
 }
 
 function persistWorkspaceState(
@@ -129,6 +134,8 @@ export function App({ api = window.texpulse }: AppProps) {
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(
     null,
   );
+  const [projectClipboard, setProjectClipboard] =
+    useState<ProjectClipboard | null>(null);
   const [projectAction, setProjectAction] =
     useState<PendingProjectAction | null>(null);
   const [projectActionBusy, setProjectActionBusy] = useState(false);
@@ -307,6 +314,7 @@ export function App({ api = window.texpulse }: AppProps) {
     gitStatusRequestRef.current += 1;
     setGitStatus(null);
     setSelectedEntryPath(null);
+    setProjectClipboard(null);
     setProjectAction(null);
     void refreshRecentProjects();
 
@@ -418,11 +426,18 @@ export function App({ api = window.texpulse }: AppProps) {
   ): Promise<void> => {
     synctexRequestRef.current += 1;
     setSyncBusy(false);
-    const rootFile = stateRef.current.project?.rootFile;
-    if (rootFile === null || rootFile === undefined) {
+    const rootFile = selectBuildRoot(
+      stateRef.current.activePath,
+      stateRef.current.project?.rootFile,
+      stateRef.current.project?.rootCandidates.map(
+        (candidate) => candidate.path,
+      ),
+    );
+    if (rootFile === null) {
       dispatch({
         type: "build-operation-failed",
-        message: "No LaTeX root file was detected for this project.",
+        message:
+          "Open a .tex file or select a project root file before compiling.",
       });
       return;
     }
@@ -1103,8 +1118,11 @@ export function App({ api = window.texpulse }: AppProps) {
     });
   };
 
-  const beginProjectAction = (kind: ProjectActionKind): void => {
-    const selected = selectedEntryPath;
+  const beginProjectAction = (
+    kind: ProjectActionKind,
+    requestedPath: string | null = selectedEntryPath,
+  ): void => {
+    const selected = requestedPath;
     const entry = stateRef.current.project?.entries.find(
       (candidate) => candidate.path === selected,
     );
@@ -1123,7 +1141,12 @@ export function App({ api = window.texpulse }: AppProps) {
     if ((kind === "rename" || kind === "delete") && selected === null) {
       return;
     }
-    setProjectAction({ kind, initialPath });
+    setSelectedEntryPath(selected);
+    setProjectAction({
+      kind,
+      initialPath,
+      sourcePath: kind === "rename" || kind === "delete" ? selected : null,
+    });
   };
 
   const confirmProjectAction = async (path: string): Promise<void> => {
@@ -1142,7 +1165,7 @@ export function App({ api = window.texpulse }: AppProps) {
     }
 
     setProjectActionBusy(true);
-    const sourcePath = selectedEntryPath;
+    const sourcePath = action.sourcePath;
     const selectedEntry = project.entries.find(
       (entry) => entry.path === sourcePath,
     );
@@ -1234,7 +1257,88 @@ export function App({ api = window.texpulse }: AppProps) {
     });
   };
 
+  const revealProjectEntry = async (path: string): Promise<void> => {
+    const result = await api.revealEntry({ path });
+    if (!result.ok) {
+      dispatch({ type: "operation-failed", message: result.error.message });
+    }
+  };
+
+  const pasteProjectEntry = async (directoryPath: string): Promise<void> => {
+    const clipboard = projectClipboard;
+    const project = stateRef.current.project;
+    if (clipboard === null || project === null) {
+      return;
+    }
+    if (!(await savePaths(null, false))) {
+      dispatch({
+        type: "operation-failed",
+        message: "Paste stopped because current changes could not save.",
+      });
+      return;
+    }
+
+    const destinationPath = pasteDestination(
+      clipboard,
+      directoryPath,
+      project.entries.map((entry) => entry.path),
+    );
+    if (destinationPath === clipboard.sourcePath) {
+      dispatch({
+        type: "external-change-detected",
+        message: `${clipboard.sourcePath} is already in that folder.`,
+      });
+      return;
+    }
+
+    setProjectActionBusy(true);
+    const expectedVersion =
+      stateRef.current.buffers[clipboard.sourcePath]?.version;
+    const result =
+      clipboard.operation === "copy"
+        ? await api.copyEntry({
+            sourcePath: clipboard.sourcePath,
+            destinationPath,
+          })
+        : await api.renameEntry({
+            sourcePath: clipboard.sourcePath,
+            destinationPath,
+            ...(expectedVersion === undefined ? {} : { expectedVersion }),
+          });
+    setProjectActionBusy(false);
+    if (!result.ok) {
+      dispatch({ type: "operation-failed", message: result.error.message });
+      return;
+    }
+
+    if (clipboard.operation === "cut") {
+      dispatch({
+        type: "entry-renamed",
+        sourcePath: clipboard.sourcePath,
+        destinationPath,
+        project: result.value,
+      });
+      setProjectClipboard(null);
+    } else {
+      dispatch({ type: "project-refreshed", project: result.value });
+    }
+    setSelectedEntryPath(destinationPath);
+    dispatch({
+      type: "external-change-detected",
+      message:
+        clipboard.operation === "cut"
+          ? `Moved ${clipboard.sourcePath} to ${destinationPath}.`
+          : `Copied ${clipboard.sourcePath} to ${destinationPath}.`,
+    });
+    void refreshGitStatus(result.value.projectId);
+  };
+
   const projectTitle = state.project?.name ?? "No project open";
+  const selectedBuildRoot = selectBuildRoot(
+    state.activePath,
+    state.project?.rootFile,
+    state.project?.rootCandidates.map((candidate) => candidate.path),
+  );
   const isAnyFileSaving = state.savingPaths.length > 0;
   const isSaving =
     activeBuffer !== undefined && state.savingPaths.includes(activeBuffer.path);
@@ -1399,9 +1503,12 @@ export function App({ api = window.texpulse }: AppProps) {
             type="button"
             className="button compile"
             disabled={
-              state.project?.rootFile === null ||
-              state.project === null ||
-              buildBusy
+              selectedBuildRoot === null || state.project === null || buildBusy
+            }
+            title={
+              selectedBuildRoot === null
+                ? "Open a .tex file or configure a project root."
+                : `Compile ${selectedBuildRoot}`
             }
             onClick={() => {
               void coordinatorRef.current?.manualBuild();
@@ -1454,14 +1561,35 @@ export function App({ api = window.texpulse }: AppProps) {
             selectedPath={selectedEntryPath}
             modifiedPaths={modifiedPaths}
             loadingPath={state.loadingPath}
-            onCreateFile={() => {
-              beginProjectAction("create-file");
+            clipboard={projectClipboard}
+            onCopy={(path) => {
+              setProjectClipboard({ operation: "copy", sourcePath: path });
+              dispatch({
+                type: "external-change-detected",
+                message: `Copied ${path}. Choose a folder and paste it.`,
+              });
             }}
-            onCreateFolder={() => {
-              beginProjectAction("create-folder");
+            onCreateFile={(parentPath) => {
+              beginProjectAction(
+                "create-file",
+                parentPath === "" ? null : (parentPath ?? selectedEntryPath),
+              );
             }}
-            onDelete={() => {
-              beginProjectAction("delete");
+            onCreateFolder={(parentPath) => {
+              beginProjectAction(
+                "create-folder",
+                parentPath === "" ? null : (parentPath ?? selectedEntryPath),
+              );
+            }}
+            onCut={(path) => {
+              setProjectClipboard({ operation: "cut", sourcePath: path });
+              dispatch({
+                type: "external-change-detected",
+                message: `Cut ${path}. Choose a folder and paste it.`,
+              });
+            }}
+            onDelete={(path) => {
+              beginProjectAction("delete", path);
             }}
             onExport={() => {
               void exportProject();
@@ -1469,8 +1597,14 @@ export function App({ api = window.texpulse }: AppProps) {
             onOpenFile={(path) => {
               void openFile(path);
             }}
-            onRename={() => {
-              beginProjectAction("rename");
+            onPaste={(directoryPath) => {
+              void pasteProjectEntry(directoryPath);
+            }}
+            onRename={(path) => {
+              beginProjectAction("rename", path);
+            }}
+            onReveal={(path) => {
+              void revealProjectEntry(path);
             }}
             onSelectEntry={setSelectedEntryPath}
           />
@@ -1644,8 +1778,8 @@ export function App({ api = window.texpulse }: AppProps) {
                 </div>
                 <strong>No completed PDF yet</strong>
                 <span>
-                  {state.project?.rootFile === null
-                    ? "No LaTeX root file was detected."
+                  {selectedBuildRoot === null
+                    ? "Open a .tex file or configure a project root."
                     : "Stop typing to save and refresh the preview."}
                 </span>
               </section>
@@ -1801,6 +1935,45 @@ export function App({ api = window.texpulse }: AppProps) {
 function parentProjectPath(path: string): string {
   const separator = path.lastIndexOf("/");
   return separator === -1 ? "" : path.slice(0, separator);
+}
+
+function pasteDestination(
+  clipboard: ProjectClipboard,
+  directoryPath: string,
+  existingPaths: readonly string[],
+): string {
+  const name = projectBaseName(clipboard.sourcePath);
+  const direct = joinProjectPath(directoryPath, name);
+  if (
+    clipboard.operation === "cut" ||
+    (direct !== clipboard.sourcePath && !existingPaths.includes(direct))
+  ) {
+    return direct;
+  }
+
+  const dot = name.lastIndexOf(".");
+  const hasExtension = dot > 0;
+  const stem = hasExtension ? name.slice(0, dot) : name;
+  const extension = hasExtension ? name.slice(dot) : "";
+  for (let index = 1; index < 10_000; index += 1) {
+    const suffix = index === 1 ? " copy" : ` copy ${String(index)}`;
+    const candidate = joinProjectPath(
+      directoryPath,
+      `${stem}${suffix}${extension}`,
+    );
+    if (!existingPaths.includes(candidate)) {
+      return candidate;
+    }
+  }
+  return joinProjectPath(directoryPath, `${stem} copy${extension}`);
+}
+
+function projectBaseName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+function joinProjectPath(directoryPath: string, name: string): string {
+  return directoryPath === "" ? name : `${directoryPath}/${name}`;
 }
 
 function sourcePosition(

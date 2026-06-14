@@ -58,7 +58,7 @@ Out of scope:
 flowchart LR
   U["Local user"] --> R["Sandboxed renderer"]
   P["Untrusted project files"] --> M["Privileged Electron main process"]
-  R -->|"32 fixed validated methods"| L["Context-isolated preload"]
+  R -->|"34 fixed validated methods"| L["Context-isolated preload"]
   L -->|"Strict IPC schemas and sender checks"| M
   M --> F["Canonical project service"]
   M --> B["Build controller"]
@@ -114,7 +114,7 @@ encrypt data at rest.
 | TM-001 | TeX or configuration executes arbitrary commands                 | `-no-shell-escape`; `-norc` by default; explicit trust warning; fixed executable discovery; argument arrays; no ordinary shell                                                                           | Medium when the user explicitly trusts custom tools or `latexmk` Perl configuration                      |
 | TM-002 | Runaway compiler exhausts CPU, memory, output capture, or disk   | Configurable timeout; cancellation; Windows process-tree cleanup; 8 MiB aggregate process capture; 4,096 files, 128 MiB per file, and 512 MiB accepted-generation quotas; maximum 8 retained generations | Medium: quotas are checked after process exit, so transient resource use remains possible before timeout |
 | TM-003 | Traversal, links, or malformed paths escape the project          | Canonical project root; relative path normalization; component `lstat`; no internal link/junction traversal; validated generated paths                                                                   | Low                                                                                                      |
-| TM-004 | Renderer compromise reaches filesystem or native processes       | Sandbox; no Node integration; context isolation; web security; 32 fixed methods; sender/frame validation; strict schemas; local CSP                                                                      | Low                                                                                                      |
+| TM-004 | Renderer compromise reaches filesystem or native processes       | Sandbox; no Node integration; context isolation; web security; 34 fixed methods; sender/frame validation; strict schemas; local CSP                                                                      | Low                                                                                                      |
 | TM-005 | Malicious or stale PDF abuses preview or replaces current output | Completed-output loading only; 100 MiB PDF limit; local pinned PDF.js worker; opaque artifact identity; current-generation revalidation; retained last-successful output                                 | Low                                                                                                      |
 | TM-006 | Recovery data overwrites source or is poisoned                   | Project-ID and path validation; strict schema; 20-buffer, 2 MiB-buffer, 10 MiB-total limits; explicit review; restore to dirty editor state only; version-token save                                     | Low                                                                                                      |
 | TM-007 | Logs leak source or local paths                                  | Structured event allowlist; no document content by default; 1 MiB current plus one rotated log; bounded values; user-initiated export; home/project path redaction; local-only storage                   | Medium because native raw compiler logs intentionally retain local troubleshooting text                  |

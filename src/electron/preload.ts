@@ -15,6 +15,7 @@ import type {
   PdfArtifactRequest,
 } from "../ipc/build-contracts.js";
 import type {
+  CopyProjectEntryRequest,
   CreateProjectEntryRequest,
   CreateTextFileRequest,
   DeleteProjectEntryRequest,
@@ -37,6 +38,8 @@ import type {
 import type { SaveRecoveryRequest } from "../ipc/recovery-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
+  copyEntry: (request: CopyProjectEntryRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.copyEntry, request),
   createProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.create),
   createDirectory: (request: CreateProjectEntryRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.createDirectory, request),
@@ -53,6 +56,8 @@ const api: TeXPulseApi = Object.freeze({
   openSampleProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.openSample),
   readTextFile: (request: ProjectPathRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.readTextFile, request),
+  revealEntry: (request: ProjectPathRequest) =>
+    ipcRenderer.invoke(PROJECT_CHANNELS.revealEntry, request),
   renameEntry: (request: RenameProjectEntryRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.renameEntry, request),
   writeTextFile: (request: ProjectWriteRequest) =>

@@ -113,7 +113,7 @@ application must:
 - add no collaboration menu item;
 - load no collaboration dependency;
 - preserve the current Content Security Policy;
-- preserve the existing 32 fixed stable preload methods.
+- preserve the existing 34 fixed stable preload methods.
 
 The future flag name should be `TEXPULSE_EXPERIMENTAL_COLLABORATION=1` unless an
 ADR chooses another name. Enabling the flag must show a visible experimental

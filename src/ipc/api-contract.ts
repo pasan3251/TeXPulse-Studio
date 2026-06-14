@@ -9,6 +9,7 @@ import type {
 } from "./build-contracts.js";
 import type { GlobalSettings } from "../settings/settings-types.js";
 import type {
+  CopyProjectEntryRequest,
   CreateProjectEntryRequest,
   CreateTextFileRequest,
   DeleteProjectEntryRequest,
@@ -18,6 +19,7 @@ import type {
   OpenRecentProjectRequest,
   ProjectMutationResult,
   ProjectFileChange,
+  ProjectEntryActionResult,
   ProjectPathRequest,
   ProjectWriteRequest,
   ReadTextFileResult,
@@ -49,6 +51,7 @@ import type {
 } from "./recovery-contracts.js";
 
 export interface TeXPulseApi {
+  copyEntry(request: CopyProjectEntryRequest): Promise<ProjectMutationResult>;
   createProject(): Promise<OpenProjectResult>;
   createDirectory(
     request: CreateProjectEntryRequest,
@@ -68,6 +71,7 @@ export interface TeXPulseApi {
   ): Promise<OpenProjectResult>;
   openSampleProject(): Promise<OpenProjectResult>;
   readTextFile(request: ProjectPathRequest): Promise<ReadTextFileResult>;
+  revealEntry(request: ProjectPathRequest): Promise<ProjectEntryActionResult>;
   renameEntry(
     request: RenameProjectEntryRequest,
   ): Promise<ProjectMutationResult>;

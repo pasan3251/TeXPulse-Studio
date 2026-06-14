@@ -103,6 +103,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "clearLocalData",
         "clearRecovery",
         "compileProject",
+        "copyEntry",
         "createDirectory",
         "createProject",
         "createTextFile",
@@ -123,6 +124,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "openSampleProject",
         "readTextFile",
         "renameEntry",
+        "revealEntry",
         "revealPdf",
         "saveGlobalSettings",
         "saveProjectSettings",
@@ -284,6 +286,64 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     ).toBeVisible();
     expect(await readTrace()).toHaveLength(5);
     await expect(introEditor).toContainText("Unsaved local intro");
+  } finally {
+    await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("compiles the active TeX file instead of always using main.tex", async () => {
+  const projectDirectory = await mkdtemp(
+    join(tmpdir(), "texpulse active root e2e "),
+  );
+  const tracePath = join(projectDirectory, ".texpulse", "build-trace.jsonl");
+  await writeFile(
+    join(projectDirectory, "main.tex"),
+    "\\documentclass{article}\\begin{document}Main document\\end{document}",
+  );
+  await writeFile(
+    join(projectDirectory, "appendix.tex"),
+    "\\documentclass{article}\\begin{document}Active appendix\\end{document}",
+  );
+  const electronApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+      TEXPULSE_E2E_NODE: process.execPath,
+      TEXPULSE_E2E_PROJECT: projectDirectory,
+      TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+      TEXPULSE_E2E_USER_DATA: join(
+        projectDirectory,
+        ".texpulse",
+        "e2e-profile",
+      ),
+      TEXPULSE_FAKE_TRACE: tracePath,
+    },
+  });
+
+  try {
+    const page = await electronApp.firstWindow();
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    await page.getByLabel("Auto build").uncheck();
+    await page.getByRole("button", { name: /appendix\.tex/u }).click();
+    await expect(page.getByLabel("Editor for appendix.tex")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Compile", exact: true }),
+    ).toHaveAttribute("title", "Compile appendix.tex");
+
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect(page.getByText("appendix.pdf")).toBeVisible();
+    const traces = (await readFile(tracePath, "utf8"))
+      .trim()
+      .split(/\r?\n/u)
+      .map((line) => JSON.parse(line) as BuildTrace);
+    expect(traces).toHaveLength(1);
+    expect(traces[0]?.source).toContain("Active appendix");
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });
@@ -792,7 +852,15 @@ test("creates, manages, exports, and reopens a project through recent projects",
     await page.keyboard.insertText("Release candidate source\n");
     await page.getByRole("button", { name: "Save", exact: true }).click();
 
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page
+      .getByRole("button", { name: /intro\.tex/u })
+      .click({ button: "right" });
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-15-project-context-menu.png"),
+    });
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     const renameDialog = page.getByRole("dialog", {
       name: "Rename or move entry",
     });
@@ -802,7 +870,10 @@ test("creates, manages, exports, and reopens a project through recent projects",
     await renameDialog.getByRole("button", { name: "Apply change" }).click();
     await expect(page.getByLabel("Editor for chapters/body.tex")).toBeVisible();
 
-    await page.getByRole("button", { name: "Delete" }).click();
+    await page
+      .getByRole("button", { name: /body\.tex/u })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click();
     const deleteDialog = page.getByRole("dialog", {
       name: "Delete project entry",
     });
@@ -814,7 +885,10 @@ test("creates, manages, exports, and reopens a project through recent projects",
     await expect(
       page.getByRole("button", { name: /body\.tex/u }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Delete" }).click();
+    await page
+      .getByRole("button", { name: /body\.tex/u })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click();
     await page
       .getByRole("dialog", { name: "Delete project entry" })
       .getByRole("button", { name: "Delete permanently" })
@@ -830,7 +904,10 @@ test("creates, manages, exports, and reopens a project through recent projects",
       .getByLabel("Project-relative path")
       .fill("chapters/kept.tex");
     await page.keyboard.press("Enter");
-    await page.getByRole("button", { name: "Export ZIP" }).click();
+    await page
+      .getByRole("navigation", { name: "Created Project files" })
+      .dispatchEvent("contextmenu", { clientX: 120, clientY: 500 });
+    await page.getByRole("menuitem", { name: "Export Project ZIP" }).click();
     await expect(
       page.getByText(/Exported 2 source files to ZIP/u),
     ).toBeVisible();
@@ -858,8 +935,6 @@ test("creates, manages, exports, and reopens a project through recent projects",
     });
     expect(accessibility).toEqual({ duplicateIds: [], unnamedButtons: 0 });
 
-    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
-    await mkdir(screenshotDirectory, { recursive: true });
     await page.screenshot({
       path: join(
         screenshotDirectory,

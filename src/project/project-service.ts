@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -295,6 +297,102 @@ export class ProjectService {
     await rename(sourceAbsolute, destinationAbsolute);
   }
 
+  async copyEntry(sourcePath: string, destinationPath: string): Promise<void> {
+    const source = normalizeProjectPath(sourcePath);
+    const destination = normalizeProjectPath(destinationPath);
+    const sourceIdentity = ignorePathKey(source);
+    const destinationIdentity = ignorePathKey(destination);
+    if (
+      destinationIdentity === sourceIdentity ||
+      destinationIdentity.startsWith(`${sourceIdentity}/`)
+    ) {
+      throw new ProjectError(
+        "invalid-path",
+        "A project entry cannot be copied into itself.",
+        destination,
+      );
+    }
+
+    const sourceAbsolute = await resolveProjectPath(this.root, source);
+    const destinationAbsolute = await resolveProjectPath(
+      this.root,
+      destination,
+      { allowMissing: true },
+    );
+    await resolveProjectPath(
+      this.root,
+      toPortableProjectPath(relative(this.root, dirname(destinationAbsolute))),
+      { allowRoot: true },
+    );
+
+    try {
+      await lstat(destinationAbsolute);
+      throw new ProjectError(
+        "already-exists",
+        `Project entry already exists: ${destination}`,
+        destination,
+      );
+    } catch (error) {
+      if (!isMissingPathError(error)) {
+        throw error;
+      }
+    }
+
+    await this.assertCopyableTree(sourceAbsolute, source);
+    let ownsDestination = false;
+    try {
+      await copyProjectEntry(
+        sourceAbsolute,
+        destinationAbsolute,
+        source,
+        () => {
+          ownsDestination = true;
+        },
+      );
+    } catch (error) {
+      if (ownsDestination || !isAlreadyExistsError(error)) {
+        await rm(destinationAbsolute, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      }
+      if (isAlreadyExistsError(error)) {
+        throw new ProjectError(
+          "already-exists",
+          `Project entry already exists: ${destination}`,
+          destination,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async resolveEntryPath(projectPath: string): Promise<{
+    absolutePath: string;
+    kind: "directory" | "file";
+  }> {
+    const normalized = normalizeProjectPath(projectPath);
+    const absolutePath = await resolveProjectPath(this.root, normalized);
+    const entryStat = await lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) {
+      throw new ProjectError(
+        "link-not-allowed",
+        `Project links cannot be opened: ${normalized}`,
+        normalized,
+      );
+    }
+    if (!entryStat.isDirectory() && !entryStat.isFile()) {
+      throw new ProjectError(
+        "not-file",
+        `Project entry cannot be opened: ${normalized}`,
+        normalized,
+      );
+    }
+    return {
+      absolutePath,
+      kind: entryStat.isDirectory() ? "directory" : "file",
+    };
+  }
+
   async deleteEntry(
     projectPath: string,
     options: { recursive?: boolean; expectedVersion?: string } = {},
@@ -350,6 +448,75 @@ export class ProjectService {
       );
     }
   }
+
+  private async assertCopyableTree(
+    absolutePath: string,
+    projectPath: string,
+  ): Promise<void> {
+    const entryStat = await lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) {
+      throw new ProjectError(
+        "link-not-allowed",
+        `Project links cannot be copied: ${projectPath}`,
+        projectPath,
+      );
+    }
+    if (entryStat.isFile()) {
+      return;
+    }
+    if (!entryStat.isDirectory()) {
+      throw new ProjectError(
+        "not-file",
+        `Only regular project files and directories can be copied: ${projectPath}`,
+        projectPath,
+      );
+    }
+    const children = await readdir(absolutePath, { withFileTypes: true });
+    for (const child of children) {
+      await this.assertCopyableTree(
+        resolve(absolutePath, child.name),
+        `${projectPath}/${child.name}`,
+      );
+    }
+  }
+}
+
+async function copyProjectEntry(
+  sourceAbsolute: string,
+  destinationAbsolute: string,
+  sourceProjectPath: string,
+  onDestinationCreated?: () => void,
+): Promise<void> {
+  const sourceStat = await lstat(sourceAbsolute);
+  if (sourceStat.isSymbolicLink()) {
+    throw new ProjectError(
+      "link-not-allowed",
+      `Project links cannot be copied: ${sourceProjectPath}`,
+      sourceProjectPath,
+    );
+  }
+  if (sourceStat.isDirectory()) {
+    await mkdir(destinationAbsolute);
+    onDestinationCreated?.();
+    const children = await readdir(sourceAbsolute, { withFileTypes: true });
+    for (const child of children) {
+      await copyProjectEntry(
+        resolve(sourceAbsolute, child.name),
+        resolve(destinationAbsolute, child.name),
+        `${sourceProjectPath}/${child.name}`,
+      );
+    }
+    return;
+  }
+  if (!sourceStat.isFile()) {
+    throw new ProjectError(
+      "not-file",
+      `Only regular project files and directories can be copied: ${sourceProjectPath}`,
+      sourceProjectPath,
+    );
+  }
+  await copyFile(sourceAbsolute, destinationAbsolute, constants.COPYFILE_EXCL);
+  onDestinationCreated?.();
 }
 
 function versionFor(content: Uint8Array): string {
@@ -360,4 +527,12 @@ function ignorePathKey(projectPath: string): string {
   return process.platform === "win32"
     ? projectPath.toLocaleLowerCase("en-US")
     : projectPath;
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "EEXIST"
+  );
 }

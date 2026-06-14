@@ -88,6 +88,10 @@ describe("project IPC", () => {
     });
 
     const requests = [
+      [
+        PROJECT_CHANNELS.copyEntry,
+        { sourcePath: "main.tex", destinationPath: "main copy.tex" },
+      ],
       [PROJECT_CHANNELS.createDirectory, { path: "chapters" }],
       [
         PROJECT_CHANNELS.createTextFile,
@@ -104,6 +108,7 @@ describe("project IPC", () => {
       [PROJECT_CHANNELS.exportZip, undefined],
       [PROJECT_CHANNELS.getGitStatus, undefined],
       [PROJECT_CHANNELS.readTextFile, { path: "main.tex" }],
+      [PROJECT_CHANNELS.revealEntry, { path: "main.tex" }],
       [
         PROJECT_CHANNELS.writeTextFile,
         {
@@ -467,6 +472,8 @@ describe("project IPC", () => {
     temporaryDirectories.push(exportDirectory);
     const exportPath = join(exportDirectory, "project.zip");
     const { handlers, ipcMain } = createFakeIpcMain();
+    const openPath = vi.fn(() => Promise.resolve(""));
+    const showItemInFolder = vi.fn();
     registerProjectIpc({
       ipcMain,
       loadRecentProjects: () =>
@@ -482,6 +489,8 @@ describe("project IPC", () => {
         Promise.resolve(id === "a".repeat(16) ? root : null),
       selectProjectDirectory: () => Promise.resolve(null),
       selectProjectExportPath: () => Promise.resolve(exportPath),
+      openPath,
+      showItemInFolder,
       trustedWebContentsId: () => 7,
     });
 
@@ -510,6 +519,33 @@ describe("project IPC", () => {
       path: "chapters/intro.tex",
       content: "Intro",
     });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.copyEntry, event(7), {
+        sourcePath: "chapters/intro.tex",
+        destinationPath: "chapters/intro copy.tex",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        entries: expect.arrayContaining([
+          expect.objectContaining({ path: "chapters/intro copy.tex" }),
+        ]),
+      },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.revealEntry, event(7), {
+        path: "chapters/intro.tex",
+      }),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.revealEntry, event(7), {
+        path: "chapters",
+      }),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    expect(showItemInFolder).toHaveBeenCalledWith(
+      join(root, "chapters", "intro.tex"),
+    );
+    expect(openPath).toHaveBeenCalledWith(join(root, "chapters"));
     const read = (await invoke(
       handlers,
       PROJECT_CHANNELS.readTextFile,
@@ -541,9 +577,63 @@ describe("project IPC", () => {
       invoke(handlers, PROJECT_CHANNELS.exportZip, event(7)),
     ).resolves.toMatchObject({
       ok: true,
-      value: { saved: true, files: 1 },
+      value: { saved: true, files: 2 },
     });
     expect((await readFile(exportPath)).readUInt32LE(0)).toBe(0x04034b50);
+  });
+
+  it("reports unavailable and failed project reveal integrations", async () => {
+    const root = await createProject();
+    const unavailable = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain: unavailable.ipcMain,
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(unavailable.handlers, PROJECT_CHANNELS.open, event(7));
+    await invoke(
+      unavailable.handlers,
+      PROJECT_CHANNELS.createDirectory,
+      event(7),
+      { path: "chapters" },
+    );
+
+    await expect(
+      invoke(unavailable.handlers, PROJECT_CHANNELS.revealEntry, event(7), {
+        path: "chapters",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "external-open-failed" },
+    });
+    await expect(
+      invoke(unavailable.handlers, PROJECT_CHANNELS.revealEntry, event(7), {
+        path: "main.tex",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "external-open-failed" },
+    });
+
+    const failed = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain: failed.ipcMain,
+      openPath: () => Promise.resolve("Windows Explorer failed."),
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    await invoke(failed.handlers, PROJECT_CHANNELS.open, event(7));
+    await expect(
+      invoke(failed.handlers, PROJECT_CHANNELS.revealEntry, event(7), {
+        path: "chapters",
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "external-open-failed",
+        message: "Windows Explorer failed.",
+      },
+    });
   });
 
   it("handles recent-record failure and export unavailable, cancellation, and failure", async () => {

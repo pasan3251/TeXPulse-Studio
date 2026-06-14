@@ -17,6 +17,7 @@
 | Sprint 12 | Complete on 2026-06-14 | Release-candidate hardening and full product validation |
 | Sprint 13 | Complete on 2026-06-14 | Read-only Git status awareness                          |
 | Sprint 14 | Complete on 2026-06-14 | Collaboration research controls                         |
+| Sprint 15 | Complete on 2026-06-14 | Explorer and preview usability                          |
 
 ## Completed scope
 
@@ -111,6 +112,13 @@ local-network WebSocket plus Yjs research direction with host authority over
 files and compilation. No collaboration runtime, dependency, listener, preload
 method, UI, or remote compilation path was added. See `reports/SPRINT-14.md`.
 
+Sprint 15 adds material-inspired explorer icons, collapsible folders, compact
+New File/New Folder actions, scoped file/folder/background context menus,
+validated recursive copy and desktop reveal operations, active standalone TeX
+root selection with configured-root fallback for fragments, and a continuous
+multi-page PDF.js viewport that retains page, zoom, scroll, and SyncTeX
+behavior. See `reports/SPRINT-15.md`.
+
 ## Current environment limitation
 
 The release-candidate installer is unsigned and may trigger Windows SmartScreen
@@ -126,4 +134,5 @@ external-file reload, side-by-side comparison, and merge actions remain future
 work. Local revision history, templates beyond the minimal starter, diff views,
 Git commit assistance, and collaboration implementation remain deferred. MiKTeX
 and Perl are not bundled, application data is preserved on uninstall, and
-automatic updates remain deferred.
+automatic updates remain deferred. The continuous PDF viewer currently renders
+every page rather than virtualizing unusually large documents.

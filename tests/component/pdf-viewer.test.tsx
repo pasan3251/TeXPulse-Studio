@@ -80,6 +80,8 @@ describe("PdfViewer", () => {
     );
 
     await screen.findByText("Page 1 of 3");
+    expect(screen.getByLabelText("PDF page 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("PDF page 3")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText("Page 2 of 3");
     await user.click(screen.getByRole("button", { name: "Zoom in" }));
@@ -134,7 +136,7 @@ describe("PdfViewer", () => {
       }),
     }));
     const onInverseSearch = vi.fn();
-    render(
+    const { container } = render(
       <PdfViewer
         artifact={artifact(1)}
         data={new Uint8Array([1])}
@@ -153,7 +155,16 @@ describe("PdfViewer", () => {
       />,
     );
 
-    const canvas = await screen.findByLabelText("PDF page 1");
+    await waitFor(() => {
+      expect(container.querySelector(".pdf-page-loading")).toBeNull();
+    });
+    const canvas = container.querySelector<HTMLCanvasElement>(
+      'canvas[aria-label="PDF page 1"]',
+    );
+    expect(canvas).not.toBeNull();
+    if (canvas === null) {
+      return;
+    }
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
       bottom: 820,
       height: 800,

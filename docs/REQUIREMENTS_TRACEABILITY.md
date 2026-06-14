@@ -641,3 +641,42 @@ runtime collaboration behavior.
 - Collaboration ADR: `adr/ADR-0015-collaboration-research-prototype.md`
 - Existing stable-path controls: `ARCHITECTURE.md`, `SECURITY.md`, and
   `TEST_PLAN.md`
+
+## Sprint 15
+
+Sprint 15 is a user-directed post-roadmap usability slice. It improves existing
+project, build, and PDF requirements without adding a new product boundary or
+production dependency.
+
+| Requirement     | Sprint 15 evidence                                                                    | Status                 |
+| --------------- | ------------------------------------------------------------------------------------- | ---------------------- |
+| `FR-PROJ-003`   | Collapsible hierarchy with material-inspired file and folder icons                    | Complete               |
+| `FR-PROJ-004`   | Scoped create, copy, cut/move, paste, rename, and confirmed delete context actions    | Complete               |
+| `FR-PROJ-005`   | Active-file build selection consumes the existing detected standalone root candidates | Complete               |
+| `FR-PROJ-006`   | Included fragments continue to use the configured root override                       | Complete               |
+| `FR-BUILD-001`  | Manual and automatic builds target the active standalone root when applicable         | Complete               |
+| `FR-BUILD-005`  | Active-root requests retain the existing newest-only build controller                 | Complete               |
+| `FR-BUILD-007`  | Active-root PDF and diagnostics retain generation and editor-revision rejection       | Complete               |
+| `FR-BUILD-016`  | Continuous preview retains the last successful PDF after failure                      | Complete               |
+| `FR-PDF-002`    | Every PDF page is stacked in one scrollable viewport with page and zoom shortcuts     | Complete               |
+| `FR-PDF-003`    | Visible page, zoom, fit mode, and approximate scroll survive artifact reload          | Complete               |
+| `FR-PDF-008`    | Existing opaque artifact and stale-generation checks guard the continuous preview     | Complete               |
+| `NFR-SEC-004`   | Frozen bridge grows only for validated project copy and reveal, totaling 34 methods   | Current scope complete |
+| `NFR-SEC-005`   | Copy and reveal requests/responses use strict schemas and trusted sender checks       | Complete               |
+| `NFR-SEC-006`   | Copy/reveal paths are canonicalized; links and self-descendant copies are rejected    | Complete               |
+| `NFR-PRIV-001`  | Explorer, compilation, and PDF rendering remain local                                 | Complete for Sprint 15 |
+| `NFR-PRIV-002`  | No analytics, telemetry, updater, network service, or production dependency was added | Complete for Sprint 15 |
+| `NFR-MAINT-005` | Unit, component, integration, Electron, native, and installed-app checks are recorded | Complete               |
+| `NFR-UX-001`    | Top actions and context-menu items are keyboard-operable named buttons/menu items     | Current scope complete |
+| `NFR-UX-004`    | Explorer actions, icons, menus, and PDF controls retain accessible names              | Complete               |
+| `NFR-UX-005`    | Context-menu delete continues through the existing confirmation dialog                | Complete               |
+
+### Sprint 15 evidence
+
+- Sprint report: `reports/SPRINT-15.md`
+- Explorer and active-root renderer flow: `../src/renderer/`
+- Validated project copy/reveal boundary: `../src/project/project-service.ts`,
+  `../src/electron/`, and `../src/ipc/`
+- Unit, component, integration, E2E, and packaged tests: `../tests/`
+- UI screenshot: `../output/playwright/sprint-15-project-context-menu.png`
+- Native three-page PDF evidence: `../output/pdf/sprint-15-active-root/`

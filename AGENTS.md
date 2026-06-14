@@ -72,14 +72,15 @@ pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 ```
 
 `pnpm test:e2e` builds and exercises rapid editing, autosave, queued
-compilation, newest-result PDF rendering, manual build, restoration, minimum
-window layout, external-conflict preservation, structured diagnostic display,
-raw-log access, source navigation, retained PDF behavior, fix-error cleanup,
-sample onboarding, project creation/mutation/export/recent reopening, and
-abnormal-shutdown recovery without automatic source overwrite.
-`pnpm test:packaged` additionally installs the NSIS release candidate into a
-path with spaces, uses clean and previous-beta profiles, runs the real MiKTeX
-self-test, edits and compiles the sample, reopens it, and uninstalls.
+compilation, newest-result PDF rendering, active standalone-file compilation,
+manual build, restoration, minimum window layout, external-conflict
+preservation, structured diagnostic display, raw-log access, source navigation,
+retained PDF behavior, fix-error cleanup, sample onboarding, project
+creation/context-menu mutation/export/recent reopening, and abnormal-shutdown
+recovery without automatic source overwrite. `pnpm test:packaged` additionally
+installs the NSIS release candidate into a path with spaces, uses clean and
+previous-beta profiles, runs the real MiKTeX self-test, edits and compiles the
+sample, reopens it, and uninstalls.
 
 The compiler service enforces timeout, cancellation, process-tree cleanup, an 8
 MiB aggregate process-output limit, generated-output quotas, and an
@@ -97,8 +98,9 @@ matching editor-originated writes. Watcher events are validated, project-scoped
 notices and never direct save or compile triggers.
 
 The renderer is sandboxed with Node integration disabled. Its frozen preload
-bridge exposes thirty-two fixed
-project/build/PDF/SyncTeX/settings/recovery/Git/event methods. PDF paths remain
+bridge exposes thirty-four fixed
+project/build/PDF/SyncTeX/settings/recovery/Git/event methods, including
+validated project copy and reveal actions. PDF and absolute project paths remain
 in the main process as actionable values, and renderer PDF loads require an
 active opaque artifact token. Raw compiler logs may contain local path text.
 Read-only Git status returns only bounded summary counts and branch metadata.

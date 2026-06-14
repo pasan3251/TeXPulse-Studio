@@ -55,12 +55,16 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes thirty-two frozen
+- exposes thirty-four frozen
   project/build/PDF/SyncTeX/settings/recovery/Git/event preload methods, never
   `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
+- resolves project-relative reveal requests in the main process and invokes the
+  desktop shell only after canonical boundary, file-type, and link checks;
+- recursively copies only validated regular project files and directories,
+  rejects links, and rejects copying a directory into itself;
 - denies permission requests, popups, webviews, and unexpected navigation;
 - denies renderer-originated external navigation instead of exposing an
   external-URL capability;

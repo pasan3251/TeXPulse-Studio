@@ -2,9 +2,9 @@
 
 ## Current state
 
-Sprint 12 hardens the complete Windows release candidate while preserving the
-editor, build, PDF, diagnostic, SyncTeX, settings, recovery, support, and
-security controls:
+Sprint 15 extends the complete Windows release candidate with explorer and PDF
+usability improvements while preserving the editor, build, diagnostic, SyncTeX,
+settings, recovery, support, and security controls:
 
 - `process/`: shell-free child process boundary with timeout, cancellation,
   process-tree cleanup, and bounded aggregate capture.
@@ -20,8 +20,9 @@ security controls:
   malformed output, and build status events.
 - `synctex/`: bounded result parsing and shell-free forward/inverse invocation.
 - `project/`: canonical project roots, non-traversable link policy, ignored
-  output enumeration, UTF-8 file CRUD, atomic versioned saves, root detection,
-  project metadata, recent-project storage, fixed-template creation, source-only
+  output enumeration, UTF-8 file CRUD and recursive copy, atomic versioned
+  saves, validated entry resolution for desktop reveal, root detection, project
+  metadata, recent-project storage, fixed-template creation, source-only
   streaming ZIP export, and filtered Chokidar events.
 - `settings/`: strict global and project schemas, safe defaults, migration, and
   atomic application-data persistence.
@@ -32,7 +33,7 @@ security controls:
   SyncTeX, and read-only Git-status channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, packaged/development resource resolution,
-  a session owning project/build state, and a frozen thirty-two-method preload
+  a session owning project/build state, and a frozen thirty-four-method preload
   bridge.
 - `packaging`: Electron Builder x64 ASAR output, assisted per-user NSIS
   installer, metadata/icon resources, tagged source and artifact provenance, and
@@ -40,11 +41,13 @@ security controls:
 - `resources/`: fixed bundled sample source used by the doctor and copied once
   into application data as an editable project.
 - `renderer/`: React workspace state, deterministic project hierarchy,
-  CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
-  persistence, resizable panes, build controls, source-linked Problems and raw
-  log panels, diagnostic and SyncTeX target markers, lazy PDF.js viewer,
-  retained-output status, read-only Git summary, settings/setup dialog, error
-  boundary, and desktop layout.
+  material-inspired explorer icons and scoped context menus, CodeMirror 6 LaTeX
+  editor, active standalone-root selection, pure live-build coordination,
+  validated workspace persistence, resizable panes, build controls,
+  source-linked Problems and raw log panels, diagnostic and SyncTeX target
+  markers, continuously scrolling PDF.js viewer, retained-output status,
+  read-only Git summary, settings/setup dialog, error boundary, and desktop
+  layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
 The release candidate has no updater, bundled TeX distribution, code-signing
@@ -300,6 +303,37 @@ the build/session maintenance boundary is idle.
 The release performance suite measures the 1,000-file project path, editor
 reducer latency, and repeated-build heap behavior. The packaged suite verifies a
 clean application profile and the previous beta's schema-version-1 settings.
+
+## Sprint 15 explorer and preview flow
+
+```text
+explorer action
+  -> relative source and destination paths through fixed typed preload methods
+  -> trusted sender and strict request/response validation
+  -> canonical ProjectService boundary and non-traversable link checks
+  -> recursive copy, versioned move, confirmed delete, or desktop reveal
+  -> refreshed bounded project description
+
+build action
+  -> active .tex file compared with detected standalone root candidates
+  -> active standalone root or configured project-root fallback
+  -> existing save, queue, generation, and stale-result controls
+
+completed PDF
+  -> bounded bytes and opaque artifact identity
+  -> all pages rendered in one scrollable PDF.js viewport
+  -> visible page, zoom, fit mode, scroll state, and SyncTeX behavior retained
+```
+
+The renderer never receives an absolute path for project reveal. It submits a
+project-relative path, and the main process resolves and validates the entry
+immediately before calling Electron's desktop shell API. Copy operations reject
+links and copying a directory into itself. Cut remains an application-owned
+copy/move intent and uses the existing validated mutation boundary.
+
+Active-file compilation applies only when the selected `.tex` file is a detected
+standalone root. Included chapter fragments continue to build through the
+configured root, preserving multi-file project behavior.
 
 ## Project flow
 

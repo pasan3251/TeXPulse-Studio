@@ -2,8 +2,15 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectExplorer } from "../../src/renderer/components/ProjectExplorer.js";
@@ -38,62 +45,112 @@ const project = {
 
 afterEach(cleanup);
 
+function renderExplorer(
+  overrides: Partial<ComponentProps<typeof ProjectExplorer>> = {},
+) {
+  const props: ComponentProps<typeof ProjectExplorer> = {
+    project,
+    activePath: "main.tex",
+    selectedPath: "main.tex",
+    modifiedPaths: new Set(["chapters/intro.tex"]),
+    loadingPath: null,
+    clipboard: null,
+    onCopy: vi.fn(),
+    onCreateFile: vi.fn(),
+    onCreateFolder: vi.fn(),
+    onCut: vi.fn(),
+    onDelete: vi.fn(),
+    onExport: vi.fn(),
+    onOpenFile: vi.fn(),
+    onPaste: vi.fn(),
+    onRename: vi.fn(),
+    onReveal: vi.fn(),
+    onSelectEntry: vi.fn(),
+    ...overrides,
+  };
+  return { ...render(<ProjectExplorer {...props} />), props };
+}
+
 describe("ProjectExplorer", () => {
-  it("renders hierarchy, active file, modified marker, and inert links", async () => {
+  it("renders hierarchy, material-style icons, modified state, and collapse controls", async () => {
     const user = userEvent.setup();
-    const onOpenFile = vi.fn();
-    render(
-      <ProjectExplorer
-        project={project}
-        activePath="main.tex"
-        selectedPath="main.tex"
-        modifiedPaths={new Set(["chapters/intro.tex"])}
-        loadingPath={null}
-        onCreateFile={vi.fn()}
-        onCreateFolder={vi.fn()}
-        onDelete={vi.fn()}
-        onExport={vi.fn()}
-        onOpenFile={onOpenFile}
-        onRename={vi.fn()}
-        onSelectEntry={vi.fn()}
-      />,
-    );
+    const { props } = renderExplorer();
 
     const intro = screen.getByRole("button", { name: /intro\.tex/i });
     expect(within(intro).getByLabelText("Modified")).toBeInTheDocument();
+    expect(intro.querySelector(".file-icon-tex")).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { selected: true })).toHaveTextContent(
       "main.tex",
     );
     expect(screen.getByText("linked").closest(".tree-row")).toHaveClass("link");
 
     await user.click(intro);
-    expect(onOpenFile).toHaveBeenCalledWith("chapters/intro.tex");
+    expect(props.onOpenFile).toHaveBeenCalledWith("chapters/intro.tex");
+    await user.click(screen.getByRole("button", { name: "chapters" }));
+    expect(screen.queryByRole("button", { name: /intro\.tex/i })).toBeNull();
   });
 
-  it("exposes named project actions and selectable folders", async () => {
+  it("keeps only new file and folder in the heading", async () => {
     const user = userEvent.setup();
     const onCreateFile = vi.fn();
-    const onSelectEntry = vi.fn();
-    render(
-      <ProjectExplorer
-        project={project}
-        activePath={null}
-        selectedPath={null}
-        modifiedPaths={new Set()}
-        loadingPath={null}
-        onCreateFile={onCreateFile}
-        onCreateFolder={vi.fn()}
-        onDelete={vi.fn()}
-        onExport={vi.fn()}
-        onOpenFile={vi.fn()}
-        onRename={vi.fn()}
-        onSelectEntry={onSelectEntry}
-      />,
-    );
+    const onCreateFolder = vi.fn();
+    renderExplorer({
+      activePath: null,
+      selectedPath: null,
+      modifiedPaths: new Set(),
+      onCreateFile,
+      onCreateFolder,
+    });
 
     await user.click(screen.getByRole("button", { name: "New file" }));
-    await user.click(screen.getByRole("button", { name: "chapters" }));
-    expect(onCreateFile).toHaveBeenCalledOnce();
-    expect(onSelectEntry).toHaveBeenCalledWith("chapters");
+    await user.click(screen.getByRole("button", { name: "New folder" }));
+    expect(onCreateFile).toHaveBeenCalledWith("");
+    expect(onCreateFolder).toHaveBeenCalledWith("");
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("opens entry actions on right-click", async () => {
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    const onDelete = vi.fn();
+    const onReveal = vi.fn();
+    renderExplorer({ onCopy, onDelete, onReveal });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /main\.tex/i }), {
+      clientX: 40,
+      clientY: 50,
+    });
+    const menu = screen.getByRole("menu", { name: "Project entry actions" });
+    expect(within(menu).getByRole("menuitem", { name: "Open" })).toBeVisible();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Reveal in File Explorer" }),
+    ).toBeVisible();
+
+    await user.click(within(menu).getByRole("menuitem", { name: "Copy" }));
+    expect(onCopy).toHaveBeenCalledWith("main.tex");
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /main\.tex/i }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Reveal in File Explorer" }),
+    );
+    expect(onReveal).toHaveBeenCalledWith("main.tex");
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /main\.tex/i }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith("main.tex");
+  });
+
+  it("offers paste on directories when an entry is copied", async () => {
+    const user = userEvent.setup();
+    const onPaste = vi.fn();
+    renderExplorer({
+      clipboard: { operation: "copy", sourcePath: "main.tex" },
+      onPaste,
+    });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "chapters" }));
+    await user.click(screen.getByRole("menuitem", { name: "Paste" }));
+    expect(onPaste).toHaveBeenCalledWith("chapters");
   });
 });

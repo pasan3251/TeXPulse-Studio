@@ -13,6 +13,12 @@ export const createTextFileRequestSchema = createProjectEntryRequestSchema
     content: z.string().max(10 * 1024 * 1024),
   })
   .strict();
+export const copyProjectEntryRequestSchema = z
+  .object({
+    sourcePath: z.string().min(1).max(4_096),
+    destinationPath: z.string().min(1).max(4_096),
+  })
+  .strict();
 export const deleteProjectEntryRequestSchema = createProjectEntryRequestSchema
   .extend({
     recursive: z.boolean(),
@@ -157,6 +163,11 @@ export const openProjectResultSchema = z.discriminatedUnion("ok", [
 
 export const projectMutationResultSchema = openProjectResultSchema;
 
+export const projectEntryActionResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), value: z.undefined() }).strict(),
+  z.object({ ok: z.literal(false), error: apiErrorSchema }).strict(),
+]);
+
 const recentProjectSchema = z
   .object({
     id: z.string().regex(/^[a-f0-9]{16}$/u),
@@ -223,6 +234,9 @@ export const writeTextFileResultSchema = readTextFileResultSchema;
 
 export type OpenProjectResult = z.infer<typeof openProjectResultSchema>;
 export type ProjectMutationResult = z.infer<typeof projectMutationResultSchema>;
+export type ProjectEntryActionResult = z.infer<
+  typeof projectEntryActionResultSchema
+>;
 export type RecentProjectsResult = z.infer<typeof recentProjectsResultSchema>;
 export type GitStatusSummary = z.infer<typeof gitStatusSchema>;
 export type GitStatusResult = z.infer<typeof gitStatusResultSchema>;
@@ -233,6 +247,9 @@ export type CreateProjectEntryRequest = z.infer<
   typeof createProjectEntryRequestSchema
 >;
 export type CreateTextFileRequest = z.infer<typeof createTextFileRequestSchema>;
+export type CopyProjectEntryRequest = z.infer<
+  typeof copyProjectEntryRequestSchema
+>;
 export type DeleteProjectEntryRequest = z.infer<
   typeof deleteProjectEntryRequestSchema
 >;

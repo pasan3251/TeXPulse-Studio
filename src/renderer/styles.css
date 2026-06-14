@@ -218,7 +218,7 @@ button {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   border-right: 1px solid #243047;
   background: #10182a;
 }
@@ -237,6 +237,19 @@ button {
 .panel-heading {
   padding: 18px 16px 14px;
   border-bottom: 1px solid #1e293b;
+}
+
+.explorer-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 10px 10px 14px;
+}
+
+.explorer-heading > div:first-child {
+  min-width: 0;
 }
 
 .eyebrow {
@@ -259,28 +272,39 @@ button {
 
 .project-actions {
   display: flex;
-  gap: 5px;
-  padding: 8px;
-  border-bottom: 1px solid #1e293b;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 0;
 }
 
 .project-actions button {
-  min-height: 25px;
-  padding: 0 7px;
-  border: 1px solid #334155;
-  border-radius: 5px;
-  color: #aab6c8;
-  background: #172033;
-  font-size: 9px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: #8ea1b8;
+  background: transparent;
   cursor: pointer;
 }
 
 .project-actions button:hover:not(:disabled),
 .project-actions button:focus-visible {
-  border-color: #52627b;
   color: #f8fafc;
+  background: #202c42;
   outline: none;
+}
+
+.project-actions svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 
 .project-actions button:disabled {
@@ -291,7 +315,9 @@ button {
 .project-tree {
   min-height: 0;
   overflow: auto;
-  padding: 10px 0 24px;
+  padding: 6px 0 24px;
+  scrollbar-color: #3a465d transparent;
+  scrollbar-width: thin;
 }
 
 .project-tree ul {
@@ -304,10 +330,10 @@ button {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 30px;
-  gap: 8px;
-  padding-block: 3px;
-  padding-inline-end: 12px;
+  min-height: 25px;
+  gap: 5px;
+  padding-block: 2px;
+  padding-inline-end: 10px;
   border: 0;
   color: #aab6c8;
   background: transparent;
@@ -332,7 +358,11 @@ button.tree-row:hover {
 
 .tree-row.selected:not(.active) {
   color: #e2e8f0;
-  background: rgb(148 163 184 / 10%);
+  background: #1c293c;
+}
+
+.tree-row.cut {
+  opacity: 0.5;
 }
 
 .tree-row.static {
@@ -343,16 +373,87 @@ button.tree-row:hover {
   color: #59677d;
 }
 
-.tree-icon {
-  display: inline-grid;
-  flex: 0 0 16px;
-  height: 16px;
-  place-items: center;
-  border-radius: 4px;
-  color: #d38a18;
-  font-family: Georgia, serif;
-  font-size: 10px;
-  font-weight: 700;
+.tree-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: #8ea1b8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.tree-chevron.hidden {
+  opacity: 0;
+}
+
+.entry-icon {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.folder-icon {
+  fill: #80a4b7;
+}
+
+.folder-highlight {
+  fill: #9fc4d4;
+}
+
+.link-icon {
+  fill: none;
+  stroke: #697a91;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.file-icon .file-sheet {
+  fill: #66798e;
+}
+
+.file-icon .file-fold {
+  fill: none;
+  stroke: rgb(255 255 255 / 48%);
+  stroke-linejoin: round;
+  stroke-width: 1;
+}
+
+.file-icon text {
+  fill: #fff;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 6px;
+  font-weight: 800;
+}
+
+.file-icon-tex .file-sheet,
+.file-icon-latex .file-sheet {
+  fill: #36a3a3;
+}
+
+.file-icon-bib .file-sheet {
+  fill: #c58c3a;
+}
+
+.file-icon-pdf .file-sheet {
+  fill: #df5555;
+}
+
+.file-icon-image .file-sheet {
+  fill: #9d72c7;
+}
+
+.file-icon-config .file-sheet {
+  fill: #d4aa3f;
+}
+
+.file-icon-markdown .file-sheet {
+  fill: #4e92c8;
+}
+
+.file-icon-code .file-sheet {
+  fill: #4aa56e;
 }
 
 .tree-label {
@@ -373,6 +474,59 @@ button.tree-row:hover {
   margin-inline-start: auto;
   color: #f59e0b;
   font-size: 9px;
+}
+
+.project-context-menu {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  width: 216px;
+  padding: 5px;
+  border: 1px solid #3b485d;
+  border-radius: 7px;
+  background: #111a2a;
+  box-shadow: 0 14px 40px rgb(0 0 0 / 48%);
+}
+
+.project-context-menu button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  color: #d5deea;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-context-menu button:hover,
+.project-context-menu button:focus-visible {
+  color: #fff;
+  background: #24344c;
+  outline: none;
+}
+
+.project-context-menu button.danger {
+  color: #f3aaaa;
+}
+
+.project-context-menu button.danger:hover,
+.project-context-menu button.danger:focus-visible {
+  color: #fff;
+  background: #713535;
+}
+
+.context-separator {
+  height: 1px;
+  margin: 4px 5px;
+  background: #2c394d;
+}
+
+.context-menu-note {
+  padding: 7px 9px;
+  color: #73839a;
+  font-size: 10px;
 }
 
 .editor-panel {
@@ -776,17 +930,39 @@ button.tree-row:hover {
     #222a38;
 }
 
+.pdf-pages {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  min-width: max-content;
+  padding-bottom: 12px;
+}
+
 .pdf-page {
   position: relative;
-  width: fit-content;
-  margin: 0 auto;
+  width: var(--pdf-page-width);
+  min-width: var(--pdf-page-width);
+  min-height: var(--pdf-page-height);
+  background: white;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 42%);
 }
 
 .pdf-viewport canvas {
   display: block;
   background: white;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 42%);
   cursor: crosshair;
+}
+
+.pdf-page-loading {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: #dbe4f0;
+  background: rgb(15 23 40 / 88%);
+  font-size: 9px;
+  transform: translateX(-50%);
 }
 
 .pdf-sync-target {

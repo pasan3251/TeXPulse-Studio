@@ -1,9 +1,10 @@
 # Test Plan
 
-## Sprint 12 scope
+## Current regression scope
 
-Sprint 12 verifies the complete offline release candidate: all existing
-controls, project creation and file management, recent reopening, source-only
+The suite verifies the complete offline release candidate: all existing
+controls, project creation and context-menu file management, active standalone
+TeX builds, continuous multi-page PDF rendering, recent reopening, source-only
 ZIP export, 1,000-file and editor-latency performance, repeated-build memory,
 accessibility, previous-beta settings compatibility, tagged provenance, packaged
 real compilation/PDF preview, and uninstall behavior.
@@ -49,19 +50,19 @@ real compilation/PDF preview, and uninstall behavior.
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
   folder/compiler/SyncTeX/toolchain overrides. It verifies the complete
-  thirty-two-method bridge and absent Node globals, rapid typing coalescence,
+  thirty-four-method bridge and absent Node globals, rapid typing coalescence,
   queued handoff, non-overlapping compiler trace intervals, newest-result
-  display, disabled auto-build plus manual compile, responsive editing,
-  stale-result rejection, workspace restoration, minimum-window layout,
-  version-conflict preservation, settings persistence, recipe and clean
-  arguments, allowlisted cleanup, first-run readiness states, template project
-  creation, mutation with confirmed deletion, artifact-free ZIP export, opaque
-  recent reopening, accessibility checks, screenshots, clean shutdown, and
-  fixture removal.
+  display, active standalone-file compilation, disabled auto-build plus manual
+  compile, responsive editing, stale-result rejection, workspace restoration,
+  minimum-window layout, version-conflict preservation, settings persistence,
+  recipe and clean arguments, allowlisted cleanup, first-run readiness states,
+  template project creation, context-menu mutation with confirmed deletion,
+  artifact-free ZIP export, opaque recent reopening, accessibility checks,
+  screenshots, clean shutdown, and fixture removal.
 - The packaged Electron test uses the installed executable rather than
   development Electron. It installs into a path containing spaces, redirects
   Electron user data to a clean temporary profile, confirms the sandboxed
-  thirty-two-method bridge, runs the real MiKTeX self-test, opens the fixed
+  thirty-four-method bridge, runs the real MiKTeX self-test, opens the fixed
   sample, disables automation, edits and saves, compiles, renders the PDF,
   captures a 150% scale screenshot, closes, reopens, verifies the edit, loads a
   previous-beta settings profile without data loss, and uninstalls.
@@ -126,13 +127,21 @@ real compilation/PDF preview, and uninstall behavior.
 - Conditional native integration runs only with `TEXPULSE_RUN_NATIVE=1` and
   compiles pdfLaTeX, XeLaTeX, LuaLaTeX, BibTeX, Biber, image-asset, and
   spaces-in-path fixtures with real MiKTeX.
-- PDF component tests use controlled PDF.js document/page/render objects and no
+- PDF component tests use controlled multi-page PDF.js document/page/render
+  objects, verify one continuous page stack and retained view state, and use no
   arbitrary sleeps.
+- Project component and integration tests cover collapsed folders, file/folder
+  context actions, paste availability, recursive copy, rejected link traversal,
+  project-relative desktop reveal, and typed OS-integration failures.
+- Build-root unit and Electron E2E tests verify that an active standalone `.tex`
+  file compiles directly while included fragments retain the configured root.
 - The fake compiler emits a structurally valid one-page PDF and can
   deterministically fail or omit output.
 - The process-tree PID fixture publishes its handoff atomically so coverage runs
   cannot observe partial JSON.
 - Real MiKTeX smoke evidence is run separately from deterministic automation.
+  Sprint 15 additionally compiles and visually inspects a three-page
+  `appendix.tex` artifact with SyncTeX and shell escape disabled.
 
 ## Remaining operational test levels
 

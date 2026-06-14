@@ -30,6 +30,7 @@ import {
 import { SYNCTEX_CHANNELS } from "../ipc/channels.js";
 import {
   type ApiError,
+  copyProjectEntryRequestSchema,
   createProjectEntryRequestSchema,
   createProjectRequestSchema,
   createTextFileRequestSchema,
@@ -43,6 +44,7 @@ import {
   openProjectResultSchema,
   openRecentProjectRequestSchema,
   openSampleProjectRequestSchema,
+  projectEntryActionResultSchema,
   projectMutationResultSchema,
   PROJECT_CHANNELS,
   projectPathRequestSchema,
@@ -54,6 +56,7 @@ import {
   type ExportProjectResult,
   type GitStatusResult,
   type OpenProjectResult,
+  type ProjectEntryActionResult,
   type ProjectMutationResult,
   type ReadTextFileResult,
   type RecentProjectsResult,
@@ -305,6 +308,25 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       }
       const selectedDirectory = await options.prepareSampleProject();
       return openProjectDirectory(selectedDirectory);
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.copyEntry,
+    copyProjectEntryRequestSchema,
+    projectMutationResultSchema,
+    async (request): Promise<ProjectMutationResult> => {
+      if (projectSession === null) {
+        return failure("no-project", "Open a project before copying an entry.");
+      }
+      return {
+        ok: true,
+        value: await projectSession.copyEntry(
+          request.sourcePath,
+          request.destinationPath,
+        ),
+      };
     },
   );
 
@@ -644,6 +666,42 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         );
       }
       return { ok: true, value: await options.checkToolchain(request) };
+    },
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.revealEntry,
+    projectPathRequestSchema,
+    projectEntryActionResultSchema,
+    async (request): Promise<ProjectEntryActionResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before revealing an entry.",
+        );
+      }
+      const entry = await projectSession.resolveEntryPath(request.path);
+      if (entry.kind === "directory") {
+        if (options.openPath === undefined) {
+          return failure(
+            "external-open-failed",
+            "The system file manager is unavailable.",
+          );
+        }
+        const errorMessage = await options.openPath(entry.absolutePath);
+        return errorMessage === ""
+          ? { ok: true, value: undefined }
+          : failure("external-open-failed", errorMessage);
+      }
+      if (options.showItemInFolder === undefined) {
+        return failure(
+          "external-open-failed",
+          "The system file manager is unavailable.",
+        );
+      }
+      options.showItemInFolder(entry.absolutePath);
+      return { ok: true, value: undefined };
     },
   );
 

@@ -51,7 +51,7 @@ Open questions that would change risk ranking:
 
 ### Primary components
 
-- Stable renderer: React, CodeMirror, PDF.js, and current 32-method preload
+- Stable renderer: React, CodeMirror, PDF.js, and current 34-method preload
   bridge.
 - Stable Electron main process: trusted IPC handlers, `ProjectSession`,
   `ProjectService`, `BuildController`, compiler adapter, settings, recovery,

@@ -1,4 +1,5 @@
 export const PROJECT_CHANNELS = {
+  copyEntry: "project:copy-entry",
   create: "project:create",
   createDirectory: "project:create-directory",
   createTextFile: "project:create-text-file",
@@ -10,6 +11,7 @@ export const PROJECT_CHANNELS = {
   openRecent: "project:open-recent",
   openSample: "project:open-sample",
   readTextFile: "project:read-text-file",
+  revealEntry: "project:reveal-entry",
   renameEntry: "project:rename-entry",
   writeTextFile: "project:write-text-file",
 } as const;

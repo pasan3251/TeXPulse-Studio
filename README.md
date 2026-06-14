@@ -7,9 +7,12 @@ change detection, workspace restoration, structured source-linked diagnostics,
 raw build logs, SyncTeX forward/inverse navigation, selectable recipes,
 persistent settings, first-run toolchain setup, clean-build controls, bounded
 compiler output, abnormal-shutdown recovery, local support diagnostics,
-read-only Git status awareness, and a PDF.js preview that retains the last
-successful output when a later build fails. Project files and generated artifact
-paths remain behind a validated main-process IPC boundary.
+read-only Git status awareness, a material-inspired project explorer with
+file-scoped context actions, and a continuously scrolling PDF.js preview that
+retains the last successful output when a later build fails. Standalone active
+TeX files can be compiled directly, while included fragments continue to use the
+configured root. Project files and generated artifact paths remain behind a
+validated main-process IPC boundary.
 
 It also creates projects from a minimal template, manages project files and
 folders with confirmed destructive actions, remembers recent projects, and
@@ -150,7 +153,10 @@ The Sprint 12 release candidate:
 - remembers recent projects through opaque renderer IDs;
 - exports a local ZIP while excluding build output, metadata, dependencies, and
   version-control data;
-- renders the bounded project entry list as a hierarchy;
+- renders the bounded project entry list as a collapsible hierarchy with
+  material-inspired file-type icons;
+- keeps New File and New Folder at the explorer top while placing open, reveal,
+  cut, copy, paste, rename, delete, and export actions in scoped context menus;
 - edits valid UTF-8 project text with LaTeX highlighting, undo/redo, find, and
   replace;
 - tracks modified files and preserves cursor/scroll state across switches;
@@ -174,9 +180,12 @@ The Sprint 12 release candidate:
 - limits aggregate process output to 8 MiB, accepted generations to 4,096 files,
   128 MiB per file and 512 MiB total, and retained generations to eight;
 - saves modified buffers before a manual compile and stops on save conflict;
+- compiles the active standalone `.tex` root when applicable and otherwise
+  preserves the configured project root for included fragments;
 - displays build status and supports cancellation;
-- renders only completed PDFs through PDF.js with page, zoom, fit-width, and
-  fit-page controls;
+- renders every page of a completed PDF through PDF.js in one continuous
+  scrolling viewport, with page shortcuts, zoom, fit-width, and fit-page
+  controls;
 - preserves page, zoom, and approximate scroll state across PDF reloads;
 - preserves and labels the last successful PDF after a failed build;
 - parses common LaTeX, `latexmk`, BibTeX, and Biber messages into bounded
@@ -207,7 +216,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-thirty-two-method typed preload bridge.
+thirty-four-method typed preload bridge.
 
 ## Project service
 

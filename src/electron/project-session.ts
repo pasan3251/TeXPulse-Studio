@@ -191,6 +191,15 @@ export class ProjectSession {
     );
   }
 
+  copyEntry(
+    sourcePath: string,
+    destinationPath: string,
+  ): Promise<OpenProjectValue> {
+    return this.mutateProject(() =>
+      this.service.copyEntry(sourcePath, destinationPath),
+    );
+  }
+
   renameEntry(
     sourcePath: string,
     destinationPath: string,
@@ -225,6 +234,10 @@ export class ProjectSession {
         ...(expectedVersion === undefined ? {} : { expectedVersion }),
       }),
     );
+  }
+
+  resolveEntryPath(path: string) {
+    return this.service.resolveEntryPath(path);
   }
 
   async exportProject(destinationPath: string): Promise<ProjectZipSummary> {
@@ -560,7 +573,7 @@ export class ProjectSession {
       log: rawLog.text,
       status: result.status,
       failureReason: result.failureReason,
-      rootFile: this.projectDescription.rootFile ?? result.rootFile ?? "",
+      rootFile: result.rootFile ?? this.projectDescription.rootFile ?? "",
       projectFiles: this.projectDescription.entries
         .filter((entry) => entry.kind === "file")
         .map((entry) => entry.path),

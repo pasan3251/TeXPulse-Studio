@@ -62,6 +62,51 @@ describe("ProjectService", () => {
     });
   });
 
+  it("copies files and directories without traversing links", async () => {
+    const root = await createProject();
+    const service = await ProjectService.open(root);
+    await service.createDirectory("chapters");
+    await service.createTextFile("chapters/intro.tex", "Copied chapter");
+
+    await service.copyEntry("chapters", "chapters copy");
+    await expect(
+      service.readTextFile("chapters copy/intro.tex"),
+    ).resolves.toMatchObject({ content: "Copied chapter" });
+
+    await expect(
+      service.copyEntry("chapters", "chapters/nested"),
+    ).rejects.toMatchObject({ code: "invalid-path" });
+    if (process.platform === "win32") {
+      await expect(
+        service.copyEntry("chapters", "CHAPTERS/nested"),
+      ).rejects.toMatchObject({ code: "invalid-path" });
+    }
+    await expect(
+      service.copyEntry("chapters/intro.tex", "../outside.tex"),
+    ).rejects.toMatchObject({ code: "path-escape" });
+  });
+
+  it("returns only validated entry paths for desktop reveal actions", async () => {
+    const root = await createProject();
+    const service = await ProjectService.open(root);
+    await service.createDirectory("chapters");
+    await service.createTextFile("chapters/intro.tex", "Intro");
+
+    await expect(service.resolveEntryPath("chapters")).resolves.toMatchObject({
+      absolutePath: join(root, "chapters"),
+      kind: "directory",
+    });
+    await expect(
+      service.resolveEntryPath("chapters/intro.tex"),
+    ).resolves.toMatchObject({
+      absolutePath: join(root, "chapters", "intro.tex"),
+      kind: "file",
+    });
+    await expect(
+      service.resolveEntryPath("../outside.tex"),
+    ).rejects.toMatchObject({ code: "path-escape" });
+  });
+
   it("does not enumerate build artifacts below ignored directories", async () => {
     const root = await createProject();
     await mkdir(join(root, "build"), { recursive: true });
