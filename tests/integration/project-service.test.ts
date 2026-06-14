@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -88,18 +89,19 @@ describe("ProjectService", () => {
 
   it("returns only validated entry paths for desktop reveal actions", async () => {
     const root = await createProject();
+    const canonicalRoot = await realpath(root);
     const service = await ProjectService.open(root);
     await service.createDirectory("chapters");
     await service.createTextFile("chapters/intro.tex", "Intro");
 
     await expect(service.resolveEntryPath("chapters")).resolves.toMatchObject({
-      absolutePath: join(root, "chapters"),
+      absolutePath: join(canonicalRoot, "chapters"),
       kind: "directory",
     });
     await expect(
       service.resolveEntryPath("chapters/intro.tex"),
     ).resolves.toMatchObject({
-      absolutePath: join(root, "chapters", "intro.tex"),
+      absolutePath: join(canonicalRoot, "chapters", "intro.tex"),
       kind: "file",
     });
     await expect(

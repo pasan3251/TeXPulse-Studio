@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -468,6 +468,7 @@ describe("project IPC", () => {
 
   it("opens recent projects and performs validated project mutations and export", async () => {
     const root = await createProject();
+    const canonicalRoot = await realpath(root);
     const exportDirectory = await mkdtemp(join(tmpdir(), "texpulse-export-"));
     temporaryDirectories.push(exportDirectory);
     const exportPath = join(exportDirectory, "project.zip");
@@ -543,9 +544,9 @@ describe("project IPC", () => {
       }),
     ).resolves.toEqual({ ok: true, value: undefined });
     expect(showItemInFolder).toHaveBeenCalledWith(
-      join(root, "chapters", "intro.tex"),
+      join(canonicalRoot, "chapters", "intro.tex"),
     );
-    expect(openPath).toHaveBeenCalledWith(join(root, "chapters"));
+    expect(openPath).toHaveBeenCalledWith(join(canonicalRoot, "chapters"));
     const read = (await invoke(
       handlers,
       PROJECT_CHANNELS.readTextFile,
