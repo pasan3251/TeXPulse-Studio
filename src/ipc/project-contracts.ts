@@ -3,6 +3,7 @@ import { z } from "zod";
 import { projectSettingsSchema } from "../settings/project-settings.js";
 
 export const openProjectRequestSchema = z.undefined();
+export const openSampleProjectRequestSchema = z.undefined();
 
 export const projectPathRequestSchema = z
   .object({

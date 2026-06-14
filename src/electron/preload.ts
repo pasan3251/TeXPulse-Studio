@@ -33,6 +33,7 @@ import type { SaveRecoveryRequest } from "../ipc/recovery-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
+  openSampleProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.openSample),
   readTextFile: (request: ProjectPathRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.readTextFile, request),
   writeTextFile: (request: ProjectWriteRequest) =>

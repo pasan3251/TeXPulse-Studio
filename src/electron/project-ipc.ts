@@ -32,6 +32,7 @@ import {
   type ApiError,
   openProjectRequestSchema,
   openProjectResultSchema,
+  openSampleProjectRequestSchema,
   PROJECT_CHANNELS,
   projectPathRequestSchema,
   projectWriteRequestSchema,
@@ -98,6 +99,7 @@ export interface ProjectIpcOptions {
   ipcMain: Pick<IpcMain, "handle" | "removeHandler">;
   openPath?: (path: string) => Promise<string>;
   notifyProjectFileChange?: (change: ProjectFileChange) => void;
+  prepareSampleProject?: () => Promise<string>;
   selectProjectDirectory: () => Promise<string | null>;
   showItemInFolder?: (path: string) => void;
   trustedWebContentsId: () => number | null;
@@ -146,6 +148,25 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
     inMemorySettings = saved;
     return saved;
   };
+  const openProjectDirectory = async (
+    selectedDirectory: string,
+  ): Promise<OpenProjectResult> => {
+    await projectSession?.dispose();
+    projectSession = await ProjectSession.open(
+      selectedDirectory,
+      options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
+      options.notifyProjectFileChange,
+      options.createSynctexService?.(),
+      async () => (await loadGlobalSettings()).settings,
+    );
+    options.logEvent?.("info", "project_opened", {
+      projectId: projectSession.describe().projectId,
+    });
+    return {
+      ok: true,
+      value: projectSession.describe(),
+    };
+  };
 
   registerHandler(
     options,
@@ -157,22 +178,21 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       if (selectedDirectory === null) {
         return failure("cancelled", "Project selection was cancelled.");
       }
+      return openProjectDirectory(selectedDirectory);
+    },
+  );
 
-      await projectSession?.dispose();
-      projectSession = await ProjectSession.open(
-        selectedDirectory,
-        options.createCompilerAdapter?.() ?? new MiktexCompilerAdapter(),
-        options.notifyProjectFileChange,
-        options.createSynctexService?.(),
-        async () => (await loadGlobalSettings()).settings,
-      );
-      options.logEvent?.("info", "project_opened", {
-        projectId: projectSession.describe().projectId,
-      });
-      return {
-        ok: true,
-        value: projectSession.describe(),
-      };
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.openSample,
+    openSampleProjectRequestSchema,
+    openProjectResultSchema,
+    async (): Promise<OpenProjectResult> => {
+      if (options.prepareSampleProject === undefined) {
+        return failure("internal", "The sample project is unavailable.");
+      }
+      const selectedDirectory = await options.prepareSampleProject();
+      return openProjectDirectory(selectedDirectory);
     },
   );
 

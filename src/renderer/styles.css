@@ -409,6 +409,12 @@ button.tree-row:hover {
   line-height: 1.7;
 }
 
+.welcome-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .editor-tabbar {
   display: flex;
   align-items: center;

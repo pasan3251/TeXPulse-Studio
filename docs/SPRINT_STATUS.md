@@ -13,7 +13,8 @@
 | Sprint 8      | Complete on 2026-06-14 | SyncTeX forward and inverse navigation                  |
 | Sprint 9      | Complete on 2026-06-14 | Recipes, settings, setup wizard, clean builds           |
 | Sprint 10     | Complete on 2026-06-14 | Security, output bounds, recovery, support logs         |
-| Sprints 11-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 11     | Complete on 2026-06-14 | Windows packaging and first-run sample workflow         |
+| Sprints 12-14 | Not started            | See `docs/SRS.md`                                       |
 
 ## Completed scope
 
@@ -78,13 +79,24 @@ explicit review, structured local application logs, redacted support export,
 user-controlled recovery/log cleanup, abuse-case tests, Electron crash-recovery
 E2E evidence, and native PDF inspection. See `reports/SPRINT-10.md`.
 
+Sprint 11 adds Electron Builder/NSIS packaging, application metadata and icon
+assets, explicit development/packaged resource resolution, an editable bundled
+sample behind one fixed preload method, release documentation, and an installed
+lifecycle test covering a clean profile, spaces in the installation path, real
+MiKTeX setup and compilation, high-DPI PDF preview, reopen persistence, and
+uninstall. See `reports/SPRINT-11.md`.
+
 ## Current environment limitation
 
+The beta installer is unsigned and may trigger Windows SmartScreen or antivirus
+reputation warnings. The local Microsoft Defender custom scan reported no
+matching detection. Code-signing and reputation validation remain release work.
 MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
 does not report a parseable version. TeX still runs with the local user's
 permissions: output quotas are checked after process exit, so transient resource
 use remains possible until timeout. Custom executables and trusted `latexmk`
 configuration remain explicit local trust decisions. Recovery is limited to 20
 buffers, 2 MiB per buffer, and 10 MiB total. Automatic external-file reload,
-side-by-side comparison, and merge actions remain future work. Packaging has not
-started.
+side-by-side comparison, and merge actions remain future work. MiKTeX and Perl
+are not bundled, application data is preserved on uninstall, and automatic
+updates remain deferred.

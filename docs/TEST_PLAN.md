@@ -1,11 +1,12 @@
 # Test Plan
 
-## Sprint 10 scope
+## Sprint 11 scope
 
-Sprint 10 verifies all existing controls plus process/output bounds, generation
-retention, navigation and CSP policy, bounded recovery, explicit restore,
-structured support logging, path redaction, data cleanup, dependency audit, and
-the implementation-matched threat model.
+Sprint 11 verifies all existing controls plus Windows package generation,
+development and packaged resource layouts, first-run onboarding, the editable
+sample project, clean-profile persistence, installation under a path containing
+spaces, high-DPI rendering, real packaged compilation/PDF preview, and uninstall
+behavior.
 
 | Check        | Command                   | Current evidence                                      |
 | ------------ | ------------------------- | ----------------------------------------------------- |
@@ -20,6 +21,9 @@ the implementation-matched threat model.
 | Build        | `pnpm build`              | Main, renderer chunks, and sandbox preload bundle     |
 | Aggregate    | `pnpm check`              | Runs every current gate in sequence                   |
 | Audit        | `pnpm audit:dependencies` | Fails on known high or critical findings              |
+| Unpacked app | `pnpm package:dir`        | Windows x64 ASAR development package                  |
+| Installer    | `pnpm package:win`        | Assisted per-user NSIS installer                      |
+| Packaged E2E | `pnpm test:packaged`      | Install, real compile, reopen, uninstall              |
 
 ## Determinism
 
@@ -42,13 +46,26 @@ the implementation-matched threat model.
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
-  folder/compiler/SyncTeX/toolchain overrides. It verifies the twenty-two-method
-  bridge and absent Node globals, rapid typing coalescence, queued handoff,
-  non-overlapping compiler trace intervals, newest-result display, disabled
-  auto-build plus manual compile, responsive editing, stale-result rejection,
-  workspace restoration, minimum-window layout, version-conflict preservation,
-  settings persistence, recipe and clean arguments, allowlisted cleanup,
-  first-run readiness states, screenshots, clean shutdown, and fixture removal.
+  folder/compiler/SyncTeX/toolchain overrides. It verifies the complete
+  twenty-three-method bridge and absent Node globals, rapid typing coalescence,
+  queued handoff, non-overlapping compiler trace intervals, newest-result
+  display, disabled auto-build plus manual compile, responsive editing,
+  stale-result rejection, workspace restoration, minimum-window layout,
+  version-conflict preservation, settings persistence, recipe and clean
+  arguments, allowlisted cleanup, first-run readiness states, screenshots, clean
+  shutdown, and fixture removal.
+- The packaged Electron test uses the installed executable rather than
+  development Electron. It installs into a path containing spaces, redirects
+  Electron user data to a clean temporary profile, confirms the sandboxed
+  twenty-three-method bridge, runs the real MiKTeX self-test, opens the fixed
+  sample, disables automation, edits and saves, compiles, renders the PDF,
+  captures a 150% scale screenshot, closes, reopens, verifies the edit, and
+  uninstalls.
+- The package harness confirms that the executable is removed while settings and
+  the edited sample remain after uninstall. Test-owned preserved data is removed
+  after the assertion.
+- Sample integration tests copy only a fixed regular file, preserve existing
+  edits, contain concurrent first creation, and reject unsafe destinations.
 - Crash-recovery E2E waits for a persisted snapshot, terminates the first
   Electron process, reviews recovery in a second process, verifies disk remains
   unchanged, restores to the editor, and saves explicitly.
@@ -108,8 +125,9 @@ the implementation-matched threat model.
 ## Later test levels
 
 Performance benchmarks for 1,000-file projects and measured editor input latency
-remain later release evidence. Real MiKTeX results are labeled separately and
-generated PDFs are inspected.
+remain later release evidence. Code-signing, SmartScreen reputation, and a
+separate clean Windows account or VM remain release-candidate evidence. Real
+MiKTeX results are labeled separately and generated PDFs are inspected.
 
 ## Clean-state procedure
 
@@ -118,4 +136,6 @@ generated PDFs are inspected.
 3. Run `pnpm check`.
 4. Run the conditional real doctor/compile smoke test when MiKTeX and Perl are
    available.
-5. Record the result in the sprint report.
+5. Run `pnpm package:dir`, `pnpm package:win`, and `pnpm test:packaged` on the
+   supported Windows host.
+6. Record the result in the sprint report.

@@ -338,6 +338,52 @@ describe("project IPC", () => {
     });
   });
 
+  it("opens only the fixed prepared sample project", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const prepareSampleProject = vi.fn(() => Promise.resolve(root));
+    const selectProjectDirectory = vi.fn(() => Promise.resolve(null));
+    registerProjectIpc({
+      ipcMain,
+      prepareSampleProject,
+      selectProjectDirectory,
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.openSample, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        entries: [{ path: "main.tex", kind: "file" }],
+        rootFile: "main.tex",
+      },
+    });
+    expect(prepareSampleProject).toHaveBeenCalledOnce();
+    expect(selectProjectDirectory).not.toHaveBeenCalled();
+  });
+
+  it("reports an unavailable sample without opening a chooser", async () => {
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const selectProjectDirectory = vi.fn(() => Promise.resolve(null));
+    registerProjectIpc({
+      ipcMain,
+      selectProjectDirectory,
+      trustedWebContentsId: () => 7,
+    });
+
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.openSample, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "internal",
+        message: expect.stringContaining("unavailable"),
+      },
+    });
+    expect(selectProjectDirectory).not.toHaveBeenCalled();
+  });
+
   it("persists only validated project recovery and exposes support controls", async () => {
     const root = await createProject();
     const { handlers, ipcMain } = createFakeIpcMain();

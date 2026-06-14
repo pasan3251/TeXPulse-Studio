@@ -43,6 +43,45 @@ Renderer assets live under `dist/renderer`; the sandbox preload must be
 `dist/electron/preload.cjs`. Packaged/production windows intentionally disable
 DevTools.
 
+For a packaged build, recreate the unpacked directory and installer:
+
+```powershell
+pnpm package:dir
+pnpm package:win
+```
+
+Packaged resources must exist under the executable's `resources` directory. The
+application resolves them through `process.resourcesPath`, not the current
+working directory.
+
+## Windows warns about the installer
+
+The 0.1.0 beta is unsigned. Windows SmartScreen or antivirus reputation checks
+may warn because the executable has no trusted publisher certificate and little
+download reputation. Verify that the installer came from the expected release
+source before running it.
+
+Do not disable antivirus globally. A maintainer can scan a local artifact with:
+
+```powershell
+Start-MpScan -ScanType CustomScan -ScanPath "<installer path>"
+Get-AuthenticodeSignature "<installer path>"
+```
+
+A clean scan is not a substitute for code signing or release provenance.
+
+## Installer or uninstall failed
+
+The beta uses an assisted per-user NSIS installer and allows a custom
+installation directory. It does not require MiKTeX to be installed in the same
+directory.
+
+Uninstall removes the application, shortcuts, and installed resources.
+Application data is preserved intentionally, including settings, logs, recovery
+data, and the edited sample. Use Settings to clear recovery and logs before
+uninstall when desired. Removing all remaining application data is a separate
+manual action.
+
 ## `latexmk` reports that Perl is missing
 
 MiKTeX's `latexmk` launcher requires a Perl interpreter. Install a supported
@@ -86,6 +125,17 @@ be launched for checks and builds.
 
 `Skip self-test and continue` is explicit. It completes setup without claiming
 that a real compile succeeded.
+
+## The sample project is missing or did not reset
+
+Choose `Open sample project` from the welcome screen. TeXPulse copies its fixed
+bundled `main.tex` into the application's user-data directory, then opens it
+through the normal canonical project service.
+
+The copy is created only when missing. Existing sample edits are preserved
+across restarts, reinstalls, and uninstall. To obtain the original text again,
+move or remove the application-data `sample-project` directory while TeXPulse
+Studio is closed, then reopen the sample.
 
 ## MakeIndex version is unknown
 

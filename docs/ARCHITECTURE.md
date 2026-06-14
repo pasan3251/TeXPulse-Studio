@@ -2,10 +2,9 @@
 
 ## Current state
 
-Sprint 10 adds compiler/output bounds, generation retention, abnormal-shutdown
-recovery, local support diagnostics, redacted export, and navigation/CSP
-hardening while preserving the editor, build, PDF, diagnostic, SyncTeX,
-settings, and project controls:
+Sprint 11 adds the Windows packaging and onboarding boundary while preserving
+the editor, build, PDF, diagnostic, SyncTeX, settings, recovery, support, and
+security controls:
 
 - `process/`: shell-free child process boundary with timeout, cancellation,
   process-tree cleanup, and bounded aggregate capture.
@@ -31,8 +30,13 @@ settings, and project controls:
 - `ipc/`: strict Zod request/response schemas and stable project, build, PDF,
   and SyncTeX channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
-  denial, trusted-sender IPC handlers, a session owning project/build state, and
-  a frozen twenty-two-method preload bridge.
+  denial, trusted-sender IPC handlers, packaged/development resource resolution,
+  a session owning project/build state, and a frozen twenty-three-method preload
+  bridge.
+- `packaging`: Electron Builder x64 ASAR output, assisted per-user NSIS
+  installer, metadata/icon resources, and a packaged lifecycle harness.
+- `resources/`: fixed bundled sample source used by the doctor and copied once
+  into application data as an editable project.
 - `renderer/`: React workspace state, deterministic project hierarchy,
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
   persistence, resizable panes, build controls, source-linked Problems and raw
@@ -41,7 +45,8 @@ settings, and project controls:
   layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no production packaging.
+The beta has no updater, bundled TeX distribution, code-signing certificate, or
+cross-platform package.
 
 ## System boundaries
 
@@ -235,6 +240,24 @@ redacts the Windows home path and active project path where practical.
 Renderer navigation and popup requests are denied. The product does not expose
 an external-URL method because no implemented workflow requires one.
 
+## Sprint 11 packaging and sample flow
+
+```text
+development package or NSIS installer
+  -> ASAR application plus fixed external sample resource
+  -> development resources/ or packaged process.resourcesPath
+  -> first-run settings/toolchain self-test
+  -> fixed openSampleProject IPC with no renderer path
+  -> copy missing sample file into Electron userData
+  -> preserve existing edits and reject links/non-files
+  -> normal canonical ProjectSession and compiler/PDF flow
+```
+
+The installer is per-user, allows a destination containing spaces, and preserves
+application data during uninstall. MiKTeX and Perl remain external
+prerequisites. The package contains no updater or network service. The beta is
+unsigned; signing and release reputation require a later operational decision.
+
 ## Project flow
 
 ```text
@@ -341,5 +364,4 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0010-synctex-navigation-boundary.md`
 - `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`
 - `adr/ADR-0012-security-recovery-and-support-data.md`
-
-Packaging requires a later ADR before implementation.
+- `adr/ADR-0013-windows-packaging-and-sample-project.md`

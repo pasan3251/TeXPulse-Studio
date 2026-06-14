@@ -1,5 +1,6 @@
 export const PROJECT_CHANNELS = {
   open: "project:open",
+  openSample: "project:open-sample",
   readTextFile: "project:read-text-file",
   writeTextFile: "project:write-text-file",
 } as const;

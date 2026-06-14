@@ -21,6 +21,7 @@ import { defaultGlobalSettings } from "../settings/settings-types.js";
 import { runDoctor } from "../toolchain/doctor.js";
 import { RecoveryStore } from "../recovery/recovery-store.js";
 import { ApplicationLog } from "../support/application-log.js";
+import { ensureSampleProject } from "../project/sample-project.js";
 import {
   isAllowedRendererNavigation,
   isExternalUrl,
@@ -104,6 +105,11 @@ void app.whenReady().then(async () => {
     notifyProjectFileChange: (change) => {
       mainWindow?.webContents.send(PROJECT_EVENTS.fileChanged, change);
     },
+    prepareSampleProject: () =>
+      ensureSampleProject(
+        applicationResourcePath("sample-project"),
+        join(userDataDirectory, "sample-project"),
+      ),
     showItemInFolder: (path) => {
       shell.showItemInFolder(path);
     },
@@ -122,7 +128,7 @@ void app.whenReady().then(async () => {
           issues: loaded.issues,
         };
       }
-      return loaded;
+      return { settings: loaded.settings, issues: loaded.issues };
     },
     saveGlobalSettings: (settings) => settingsStore.save(settings),
     checkToolchain,
@@ -236,14 +242,7 @@ async function checkToolchain(
   }
 
   const report = await runDoctor({
-    fixturePath: join(
-      currentDirectory,
-      "..",
-      "..",
-      "fixtures",
-      "minimal-success",
-      "main.tex",
-    ),
+    fixturePath: applicationResourcePath("sample-project", "main.tex"),
     ...(request.customBinDirectory === null
       ? {}
       : { customBinDirectory: request.customBinDirectory }),
@@ -260,6 +259,13 @@ async function checkToolchain(
       message: report.selfTest.message,
     },
   };
+}
+
+function applicationResourcePath(...segments: string[]): string {
+  const root = app.isPackaged
+    ? process.resourcesPath
+    : join(currentDirectory, "..", "..", "resources");
+  return join(root, ...segments);
 }
 
 function configurePermissionPolicy(): void {

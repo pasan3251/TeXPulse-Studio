@@ -22,6 +22,20 @@ pnpm check
 pnpm audit:dependencies
 ```
 
+For Windows packaging work, run:
+
+```powershell
+pnpm package:dir
+pnpm package:win
+pnpm test:packaged
+```
+
+The packaged lifecycle requires the supported MiKTeX and Perl toolchain. It
+installs into an isolated path containing spaces, uses a clean application
+profile, exercises the sample project through a real compile and PDF preview,
+then uninstalls. Do not claim signing or SmartScreen reputation when the
+artifact is unsigned.
+
 For editor/PDF work, run the focused renderer and Electron suites:
 
 ```powershell

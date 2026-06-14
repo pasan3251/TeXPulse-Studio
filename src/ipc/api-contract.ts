@@ -41,6 +41,7 @@ import type {
 
 export interface TeXPulseApi {
   openProject(): Promise<OpenProjectResult>;
+  openSampleProject(): Promise<OpenProjectResult>;
   readTextFile(request: ProjectPathRequest): Promise<ReadTextFileResult>;
   writeTextFile(request: ProjectWriteRequest): Promise<WriteTextFileResult>;
   compileProject(request: CompileProjectRequest): Promise<CompileProjectResult>;

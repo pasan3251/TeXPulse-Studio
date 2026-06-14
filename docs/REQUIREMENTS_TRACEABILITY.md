@@ -487,3 +487,44 @@ sprint assignments are authoritative in `docs/SRS.md`.
   component, integration, and Electron E2E tests: `../tests/`
 - Recovery and support modules: `../src/recovery/` and `../src/support/`
 - Security decision: `adr/ADR-0012-security-recovery-and-support-data.md`
+
+## Sprint 11
+
+| Requirement     | Sprint 11 evidence                                                                  | Status                                            |
+| --------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `FR-PACK-001`   | Electron Builder creates x64 unpacked and assisted NSIS packages                    | Complete                                          |
+| `FR-PACK-002`   | Package contains no MiKTeX or Perl; setup reports external toolchain readiness      | Complete                                          |
+| `FR-PACK-003`   | Installed clean profile opens the first-run toolchain wizard                        | Complete                                          |
+| `FR-PACK-004`   | Packaged test distinguishes app launch from passed real MiKTeX self-test            | Complete                                          |
+| `FR-PACK-005`   | Fixed bundled sample is copied once, editable, compiled, and preserved              | Complete                                          |
+| `FR-PACK-006`   | Setup, release, troubleshooting, architecture, test, security, and contributor docs | Complete for beta                                 |
+| `FR-PACK-007`   | No updater is included; update design remains separately deferred                   | Complete for beta                                 |
+| `NFR-COMP-001`  | Installer and unpacked application target Windows 11 x64                            | Complete for beta                                 |
+| `NFR-COMP-002`  | Installed beta uses the existing MiKTeX adapter and real MiKTeX                     | Complete for beta                                 |
+| `NFR-COMP-003`  | Installer path contains spaces; sample and prior Unicode project tests remain green | Current scope complete                            |
+| `NFR-REL-004`   | Sample copy is exclusive and never overwrites an existing user edit                 | Complete where practical                          |
+| `NFR-REL-005`   | Sample service, IPC, development E2E, and packaged lifecycle are automated          | Complete                                          |
+| `NFR-SEC-001`   | Packaged app retains sandbox, context isolation, CSP, and navigation denial         | Complete for Sprint 11                            |
+| `NFR-SEC-004`   | Frozen bridge adds one no-argument fixed sample method, totaling twenty-three       | Current scope complete                            |
+| `NFR-SEC-005`   | Sample request and response use strict schemas and trusted sender checks            | Complete                                          |
+| `NFR-SEC-006`   | Copied sample opens through the normal canonical project boundary                   | Complete                                          |
+| `NFR-SEC-012`   | Electron Builder is pinned, locked, audited, and development-only                   | Complete for beta release gate                    |
+| `NFR-PRIV-001`  | Packaging, onboarding, sample compilation, and preview remain local                 | Complete for Sprint 11                            |
+| `NFR-PRIV-002`  | Installer adds no analytics, telemetry, updater, or network service                 | Complete for Sprint 11                            |
+| `NFR-MAINT-004` | ADR-0013 records packaging, resources, sample, and uninstall decisions              | Complete                                          |
+| `NFR-MAINT-005` | Packaged lifecycle uses bounded waits and observable UI/filesystem completion       | Complete                                          |
+| `NFR-MAINT-006` | `AGENTS.md` contains verified package and packaged-test commands                    | Complete                                          |
+| `NFR-UX-001`    | Welcome-screen sample action is a named keyboard-operable button                    | Complete                                          |
+| `NFR-UX-004`    | Sample, setup, installer workflow, and high-DPI UI retain accessible labels         | Current scope complete                            |
+| `AS-010`        | Installed app edits/compiles sample and renders PDF without development runtime     | Complete on clean app profile; account RC pending |
+
+### Sprint 11 evidence
+
+- Sprint report: `reports/SPRINT-11.md`
+- Package configuration and assets: `../electron-builder.yml` and `../build/`
+- Bundled sample and copy service: `../resources/sample-project/` and
+  `../src/project/sample-project.ts`
+- Packaged lifecycle harness: `../scripts/test-packaged.ps1` and
+  `../tests/packaged/`
+- Windows packaging decision:
+  `adr/ADR-0013-windows-packaging-and-sample-project.md`

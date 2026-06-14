@@ -206,7 +206,7 @@ export function App({ api = window.texpulse }: AppProps) {
     return operation;
   };
 
-  const openProject = async (): Promise<void> => {
+  const openProject = async (sample = false): Promise<void> => {
     coordinatorRef.current?.cancelPending();
     synctexRequestRef.current += 1;
     setSyncBusy(false);
@@ -219,7 +219,9 @@ export function App({ api = window.texpulse }: AppProps) {
     }
 
     const requestId = ++openRequestRef.current;
-    const result = await api.openProject();
+    const result = sample
+      ? await api.openSampleProject()
+      : await api.openProject();
     if (requestId !== openRequestRef.current) {
       return;
     }
@@ -1070,7 +1072,9 @@ export function App({ api = window.texpulse }: AppProps) {
             type="button"
             className="button secondary"
             disabled={buildBusy || isAnyFileSaving}
-            onClick={openProject}
+            onClick={() => {
+              void openProject();
+            }}
           >
             Open project
           </button>
@@ -1237,13 +1241,26 @@ export function App({ api = window.texpulse }: AppProps) {
                       Open a project, edit its source, then compile through your
                       local MiKTeX installation.
                     </p>
-                    <button
-                      type="button"
-                      className="button large"
-                      onClick={openProject}
-                    >
-                      Open a project
-                    </button>
+                    <div className="welcome-actions">
+                      <button
+                        type="button"
+                        className="button large"
+                        onClick={() => {
+                          void openProject();
+                        }}
+                      >
+                        Open a project
+                      </button>
+                      <button
+                        type="button"
+                        className="button large secondary"
+                        onClick={() => {
+                          void openProject(true);
+                        }}
+                      >
+                        Open sample project
+                      </button>
+                    </div>
                   </div>
                 </section>
               ) : (

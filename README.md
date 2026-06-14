@@ -1,25 +1,43 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 10 provides a secure Electron editor with autosave,
-debounced live compilation, project change detection, workspace restoration,
-structured source-linked diagnostics, raw build logs, SyncTeX forward/inverse
-navigation, selectable recipes, persistent settings, first-run toolchain setup,
-clean-build controls, bounded compiler output, abnormal-shutdown recovery, local
-support diagnostics, and a PDF.js preview that retains the last successful
-output when a later build fails. Project files and generated artifact paths
-remain behind a validated main-process IPC boundary.
+development. Sprint 11 provides an installable Windows beta plus a secure
+Electron editor with autosave, debounced live compilation, project change
+detection, workspace restoration, structured source-linked diagnostics, raw
+build logs, SyncTeX forward/inverse navigation, selectable recipes, persistent
+settings, first-run toolchain setup, clean-build controls, bounded compiler
+output, abnormal-shutdown recovery, local support diagnostics, and a PDF.js
+preview that retains the last successful output when a later build fails.
+Project files and generated artifact paths remain behind a validated
+main-process IPC boundary.
 
-## Requirements
+## Installed beta requirements
 
 - Windows 11 x64
-- Node.js 24.x
-- pnpm 10.12.1 through Corepack
-- Git
 - MiKTeX with `latexmk`
 - Native Windows Perl available on `PATH`
 
-## Setup
+MiKTeX and Perl are not bundled. The first launch runs a real isolated toolchain
+self-test before reporting compilation readiness.
+
+## Install
+
+Run the generated assisted installer under `output/package`. The beta installer
+is unsigned, so Windows SmartScreen may show a reputation warning. Verify the
+artifact source before continuing.
+
+After setup, choose `Open sample project` from the welcome screen, edit
+`main.tex`, and compile. The editable copy is stored under TeXPulse Studio's
+application data and is preserved during uninstall.
+
+## Development requirements
+
+- Node.js 24.x
+- pnpm 10.12.1 through Corepack
+- Git
+- The installed beta requirements above
+
+## Development setup
 
 ```powershell
 corepack prepare pnpm@10.12.1 --activate
@@ -43,6 +61,18 @@ pnpm audit:dependencies
 The aggregate command runs formatting, linting, strict type checking, unit,
 component, integration, coverage, and Electron E2E tests, then creates the
 production main, renderer, and preload bundles.
+
+Build and verify Windows packages:
+
+```powershell
+pnpm package:dir
+pnpm package:win
+pnpm test:packaged
+```
+
+The packaged lifecycle installs to a path containing spaces, uses a clean app
+profile, runs the real MiKTeX self-test, edits and compiles the bundled sample,
+captures high-DPI evidence, reopens the edit, and uninstalls.
 
 ## Toolchain doctor
 
@@ -77,8 +107,12 @@ still runs with the local user's permissions and is not OS-sandboxed.
 
 ## Desktop editor
 
-The Sprint 10 application:
+The Sprint 11 application:
 
+- installs through an assisted per-user NSIS installer;
+- preserves application data during uninstall;
+- resolves bundled resources in development and packaged layouts;
+- opens an editable bundled sample without exposing an arbitrary path API;
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
 - edits valid UTF-8 project text with LaTeX highlighting, undo/redo, find, and
@@ -137,7 +171,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-twenty-two-method typed preload bridge.
+twenty-three-method typed preload bridge.
 
 ## Project service
 
@@ -173,3 +207,5 @@ The typed modules under `src/project/`:
 - Sprint 8 report: `docs/reports/SPRINT-8.md`
 - Sprint 9 report: `docs/reports/SPRINT-9.md`
 - Sprint 10 report: `docs/reports/SPRINT-10.md`
+- Sprint 11 report: `docs/reports/SPRINT-11.md`
+- Release notes: `docs/RELEASE_NOTES.md`

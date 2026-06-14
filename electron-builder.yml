@@ -1,0 +1,34 @@
+appId: com.texpulse.studio
+productName: TeXPulse Studio
+asar: true
+
+directories:
+  buildResources: build
+  output: output/package
+
+files:
+  - dist/**/*
+  - package.json
+  - "!dist/**/*.map"
+
+extraResources:
+  - from: resources/sample-project
+    to: sample-project
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: TeXPulse Studio
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false

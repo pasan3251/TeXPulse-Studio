@@ -112,6 +112,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "onProjectFileChanged",
         "openPdf",
         "openProject",
+        "openSampleProject",
         "readTextFile",
         "revealPdf",
         "saveGlobalSettings",
@@ -709,6 +710,14 @@ test("reports first-run toolchain readiness only after a self-test", async () =>
     });
     await dialog.getByRole("button", { name: "Save settings" }).click();
     await expect(dialog).toBeHidden();
+    await page.getByRole("button", { name: "Open sample project" }).click();
+    await expect(page.getByLabel("Editor for main.tex")).toContainText(
+      "Welcome to TeXPulse Studio",
+    );
+    await page.getByLabel("Auto build").uncheck();
+    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(page.getByText("Build: succeeded")).toBeVisible();
+    await expect(page.getByLabel("PDF page 1")).toBeVisible();
   } finally {
     await electronApp.close();
     await rm(projectDirectory, { recursive: true, force: true });
