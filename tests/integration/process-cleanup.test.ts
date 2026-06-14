@@ -1,6 +1,7 @@
-import { copyFile, mkdtemp, readFile, rm, watch } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,52 +31,32 @@ interface ProcessTreePids {
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { force: true, recursive: true })),
+    temporaryDirectories.splice(0).map((directory) =>
+      rm(directory, {
+        force: true,
+        maxRetries: 5,
+        recursive: true,
+        retryDelay: 100,
+      }),
+    ),
   );
 });
 
 async function readProcessTreePids(path: string): Promise<ProcessTreePids> {
-  try {
-    return JSON.parse(await readFile(path, "utf8")) as ProcessTreePids;
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !("code" in error) ||
-      error.code !== "ENOENT"
-    ) {
-      throw error;
-    }
-  }
-
-  const abortController = new AbortController();
-  const watcher = watch(dirname(path), { signal: abortController.signal });
-  const guard = setTimeout(() => {
-    abortController.abort();
-  }, 5_000);
-  try {
-    for await (const event of watcher) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      return JSON.parse(await readFile(path, "utf8")) as ProcessTreePids;
+    } catch (error) {
       if (
-        event.filename === null ||
-        join(dirname(path), event.filename) === path
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
       ) {
-        try {
-          return JSON.parse(await readFile(path, "utf8")) as ProcessTreePids;
-        } catch (error) {
-          if (
-            !(error instanceof Error) ||
-            !("code" in error) ||
-            error.code !== "ENOENT"
-          ) {
-            throw error;
-          }
-        }
+        throw error;
       }
     }
-  } finally {
-    clearTimeout(guard);
-    abortController.abort();
+    await delay(25);
   }
 
   throw new Error("Timed out waiting for the fake compiler PID file.");

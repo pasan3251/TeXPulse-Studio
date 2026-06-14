@@ -2,6 +2,7 @@ import { lstat, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  canonicalProjectRoot,
   normalizeProjectPath,
   resolveProjectPath,
 } from "../project/project-paths.js";
@@ -29,11 +30,12 @@ export async function cleanupAuxiliaryFiles(
   projectRoot: string,
   buildDirectory: string,
 ): Promise<number> {
+  const canonicalRoot = await canonicalProjectRoot(projectRoot);
   const generationsPath = `${normalizeProjectPath(buildDirectory)}/generations`;
   let generationsDirectory: string;
   try {
     generationsDirectory = await resolveProjectPath(
-      projectRoot,
+      canonicalRoot,
       generationsPath,
     );
   } catch (error) {

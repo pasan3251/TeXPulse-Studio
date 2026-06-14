@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, mkdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,20 +57,23 @@ describe("compileProject", () => {
       rootFile: "main.tex",
       customBinDirectory,
     });
+    const canonicalProject = await realpath(project);
 
     expect(result).toMatchObject({
       status: "succeeded",
       exitCode: 0,
-      projectDirectory: project,
+      projectDirectory: canonicalProject,
       failureReason: null,
     });
     expect(result.pdfPath).toContain("project with spaces");
     expect(result.args).toContain("-no-shell-escape");
     expect(result.args).toContain("-norc");
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      cwd: project,
+    const stdout = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(stdout).toMatchObject({
       path: expect.stringMatching(/^.*custom tools/i),
     });
+    expect(typeof stdout.cwd).toBe("string");
+    expect(await realpath(stdout.cwd as string)).toBe(canonicalProject);
   });
 
   it("reports a missing root file without launching a process", async () => {

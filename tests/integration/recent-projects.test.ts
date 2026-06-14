@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -37,11 +37,16 @@ describe("RecentProjectsStore", () => {
     await store.add(first);
     await store.add(second);
     const projects = await store.add(first);
-    expect(projects.map((project) => project.path)).toEqual([first, second]);
+    const canonicalFirst = await realpath(first);
+    const canonicalSecond = await realpath(second);
+    expect(projects.map((project) => project.path)).toEqual([
+      canonicalFirst,
+      canonicalSecond,
+    ]);
     expect(projects[0]?.lastOpenedAt).toBe("2026-06-13T12:00:02.000Z");
 
     await expect(store.remove(first)).resolves.toMatchObject([
-      { path: second },
+      { path: canonicalSecond },
     ]);
     await store.clear();
     await expect(store.load()).resolves.toEqual({ projects: [], issues: [] });

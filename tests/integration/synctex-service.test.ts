@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -75,9 +75,10 @@ describe("SynctexService", () => {
       .trim()
       .split(/\r?\n/u)
       .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const canonicalProject = await realpath(project);
+    const firstTrace = traces[0];
     expect(traces).toHaveLength(2);
-    expect(traces[0]).toMatchObject({
-      cwd: project,
+    expect(firstTrace).toMatchObject({
       editor: null,
       viewer: null,
       args: [
@@ -90,6 +91,8 @@ describe("SynctexService", () => {
         buildDirectory,
       ],
     });
+    expect(typeof firstTrace?.cwd).toBe("string");
+    expect(await realpath(firstTrace?.cwd as string)).toBe(canonicalProject);
   });
 
   it("reports process and parser failures without exposing command output", async () => {

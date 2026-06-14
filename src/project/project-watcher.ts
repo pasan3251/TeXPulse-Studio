@@ -16,6 +16,7 @@ const DEFAULT_IGNORED_DIRECTORIES = new Set([
   "dist",
   "node_modules",
 ]);
+const WINDOWS_POLLING_INTERVAL_MS = 250;
 
 type ProjectFileChangeKind = ProjectFileChange["kind"];
 export type ProjectWatchChange = Pick<ProjectFileChange, "kind" | "path">;
@@ -79,6 +80,14 @@ export class ProjectWatcher {
       followSymlinks: false,
       ignoreInitial: true,
       persistent: false,
+      ...(process.platform === "win32"
+        ? {
+            // Native fs events can hard-crash on short/long Windows path aliases.
+            binaryInterval: WINDOWS_POLLING_INTERVAL_MS,
+            interval: WINDOWS_POLLING_INTERVAL_MS,
+            usePolling: true,
+          }
+        : {}),
       ignored: (path) =>
         shouldIgnoreProjectWatchPath(
           options.root,

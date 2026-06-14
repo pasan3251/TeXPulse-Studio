@@ -97,7 +97,7 @@ export class RecentProjectsStore {
   }
 
   async remove(projectDirectory: string): Promise<RecentProject[]> {
-    const key = pathKey(projectDirectory);
+    const key = pathKey(await canonicalOrRawPath(projectDirectory));
     const current = await this.load();
     const projects = current.projects.filter(
       (project) => pathKey(project.path) !== key,
@@ -124,4 +124,12 @@ function pathKey(projectPath: string): string {
   return process.platform === "win32"
     ? projectPath.toLocaleLowerCase("en-US")
     : projectPath;
+}
+
+async function canonicalOrRawPath(projectDirectory: string): Promise<string> {
+  try {
+    return await canonicalProjectRoot(projectDirectory);
+  } catch {
+    return projectDirectory;
+  }
 }
