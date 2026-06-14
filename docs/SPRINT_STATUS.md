@@ -16,7 +16,7 @@
 | Sprint 11 | Complete on 2026-06-14 | Windows packaging and first-run sample workflow         |
 | Sprint 12 | Complete on 2026-06-14 | Release-candidate hardening and full product validation |
 | Sprint 13 | Complete on 2026-06-14 | Read-only Git status awareness                          |
-| Sprint 14 | Not started            | Optional collaboration research; see `docs/SRS.md`      |
+| Sprint 14 | Complete on 2026-06-14 | Collaboration research controls                         |
 
 ## Completed scope
 
@@ -104,6 +104,13 @@ refreshes after project changes, and focused parser/IPC/integration tests.
 Templates, local revision history, diff views, and commit assistance remain
 deferred. See `reports/SPRINT-13.md`.
 
+Sprint 14 completes the required collaboration research controls before any
+runtime implementation: a separate collaboration SRS, a repository-grounded
+remote-peer threat model, and ADR-0015 selecting a future feature-flagged
+local-network WebSocket plus Yjs research direction with host authority over
+files and compilation. No collaboration runtime, dependency, listener, preload
+method, UI, or remote compilation path was added. See `reports/SPRINT-14.md`.
+
 ## Current environment limitation
 
 The release-candidate installer is unsigned and may trigger Windows SmartScreen
@@ -117,6 +124,6 @@ trusted `latexmk` configuration remain explicit local trust decisions. Recovery
 is limited to 20 buffers, 2 MiB per buffer, and 10 MiB total. Automatic
 external-file reload, side-by-side comparison, and merge actions remain future
 work. Local revision history, templates beyond the minimal starter, diff views,
-Git commit assistance, and collaboration remain deferred. MiKTeX and Perl are
-not bundled, application data is preserved on uninstall, and automatic updates
-remain deferred.
+Git commit assistance, and collaboration implementation remain deferred. MiKTeX
+and Perl are not bundled, application data is preserved on uninstall, and
+automatic updates remain deferred.

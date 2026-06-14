@@ -48,7 +48,9 @@ security controls:
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
 The release candidate has no updater, bundled TeX distribution, code-signing
-certificate, or cross-platform package.
+certificate, cross-platform package, or collaboration runtime. Sprint 14 adds
+only collaboration research controls in `COLLABORATION_SRS.md`,
+`COLLABORATION_THREAT_MODEL.md`, and ADR-0015.
 
 ## System boundaries
 
@@ -63,6 +65,8 @@ The implemented and planned boundaries are:
 5. Pure modules for path validation, build generations, diagnostics, settings,
    recovery, support logging, navigation policy, output limits, retention,
    Git-status parsing, and SyncTeX parsing.
+6. Future collaboration, if implemented, must be a separately feature-flagged
+   boundary that is absent from the stable offline path by default.
 
 ## Sprint 4 editor flow
 
@@ -388,6 +392,9 @@ after the self-test, so it does not modify user projects.
 - Recovery requires explicit review and never writes source automatically.
 - Application logs avoid source content by default and support redacted export
   and user-controlled cleanup.
+- Collaboration implementation remains absent by default. Future collaboration
+  must not add preload methods, listeners, dependencies, UI, or network exposure
+  unless an explicit experimental flag is enabled.
 
 ## Decision records
 
@@ -405,3 +412,4 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0012-security-recovery-and-support-data.md`
 - `adr/ADR-0013-windows-packaging-and-sample-project.md`
 - `adr/ADR-0014-project-management-and-release-provenance.md`
+- `adr/ADR-0015-collaboration-research-prototype.md`

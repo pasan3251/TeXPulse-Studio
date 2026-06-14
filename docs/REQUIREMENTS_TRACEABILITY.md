@@ -613,3 +613,31 @@ history, diff views, and commit assistance remain deferred.
   `../tests/integration/git-status.test.ts`,
   `../tests/integration/project-ipc.test.ts`, `../tests/e2e/`, and
   `../tests/packaged/`
+
+## Sprint 14
+
+Sprint 14 implements the prerequisite research and governance artifacts required
+by `SRS.md` section 16 before collaboration implementation. It does not add
+runtime collaboration behavior.
+
+| Requirement     | Sprint 14 evidence                                                                      | Status                      |
+| --------------- | --------------------------------------------------------------------------------------- | --------------------------- |
+| `NFR-SEC-013`   | Separate collaboration SRS, remote-peer threat model, and sandbox/authority decisions   | Research controls complete  |
+| `NFR-SEC-001`   | Stable Electron security posture remains unchanged; collaboration is docs-only          | Complete for Sprint 14      |
+| `NFR-SEC-004`   | No preload method or runtime capability was added                                       | Complete for Sprint 14      |
+| `NFR-SEC-005`   | Future collaboration messages require strict schema/versioning in the collaboration SRS | Planned control documented  |
+| `NFR-SEC-006`   | Future guest input cannot become host paths without `ProjectService` validation         | Planned control documented  |
+| `NFR-MAINT-004` | ADR-0015 records transport, CRDT, authority, feature-flag, and validation decisions     | Complete                    |
+| `NFR-MAINT-005` | Future collaboration test strategy is specified before implementation                   | Complete for research scope |
+| `NFR-PRIV-001`  | Future collaboration keeps host-local source authority by default                       | Planned control documented  |
+| `NFR-PRIV-002`  | No analytics, telemetry, hosted service, relay, or production dependency was added      | Complete for Sprint 14      |
+| `NFR-PRIV-003`  | Future diagnostic/upload behavior remains opt-in; support logs must omit secrets/source | Planned control documented  |
+
+### Sprint 14 evidence
+
+- Sprint report: `reports/SPRINT-14.md`
+- Collaboration SRS: `COLLABORATION_SRS.md`
+- Collaboration threat model: `COLLABORATION_THREAT_MODEL.md`
+- Collaboration ADR: `adr/ADR-0015-collaboration-research-prototype.md`
+- Existing stable-path controls: `ARCHITECTURE.md`, `SECURITY.md`, and
+  `TEST_PLAN.md`

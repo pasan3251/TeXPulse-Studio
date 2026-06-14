@@ -141,6 +141,13 @@ certificate. Additional clean Windows accounts or VMs remain useful
 cross-environment release observations. Real MiKTeX results are labeled
 separately and generated PDFs are inspected.
 
+Sprint 14 collaboration work is documentation-only. Before any future runtime
+prototype is accepted, tests must prove collaboration is absent by default, the
+experimental flag gates all listeners/UI/preload methods/dependencies, message
+schemas reject malformed and oversized input, remote peer messages cannot become
+host filesystem paths or compiler arguments, loopback sessions tear down
+deterministically, and support logs omit invitation secrets and source payloads.
+
 ## Clean-state procedure
 
 1. Copy only non-ignored repository files to an empty directory.

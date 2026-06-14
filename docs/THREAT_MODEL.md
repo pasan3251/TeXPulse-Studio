@@ -17,7 +17,9 @@ sandbox. Users must review projects before enabling custom executables or
 `latexmk` configuration.
 
 No known critical or high-severity finding remains in the implemented Sprint 10
-scope. Residual medium risks are documented below.
+scope. Residual medium risks are documented below. Collaboration remains absent
+from the implemented runtime and is modeled separately in
+`COLLABORATION_THREAT_MODEL.md`.
 
 ## Scope and assumptions
 
@@ -46,7 +48,9 @@ Out of scope:
 - protection from an already-compromised Windows account or administrator;
 - containment equivalent to a VM, container, or restricted OS token;
 - hostile multi-user or hosted compilation; and
-- network or collaboration protocols that do not exist in the product.
+- network or collaboration protocols that do not exist in the product. Sprint 14
+  collaboration research is documented separately and does not add runtime
+  behavior.
 
 ## System model
 
@@ -175,3 +179,5 @@ a rendered PDF are reviewed separately.
 - Classic NSIS output embeds build metadata, so the tagged source archive and
   recorded artifact hashes are the provenance controls; byte-identical installer
   rebuilds are not claimed.
+- Collaboration implementation remains deferred behind the Sprint 14
+  collaboration SRS, threat model, and ADR.

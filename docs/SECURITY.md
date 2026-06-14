@@ -1,13 +1,17 @@
 # Security
 
-## Sprint 12 posture
+## Current posture
 
-Sprint 12 keeps the Electron renderer outside the trusted computing boundary
-while completing project creation, file/folder mutation, recent projects,
-source-only ZIP export, and release-candidate verification. It adds no network
-service, telemetry, remote content, arbitrary renderer filesystem access,
-bundled TeX distribution, updater, or production dependency. The
+The current build keeps the Electron renderer outside the trusted computing
+boundary while completing project creation, file/folder mutation, recent
+projects, source-only ZIP export, and release-candidate verification. It adds no
+network service, telemetry, remote content, arbitrary renderer filesystem
+access, bundled TeX distribution, updater, or production dependency. The
 implementation-matched threat model remains `THREAT_MODEL.md`.
+
+Sprint 14 adds collaboration research controls only: `COLLABORATION_SRS.md`,
+`COLLABORATION_THREAT_MODEL.md`, and ADR-0015. No collaboration listener,
+runtime dependency, preload method, UI, or remote compile path exists.
 
 The application:
 
@@ -215,6 +219,9 @@ or execute user-controlled local programs and Perl configuration respectively.
 - Do not traverse project-internal links or junctions.
 - Validate external URLs and configure a Content Security Policy.
 - Keep source content local and omit analytics from the initial release.
+- Keep collaboration disabled and absent from runtime until a separate
+  implementation sprint proves the feature flag, authority model, schemas,
+  limits, and tests.
 
 ## Dependency policy
 
@@ -234,11 +241,13 @@ Code signing, SmartScreen reputation, update integrity/rollback, and repeat
 validation on additional clean Windows accounts or VMs remain release
 operations. Automatic external-file reload/merge and any new preload or
 external-URL capability require their own validated contracts and tests.
-ADR-0005 defines the path/link policy; ADR-0006 defines the Electron boundary;
-ADR-0007 defines completed PDF loading and artifact actions; ADR-0008 defines
-live build and project watching; ADR-0009 defines structured diagnostic parsing
-and source links; ADR-0010 defines the SyncTeX process, artifact, path, and
-renderer boundary; ADR-0011 defines settings, toolchain readiness, `latexmk`
-trust, and cleanup; ADR-0012 defines output bounds, recovery, support data, and
-navigation denial; ADR-0013 defines Windows packaging, resources, onboarding,
-and uninstall behavior.
+Collaboration implementation remains deferred behind the Sprint 14 SRS, threat
+model, and ADR-0015. ADR-0005 defines the path/link policy; ADR-0006 defines the
+Electron boundary; ADR-0007 defines completed PDF loading and artifact actions;
+ADR-0008 defines live build and project watching; ADR-0009 defines structured
+diagnostic parsing and source links; ADR-0010 defines the SyncTeX process,
+artifact, path, and renderer boundary; ADR-0011 defines settings, toolchain
+readiness, `latexmk` trust, and cleanup; ADR-0012 defines output bounds,
+recovery, support data, and navigation denial; ADR-0013 defines Windows
+packaging, resources, onboarding, and uninstall behavior; ADR-0015 defines
+collaboration research boundaries.

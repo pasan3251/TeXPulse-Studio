@@ -15,6 +15,10 @@ It also creates projects from a minimal template, manages project files and
 folders with confirmed destructive actions, remembers recent projects, and
 exports source-only ZIP archives.
 
+Collaboration is not implemented in the application runtime. Sprint 14 adds
+research-only collaboration controls in `docs/COLLABORATION_SRS.md`,
+`docs/COLLABORATION_THREAT_MODEL.md`, and ADR-0015.
+
 Repository: <https://github.com/pasan3251/TeXPulse-Studio>
 
 License: MIT
