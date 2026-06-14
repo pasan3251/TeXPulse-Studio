@@ -15,6 +15,24 @@ It also creates projects from a minimal template, manages project files and
 folders with confirmed destructive actions, remembers recent projects, and
 exports source-only ZIP archives.
 
+Repository: <https://github.com/pasan3251/TeXPulse-Studio>
+
+License: MIT
+
+## Screenshots
+
+### Editor, PDF preview, and real MiKTeX build
+
+![TeXPulse Studio packaged high-DPI PDF preview](docs/images/texpulse-packaged-high-dpi.png)
+
+### Project creation, file management, and ZIP export
+
+![TeXPulse Studio project workflow](docs/images/texpulse-project-workflow.png)
+
+### Rendered PDF evidence
+
+![Packaged release candidate PDF output](docs/images/texpulse-packaged-pdf.png)
+
 ## Installed requirements
 
 - Windows 11 x64
@@ -26,9 +44,10 @@ self-test before reporting compilation readiness.
 
 ## Install
 
-Run the generated assisted installer under `output/package`. The release
-candidate installer is unsigned, so Windows SmartScreen may show a reputation
-warning. Verify the artifact against the release manifest before continuing.
+Download the installer from GitHub Releases or generate it locally with
+`pnpm package:win`. The release candidate installer is unsigned, so Windows
+SmartScreen may show a reputation warning. Verify the artifact against the
+release manifest before continuing.
 
 After setup, choose `Open sample project` from the welcome screen, edit
 `main.tex`, and compile. The editable copy is stored under TeXPulse Studio's

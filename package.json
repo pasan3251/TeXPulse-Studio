@@ -1,10 +1,27 @@
 {
   "name": "texpulse-studio",
   "version": "0.1.0-rc.1",
-  "description": "Offline Windows LaTeX editor with local compilation and PDF preview",
-  "author": "TeXPulse Studio contributors",
-  "license": "UNLICENSED",
+  "description": "Offline Windows LaTeX editor with secure local MiKTeX compilation, PDF preview, SyncTeX navigation, diagnostics, project management, and recovery",
+  "author": "Pasan Chathuranga <e23442@eng.pdn.ac.lk>",
+  "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pasan3251/TeXPulse-Studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pasan3251/TeXPulse-Studio/issues"
+  },
+  "homepage": "https://github.com/pasan3251/TeXPulse-Studio#readme",
+  "keywords": [
+    "latex",
+    "editor",
+    "electron",
+    "miktex",
+    "pdf",
+    "synctex",
+    "windows"
+  ],
   "type": "module",
   "main": "./dist/electron/main.js",
   "bin": {
