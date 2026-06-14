@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,8 +36,13 @@ describe("validateCompilePaths", () => {
       "main.tex",
       ".texpulse/build",
     );
+    const canonicalProject = await realpath(project);
 
-    expect(result.projectDirectory).toBe(project);
+    expect(result.projectDirectory).toBe(canonicalProject);
+    expect(result.rootFile).toBe(await realpath(join(project, "main.tex")));
+    expect(result.buildDirectory).toBe(
+      join(canonicalProject, ".texpulse", "build"),
+    );
     expect(result.buildDirectory).toContain("project with spaces");
   });
 

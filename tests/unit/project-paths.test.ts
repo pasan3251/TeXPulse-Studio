@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,7 +46,9 @@ describe("project path validation", () => {
 
   it("canonicalizes an existing project directory", async () => {
     const directory = await temporaryDirectory();
-    await expect(canonicalProjectRoot(directory)).resolves.toBe(directory);
+    await expect(canonicalProjectRoot(directory)).resolves.toBe(
+      await realpath(directory),
+    );
   });
 
   it("rejects links and junctions inside a project", async () => {
