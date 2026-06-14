@@ -104,6 +104,16 @@ installed packaged lifecycle tests, previous-beta settings preservation, PDF
 inspection, screenshot inspection, Microsoft Defender custom scan, and release
 provenance manifest generation.
 
+## Project Documentation
+
+- README: <https://github.com/pasan3251/TeXPulse-Studio#readme>
+- Roadmap:
+  <https://github.com/pasan3251/TeXPulse-Studio/blob/main/docs/ROADMAP.md>
+- Upcoming implementations:
+  <https://github.com/pasan3251/TeXPulse-Studio/blob/main/docs/UPCOMING_IMPLEMENTATIONS.md>
+- Requirements and traceability:
+  <https://github.com/pasan3251/TeXPulse-Studio/blob/main/docs/SRS.md>
+
 ## Known Limitations
 
 - The installer is unsigned and may trigger Windows SmartScreen or antivirus

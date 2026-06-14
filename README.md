@@ -26,6 +26,13 @@ Repository: <https://github.com/pasan3251/TeXPulse-Studio>
 
 License: MIT
 
+## Project roadmap
+
+- Full sprint roadmap: `docs/ROADMAP.md`
+- Upcoming implementations: `docs/UPCOMING_IMPLEMENTATIONS.md`
+- Current sprint status: `docs/SPRINT_STATUS.md`
+- Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
+
 ## Screenshots
 
 ### Editor, PDF preview, and real MiKTeX build
@@ -140,7 +147,7 @@ still runs with the local user's permissions and is not OS-sandboxed.
 
 ## Desktop editor
 
-The Sprint 12 release candidate:
+The current release candidate:
 
 - installs through an assisted per-user NSIS installer;
 - preserves application data during uninstall;
@@ -237,10 +244,14 @@ The typed modules under `src/project/`:
 ## Documentation
 
 - Product specification: `docs/SRS.md`
+- Full project roadmap: `docs/ROADMAP.md`
+- Upcoming implementations: `docs/UPCOMING_IMPLEMENTATIONS.md`
 - Architecture: `docs/ARCHITECTURE.md`
 - Test plan: `docs/TEST_PLAN.md`
 - Security baseline: `docs/SECURITY.md`
 - Threat model: `docs/THREAT_MODEL.md`
+- Collaboration SRS: `docs/COLLABORATION_SRS.md`
+- Collaboration threat model: `docs/COLLABORATION_THREAT_MODEL.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - Sprint status: `docs/SPRINT_STATUS.md`
 - Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
@@ -257,6 +268,19 @@ The typed modules under `src/project/`:
 - Sprint 10 report: `docs/reports/SPRINT-10.md`
 - Sprint 11 report: `docs/reports/SPRINT-11.md`
 - Sprint 12 report: `docs/reports/SPRINT-12.md`
+- Sprint 13 report: `docs/reports/SPRINT-13.md`
+- Sprint 14 report: `docs/reports/SPRINT-14.md`
+- Sprint 15 report: `docs/reports/SPRINT-15.md`
 - Release-candidate checklist: `docs/RELEASE_CANDIDATE_CHECKLIST.md`
 - Deferred issues: `docs/DEFERRED_ISSUES.md`
 - Release notes: `docs/RELEASE_NOTES.md`
+- GitHub release description: `docs/GITHUB_RELEASE.md`
+
+## Acknowledgements
+
+TeXPulse Studio was planned, implemented, tested, reviewed, and documented with
+assistance from OpenAI and Codex. The project direction, requirements,
+repository ownership, release decisions, and final responsibility remain with
+Pasan Chathuranga.
+
+You just need a problem and a little bit of time.
