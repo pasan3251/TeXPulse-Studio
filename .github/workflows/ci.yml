@@ -33,5 +33,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit high-severity dependency advisories
+        run: pnpm audit:dependencies
+
       - name: Run current quality gate
         run: pnpm check

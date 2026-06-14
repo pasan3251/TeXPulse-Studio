@@ -33,6 +33,14 @@ async function readJson<T>(path: string): Promise<T> {
 }
 
 describe("engineering controls", () => {
+  it("defines a restrictive renderer Content Security Policy", async () => {
+    const html = await readFile("index.html", "utf8");
+    expect(html).toContain("script-src 'self'");
+    expect(html).toContain("connect-src 'none'");
+    expect(html).toContain("object-src 'none'");
+    expect(html).toContain("frame-src 'none'");
+    expect(html).not.toContain("unsafe-eval");
+  });
   it("pins pnpm and exposes every current quality command", async () => {
     const manifest = await readJson<PackageManifest>("package.json");
 
@@ -48,6 +56,7 @@ describe("engineering controls", () => {
     expect(Object.keys(manifest.scripts ?? {})).toEqual(
       expect.arrayContaining([
         "app:start",
+        "audit:dependencies",
         "build",
         "check",
         "format:check",
@@ -86,6 +95,7 @@ describe("engineering controls", () => {
         "corepack enable",
         "pnpm --version",
         "pnpm install --frozen-lockfile",
+        "pnpm audit:dependencies",
         "pnpm check",
       ]),
     );

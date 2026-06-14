@@ -437,3 +437,53 @@ sprint assignments are authoritative in `docs/SRS.md`.
 - Unit, component, integration, Electron E2E, and conditional native tests:
   `../tests/`
 - Design decision: `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`
+
+## Sprint 10
+
+| Requirement     | Sprint 10 evidence                                                                                                              | Status                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `FR-REC-001`    | Bounded dirty-buffer snapshots survive an abnormal Electron shutdown                                                            | Complete where feasible     |
+| `FR-REC-002`    | Restore changes editor state only; E2E proves disk remains unchanged                                                            | Complete                    |
+| `FR-REC-003`    | Recovery dialog requires explicit restore or discard                                                                            | Complete                    |
+| `FR-REC-004`    | Process exits, output overflow, timeout, cancellation, and crashes remain typed and isolated                                    | Complete                    |
+| `FR-REC-005`    | Existing retained-PDF behavior and rendering-failure tests remain green                                                         | Complete                    |
+| `FR-REC-006`    | Rotating structured local application JSONL log                                                                                 | Complete                    |
+| `FR-REC-007`    | Event fields exclude document content and bound all text values                                                                 | Complete                    |
+| `FR-REC-008`    | Settings actions clear project recovery or all recovery/log data                                                                | Complete                    |
+| `FR-DIAG-001`   | Full bounded generation log remains on disk; renderer copy remains 2 MiB                                                        | Complete                    |
+| `FR-DIAG-006`   | Oversized or malformed log handling preserves bounded raw fallback                                                              | Complete                    |
+| `NFR-REL-003`   | Output overflow, malformed recovery, log failure, and rendering failure are recoverable                                         | Current scope complete      |
+| `NFR-REL-004`   | Recovery store uses atomic replacement; project writes retain version checks                                                    | Complete where practical    |
+| `NFR-REL-005`   | Recovery, logging, output, navigation, and retention tests are deterministic                                                    | Complete                    |
+| `NFR-SEC-001`   | Threat model and Electron security review match implementation                                                                  | Complete for Sprint 10      |
+| `NFR-SEC-004`   | Frozen preload exposes twenty-two fixed methods                                                                                 | Current scope complete      |
+| `NFR-SEC-005`   | Recovery/support requests and responses use strict schemas and sender checks                                                    | Complete                    |
+| `NFR-SEC-006`   | Recovery paths and generated output retain canonical project boundaries                                                         | Current scope complete      |
+| `NFR-SEC-007`   | Every recipe and trust mode retains `-no-shell-escape` tests                                                                    | Complete                    |
+| `NFR-SEC-008`   | Runaway process timeout and process-tree cleanup remain verified                                                                | Complete                    |
+| `NFR-SEC-009`   | Process capture, display logs, output files/bytes/count, PDFs, SyncTeX, diagnostics, recovery, and application logs are bounded | Complete for current design |
+| `NFR-SEC-010`   | Renderer navigation and popup requests are denied and classified without retaining full URLs                                    | Complete                    |
+| `NFR-SEC-011`   | Local CSP blocks network, objects, frames, forms, external bases, and evaluated scripts                                         | Complete                    |
+| `NFR-SEC-012`   | High-severity dependency audit runs in CI and passed locally                                                                    | Complete for release gate   |
+| `NFR-PRIV-001`  | Source, recovery, logs, compilation, and export remain local                                                                    | Complete for Sprint 10      |
+| `NFR-PRIV-002`  | No analytics or telemetry added                                                                                                 | Complete for Sprint 10      |
+| `NFR-PRIV-003`  | No crash or diagnostic upload exists                                                                                            | Complete for current design |
+| `NFR-PRIV-004`  | Support export redacts home and active-project path forms where practical                                                       | Complete                    |
+| `NFR-MAINT-002` | Typed output, recovery, support, IPC, and renderer contracts                                                                    | Complete                    |
+| `NFR-MAINT-003` | Recovery, support logging, output limits, retention, and navigation are independent modules                                     | Complete                    |
+| `NFR-MAINT-004` | ADR-0012 and `THREAT_MODEL.md` record the security design                                                                       | Complete                    |
+| `NFR-MAINT-005` | Unit, component, integration, E2E, and native checks avoid arbitrary sleeps                                                     | Complete                    |
+| `NFR-UX-001`    | Recovery and support actions are keyboard-operable controls                                                                     | Current scope complete      |
+| `NFR-UX-004`    | Recovery dialog and support controls have accessible names                                                                      | Complete                    |
+| `NFR-UX-006`    | Recovery, output-limit, and export failures provide corrective context                                                          | Current scope complete      |
+| `AS-008`        | Crash-recovery E2E reviews, restores, preserves disk, then explicitly saves                                                     | Complete                    |
+| `AS-009`        | Traversal IPC is rejected and recorded without exposing external content                                                        | Complete                    |
+
+### Sprint 10 evidence
+
+- Sprint report: `reports/SPRINT-10.md`
+- Threat model: `THREAT_MODEL.md`
+- Process, output, retention, recovery, logging, IPC, navigation, CSP,
+  component, integration, and Electron E2E tests: `../tests/`
+- Recovery and support modules: `../src/recovery/` and `../src/support/`
+- Security decision: `adr/ADR-0012-security-recovery-and-support-data.md`

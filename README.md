@@ -1,13 +1,14 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 9 provides a secure Electron editor with autosave, debounced
-live compilation, project change detection, workspace restoration, structured
-source-linked diagnostics, raw build logs, SyncTeX forward/inverse navigation,
-selectable recipes, persistent settings, first-run toolchain setup, clean-build
-controls, and a PDF.js preview that retains the last successful output when a
-later build fails. Project files and generated artifact paths remain behind a
-validated main-process IPC boundary.
+development. Sprint 10 provides a secure Electron editor with autosave,
+debounced live compilation, project change detection, workspace restoration,
+structured source-linked diagnostics, raw build logs, SyncTeX forward/inverse
+navigation, selectable recipes, persistent settings, first-run toolchain setup,
+clean-build controls, bounded compiler output, abnormal-shutdown recovery, local
+support diagnostics, and a PDF.js preview that retains the last successful
+output when a later build fails. Project files and generated artifact paths
+remain behind a validated main-process IPC boundary.
 
 ## Requirements
 
@@ -36,6 +37,7 @@ pnpm app:start
 
 ```powershell
 pnpm check
+pnpm audit:dependencies
 ```
 
 The aggregate command runs formatting, linting, strict type checking, unit,
@@ -69,12 +71,13 @@ Output defaults to generation-isolated directories under
 `<project>\.texpulse\build\generations`. Supported recipes are `pdf`, `xelatex`,
 and `lualatex`. Pressing `Ctrl+C` cancels the active compiler tree.
 
-This developer service accepts trusted local projects only. Compiler output
-bounding and the complete threat model remain later hardening work.
+This developer service accepts trusted local projects only. Process capture,
+accepted generated output, and retained generation count are bounded, but TeX
+still runs with the local user's permissions and is not OS-sandboxed.
 
 ## Desktop editor
 
-The Sprint 9 application:
+The Sprint 10 application:
 
 - opens an existing local project folder;
 - renders the bounded project entry list as a hierarchy;
@@ -98,6 +101,8 @@ The Sprint 9 application:
 - disables `latexmk` configuration files by default and requires explicit
   per-project trust before loading them;
 - provides a clean build and allowlisted generation auxiliary cleanup;
+- limits aggregate process output to 8 MiB, accepted generations to 4,096 files,
+  128 MiB per file and 512 MiB total, and retained generations to eight;
 - saves modified buffers before a manual compile and stops on save conflict;
 - displays build status and supports cancellation;
 - renders only completed PDFs through PDF.js with page, zoom, fit-width, and
@@ -120,7 +125,11 @@ The Sprint 9 application:
 - watches the project without following links or generated output and reports
   external changes without replacing local unsaved content;
 - restores open files, active file, cursor/scroll views, and pane ratio for the
-  same project; and
+  same project;
+- offers bounded unsaved-buffer recovery after abnormal shutdown, restores only
+  to the editor after review, and never writes recovered text automatically;
+- records bounded local application events, exports a practically path-redacted
+  support log on request, and provides recovery/log cleanup; and
 - denies renderer Node access, arbitrary filesystem access, navigation, popups,
   webviews, and permissions.
 
@@ -128,7 +137,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-seventeen-method typed preload bridge.
+twenty-two-method typed preload bridge.
 
 ## Project service
 
@@ -149,6 +158,7 @@ The typed modules under `src/project/`:
 - Architecture: `docs/ARCHITECTURE.md`
 - Test plan: `docs/TEST_PLAN.md`
 - Security baseline: `docs/SECURITY.md`
+- Threat model: `docs/THREAT_MODEL.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - Sprint status: `docs/SPRINT_STATUS.md`
 - Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
@@ -162,3 +172,4 @@ The typed modules under `src/project/`:
 - Sprint 7 report: `docs/reports/SPRINT-7.md`
 - Sprint 8 report: `docs/reports/SPRINT-8.md`
 - Sprint 9 report: `docs/reports/SPRINT-9.md`
+- Sprint 10 report: `docs/reports/SPRINT-10.md`

@@ -12,6 +12,7 @@ describe("secure BrowserWindow options", () => {
         nodeIntegration: false,
         nodeIntegrationInSubFrames: false,
         nodeIntegrationInWorker: false,
+        navigateOnDragDrop: false,
         preload: "C:\\app\\preload.cjs",
         sandbox: true,
         webSecurity: true,

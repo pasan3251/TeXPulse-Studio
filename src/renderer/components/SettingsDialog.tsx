@@ -17,7 +17,9 @@ interface SettingsDialogProps {
   onCheckToolchain: (customBinDirectory: string | null) => void;
   onCleanBuild: () => void;
   onCleanupAuxiliary: () => void;
+  onClearLocalData: () => void;
   onClose: () => void;
+  onExportSupportLog: () => void;
   onSave: (
     globalSettings: GlobalSettings,
     projectSettings: ProjectSettings | null,
@@ -39,7 +41,9 @@ export function SettingsDialog({
   onCheckToolchain,
   onCleanBuild,
   onCleanupAuxiliary,
+  onClearLocalData,
   onClose,
+  onExportSupportLog,
   onSave,
   onSkipSetup,
 }: SettingsDialogProps) {
@@ -377,6 +381,34 @@ export function SettingsDialog({
                   onClick={onCleanupAuxiliary}
                 >
                   Clean auxiliary files
+                </button>
+              </div>
+            </fieldset>
+          ) : null}
+
+          {mode === "settings" ? (
+            <fieldset>
+              <legend>Support and recovery</legend>
+              <p className="settings-help">
+                Support logs contain bounded application events, not full
+                document content. Exported paths are redacted.
+              </p>
+              <div className="settings-row">
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={onExportSupportLog}
+                >
+                  Export support log
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={onClearLocalData}
+                >
+                  Clear recovery and logs
                 </button>
               </div>
             </fieldset>

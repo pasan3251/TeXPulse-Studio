@@ -30,9 +30,22 @@ export const SYNCTEX_CHANNELS = {
   inverse: "synctex:inverse",
 } as const;
 
+export const RECOVERY_CHANNELS = {
+  clearRecovery: "recovery:clear",
+  getRecovery: "recovery:get",
+  saveRecovery: "recovery:save",
+} as const;
+
+export const SUPPORT_CHANNELS = {
+  clearLocalData: "support:clear-local-data",
+  exportSupportLog: "support:export-log",
+} as const;
+
 export const ALL_CHANNELS = {
   ...PROJECT_CHANNELS,
   ...BUILD_CHANNELS,
   ...SETTINGS_CHANNELS,
   ...SYNCTEX_CHANNELS,
+  ...RECOVERY_CHANNELS,
+  ...SUPPORT_CHANNELS,
 } as const;

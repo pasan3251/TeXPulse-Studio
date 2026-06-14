@@ -6,11 +6,17 @@ export interface ProcessInvocation {
   args: readonly string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  maxOutputBytes?: number;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
 
-export type ProcessTerminationReason = "cancelled" | "timed-out";
+export const DEFAULT_MAX_PROCESS_OUTPUT_BYTES = 8 * 1024 * 1024;
+
+export type ProcessTerminationReason =
+  | "cancelled"
+  | "output-limit"
+  | "timed-out";
 
 export interface ProcessResult {
   executable: string;
@@ -20,6 +26,7 @@ export interface ProcessResult {
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+  outputTruncated: boolean;
   startedAt: string;
   endedAt: string;
   durationMs: number;
@@ -71,6 +78,7 @@ function terminateWindowsProcessTree(
 
   return new Promise((resolve) => {
     const stderr: Buffer[] = [];
+    let stderrBytes = 0;
     const killer = spawn(
       taskkillPath,
       ["/PID", String(child.pid), "/T", "/F"],
@@ -82,7 +90,11 @@ function terminateWindowsProcessTree(
     );
 
     killer.stderr.on("data", (chunk: Buffer) => {
-      stderr.push(chunk);
+      const remaining = Math.max(8_192 - stderrBytes, 0);
+      if (remaining > 0) {
+        stderr.push(chunk.subarray(0, remaining));
+        stderrBytes += Math.min(chunk.length, remaining);
+      }
     });
     killer.on("error", (error) => {
       try {
@@ -127,6 +139,13 @@ export class NodeProcessRunner implements ProcessRunner {
   run(invocation: ProcessInvocation): Promise<ProcessResult> {
     const startedAt = new Date();
     const startTime = performance.now();
+    const maxOutputBytes =
+      invocation.maxOutputBytes ?? DEFAULT_MAX_PROCESS_OUTPUT_BYTES;
+    if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0) {
+      return Promise.reject(
+        new Error("Process output limit must be a positive safe integer."),
+      );
+    }
 
     return new Promise((resolve) => {
       const child = spawn(invocation.executable, [...invocation.args], {
@@ -139,6 +158,8 @@ export class NodeProcessRunner implements ProcessRunner {
       });
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
+      let capturedOutputBytes = 0;
+      let outputTruncated = false;
       let spawnError: string | null = null;
       let terminationReason: ProcessTerminationReason | null = null;
       let terminationPromise: Promise<string | null> | null = null;
@@ -154,12 +175,23 @@ export class NodeProcessRunner implements ProcessRunner {
       const handleAbort = (): void => {
         requestTermination("cancelled");
       };
+      const captureOutput = (target: Buffer[], chunk: Buffer): void => {
+        const remaining = Math.max(maxOutputBytes - capturedOutputBytes, 0);
+        if (remaining > 0) {
+          target.push(chunk.subarray(0, remaining));
+          capturedOutputBytes += Math.min(chunk.length, remaining);
+        }
+        if (chunk.length > remaining) {
+          outputTruncated = true;
+          requestTermination("output-limit");
+        }
+      };
 
       child.stdout.on("data", (chunk: Buffer) => {
-        stdout.push(chunk);
+        captureOutput(stdout, chunk);
       });
       child.stderr.on("data", (chunk: Buffer) => {
-        stderr.push(chunk);
+        captureOutput(stderr, chunk);
       });
       child.on("error", (error) => {
         spawnError = error.message;
@@ -181,6 +213,7 @@ export class NodeProcessRunner implements ProcessRunner {
           signal,
           stdout: Buffer.concat(stdout).toString("utf8"),
           stderr: Buffer.concat(stderr).toString("utf8"),
+          outputTruncated,
           startedAt: startedAt.toISOString(),
           endedAt: endedAt.toISOString(),
           durationMs: Math.round(performance.now() - startTime),

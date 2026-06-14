@@ -9,10 +9,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MiktexCompilerAdapter } from "../../src/compiler/compiler-adapter.js";
 import { registerProjectIpc } from "../../src/electron/project-ipc.js";
+import { RecoveryStoreError } from "../../src/recovery/recovery-store.js";
 import {
   ALL_CHANNELS,
   BUILD_CHANNELS,
+  RECOVERY_CHANNELS,
   SETTINGS_CHANNELS,
+  SUPPORT_CHANNELS,
   SYNCTEX_CHANNELS,
 } from "../../src/ipc/channels.js";
 import { PROJECT_CHANNELS } from "../../src/ipc/project-contracts.js";
@@ -101,6 +104,21 @@ describe("project IPC", () => {
       [BUILD_CHANNELS.loadPdf, { buildId: "build-1", generation: 1 }],
       [BUILD_CHANNELS.openPdf, { buildId: "build-1", generation: 1 }],
       [BUILD_CHANNELS.revealPdf, { buildId: "build-1", generation: 1 }],
+      [RECOVERY_CHANNELS.getRecovery, undefined],
+      [RECOVERY_CHANNELS.clearRecovery, undefined],
+      [
+        RECOVERY_CHANNELS.saveRecovery,
+        {
+          projectId: "a".repeat(16),
+          buffers: [
+            {
+              path: "main.tex",
+              content: "unsaved",
+              version: "a".repeat(64),
+            },
+          ],
+        },
+      ],
       [
         SYNCTEX_CHANNELS.forward,
         {
@@ -288,13 +306,27 @@ describe("project IPC", () => {
         entries: [{ path: "main.tex", kind: "file" }],
       },
     });
-    await expect(
-      invoke(handlers, PROJECT_CHANNELS.readTextFile, event(7), {
+    const read = await invoke(
+      handlers,
+      PROJECT_CHANNELS.readTextFile,
+      event(7),
+      {
         path: "main.tex",
+      },
+    );
+    expect(read).toMatchObject({
+      ok: true,
+      value: { path: "main.tex", content: "\\documentclass{article}" },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.writeTextFile, event(7), {
+        path: "main.tex",
+        content: "\\documentclass{article}\n% saved",
+        expectedVersion: (read as { value: { version: string } }).value.version,
       }),
     ).resolves.toMatchObject({
       ok: true,
-      value: { path: "main.tex", content: "\\documentclass{article}" },
+      value: { content: "\\documentclass{article}\n% saved" },
     });
     await expect(
       invoke(handlers, PROJECT_CHANNELS.readTextFile, event(7), {
@@ -303,6 +335,241 @@ describe("project IPC", () => {
     ).resolves.toMatchObject({
       ok: false,
       error: { code: "path-escape" },
+    });
+  });
+
+  it("persists only validated project recovery and exposes support controls", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const saveRecovery = vi.fn(
+      (request: {
+        projectId: string;
+        buffers: {
+          path: string;
+          content: string;
+          version: string;
+        }[];
+      }) =>
+        Promise.resolve({
+          schemaVersion: 1 as const,
+          projectId: request.projectId,
+          savedAt: "2026-06-14T00:00:00.000Z",
+          buffers: request.buffers,
+        }),
+    );
+    const loadRecovery = vi.fn(() => Promise.resolve(null));
+    const clearRecovery = vi.fn(() => Promise.resolve(true));
+    const exportSupportLog = vi.fn(() => Promise.resolve(true));
+    const clearLocalData = vi.fn(() =>
+      Promise.resolve({ recoverySnapshots: 1 }),
+    );
+    registerProjectIpc({
+      clearLocalData,
+      clearRecovery,
+      exportSupportLog,
+      ipcMain,
+      loadRecovery,
+      saveRecovery,
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+
+    const opened = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.open,
+      event(7),
+    )) as { value: { projectId: string } };
+    const read = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.readTextFile,
+      event(7),
+      { path: "main.tex" },
+    )) as { value: { version: string } };
+    const request = {
+      projectId: opened.value.projectId,
+      buffers: [
+        {
+          path: "main.tex",
+          content: "unsaved",
+          version: read.value.version,
+        },
+      ],
+    };
+
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), request),
+    ).resolves.toMatchObject({ ok: true });
+    expect(saveRecovery).toHaveBeenCalledWith(request);
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), {
+        ...request,
+        buffers: [{ ...request.buffers[0], path: "../outside.tex" }],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "path-escape" },
+    });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.getRecovery, event(7)),
+    ).resolves.toEqual({ ok: true, value: null });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.clearRecovery, event(7)),
+    ).resolves.toEqual({ ok: true, value: { cleared: true } });
+    await expect(
+      invoke(handlers, SUPPORT_CHANNELS.exportSupportLog, event(7)),
+    ).resolves.toEqual({ ok: true, value: { saved: true } });
+    await expect(
+      invoke(handlers, SUPPORT_CHANNELS.clearLocalData, event(7)),
+    ).resolves.toEqual({
+      ok: true,
+      value: { recoverySnapshots: 1 },
+    });
+  });
+
+  it("contains unavailable, mismatched, duplicate, and invalid recovery data", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    const clearRecovery = vi.fn(() => Promise.resolve(true));
+    registerProjectIpc({
+      clearRecovery,
+      ipcMain,
+      loadRecovery: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          projectId: "a".repeat(16),
+          savedAt: "2026-06-14T00:00:00.000Z",
+          buffers: [
+            {
+              path: "../outside.tex",
+              content: "untrusted",
+              version: "b".repeat(64),
+            },
+          ],
+        }),
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    const opened = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.open,
+      event(7),
+    )) as { value: { projectId: string } };
+    const read = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.readTextFile,
+      event(7),
+      { path: "main.tex" },
+    )) as { value: { version: string } };
+    const buffer = {
+      path: "main.tex",
+      content: "unsaved",
+      version: read.value.version,
+    };
+
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), {
+        projectId: "f".repeat(16),
+        buffers: [buffer],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), {
+        projectId: opened.value.projectId,
+        buffers: [buffer, buffer],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "invalid-request" },
+    });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), {
+        projectId: opened.value.projectId,
+        buffers: [buffer],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "internal" },
+    });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.getRecovery, event(7)),
+    ).resolves.toEqual({ ok: true, value: null });
+    expect(clearRecovery).toHaveBeenCalledWith(opened.value.projectId);
+    await expect(
+      invoke(handlers, SUPPORT_CHANNELS.exportSupportLog, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "support-export-failed" },
+    });
+    await expect(
+      invoke(handlers, SUPPORT_CHANNELS.clearLocalData, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "internal" },
+    });
+  });
+
+  it("maps recovery and support-store failures to typed errors", async () => {
+    const root = await createProject();
+    const { handlers, ipcMain } = createFakeIpcMain();
+    registerProjectIpc({
+      ipcMain,
+      saveRecovery: () => {
+        return Promise.reject(
+          new RecoveryStoreError(
+            "too-large",
+            "Recovery content was too large.",
+          ),
+        );
+      },
+      loadRecovery: () =>
+        Promise.reject(
+          new RecoveryStoreError("invalid", "Recovery data was invalid."),
+        ),
+      exportSupportLog: () => Promise.reject(new Error("Disk unavailable.")),
+      selectProjectDirectory: () => Promise.resolve(root),
+      trustedWebContentsId: () => 7,
+    });
+    const opened = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.open,
+      event(7),
+    )) as { value: { projectId: string } };
+    const read = (await invoke(
+      handlers,
+      PROJECT_CHANNELS.readTextFile,
+      event(7),
+      { path: "main.tex" },
+    )) as { value: { version: string } };
+
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.saveRecovery, event(7), {
+        projectId: opened.value.projectId,
+        buffers: [
+          {
+            path: "main.tex",
+            content: "unsaved",
+            version: read.value.version,
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "recovery-too-large" },
+    });
+    await expect(
+      invoke(handlers, RECOVERY_CHANNELS.getRecovery, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "recovery-invalid" },
+    });
+    await expect(
+      invoke(handlers, SUPPORT_CHANNELS.exportSupportLog, event(7)),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "support-export-failed" },
     });
   });
 

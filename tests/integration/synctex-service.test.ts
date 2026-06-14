@@ -203,6 +203,7 @@ function processResult(overrides: Partial<ProcessResult> = {}): ProcessResult {
     signal: null,
     stdout: "",
     stderr: "",
+    outputTruncated: false,
     startedAt: "2026-06-14T00:00:00.000Z",
     endedAt: "2026-06-14T00:00:00.001Z",
     durationMs: 1,

@@ -76,6 +76,7 @@ class RecordingAdapter implements CompilerAdapter {
       synctexPath: null,
       stdout: "",
       stderr: "",
+      outputTruncated: false,
       failureReason: "Recorded without launching a compiler.",
     });
   }
@@ -159,6 +160,20 @@ describe("ProjectSession", () => {
       failureReason:
         "latexmk exited successfully but did not produce a readable PDF.",
     });
+  });
+
+  it("bounds an oversized raw compiler log before returning it to the renderer", async () => {
+    const project = await createProject();
+    const session = await ProjectSession.open(
+      project,
+      adapter("--fake-large-log"),
+    );
+
+    const build = await session.compile("main.tex");
+    expect(build.status).toBe("succeeded");
+    expect(build.logTruncated).toBe(true);
+    expect(build.log.length).toBeLessThanOrEqual(2 * 1024 * 1024);
+    expect(build.log).toContain("[Display truncated.");
   });
 
   it("reports missing SyncTeX data as a non-fatal navigation error", async () => {

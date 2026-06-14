@@ -59,7 +59,7 @@ export const buildViewSchema = z
     ]),
     durationMs: z.number().nonnegative(),
     failureReason: z.string().nullable(),
-    log: z.string(),
+    log: z.string().max(2 * 1024 * 1024),
     logTruncated: z.boolean(),
     diagnostics: z.array(buildDiagnosticSchema).max(200),
     visiblePdf: pdfArtifactSchema.nullable(),

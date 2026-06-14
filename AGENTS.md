@@ -58,6 +58,7 @@ pnpm test:component
 pnpm test:integration
 pnpm test:coverage
 pnpm test:e2e
+pnpm audit:dependencies
 pnpm build
 pnpm check
 pnpm app:start
@@ -68,12 +69,15 @@ pnpm texpulse-compile -- --project <directory> --root main.tex --timeout 120000
 `pnpm test:e2e` builds and exercises rapid editing, autosave, queued
 compilation, newest-result PDF rendering, manual build, restoration, minimum
 window layout, external-conflict preservation, structured diagnostic display,
-raw-log access, source navigation, retained PDF behavior, and fix-error cleanup.
-Packaging begins in Sprint 11, so no packaging command exists yet.
+raw-log access, source navigation, retained PDF behavior, fix-error cleanup, and
+abnormal-shutdown recovery without automatic source overwrite. Packaging begins
+in Sprint 11, so no packaging command exists yet.
 
-The compiler service enforces timeout, cancellation, and process-tree cleanup.
-It remains limited to trusted local projects until output bounds and the full
-security hardening sprint are complete.
+The compiler service enforces timeout, cancellation, process-tree cleanup, an 8
+MiB aggregate process-output limit, generated-output quotas, and an
+eight-generation retention policy. It remains limited to trusted local projects
+because TeX is not OS-sandboxed and explicitly trusted custom tools or `latexmk`
+configuration can execute local code.
 
 The project service treats symbolic links and junctions inside an open project
 as non-traversable entries. Text replacement is atomic where supported and
@@ -85,9 +89,15 @@ matching editor-originated writes. Watcher events are validated, project-scoped
 notices and never direct save or compile triggers.
 
 The renderer is sandboxed with Node integration disabled. Its frozen preload
-bridge exposes nine fixed project/build/PDF/event methods. PDF paths remain in
+bridge exposes twenty-two fixed
+project/build/PDF/SyncTeX/settings/recovery/event methods. PDF paths remain in
 the main process as actionable values, and renderer PDF loads require an active
 opaque artifact token. Raw compiler logs may contain local path text.
+
+Recovery snapshots are bounded, project-scoped, stored under application data,
+and restored only to dirty editor buffers after explicit review. Structured
+application logs avoid source content by default, rotate at bounded size, and
+redact home/project paths when exported where practical.
 
 Structured diagnostics are parsed from the bounded display log in a pure module.
 They are limited to enumerated project-relative source links, 200 items, 4,096

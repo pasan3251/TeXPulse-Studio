@@ -20,6 +20,7 @@ export function createSecureWindowOptions(
       nodeIntegration: false,
       nodeIntegrationInSubFrames: false,
       nodeIntegrationInWorker: false,
+      navigateOnDragDrop: false,
       preload: preloadPath,
       sandbox: true,
       spellcheck: false,

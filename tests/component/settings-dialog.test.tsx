@@ -33,7 +33,9 @@ describe("SettingsDialog", () => {
         onCheckToolchain={vi.fn()}
         onCleanBuild={vi.fn()}
         onCleanupAuxiliary={vi.fn()}
+        onClearLocalData={vi.fn()}
         onClose={vi.fn()}
+        onExportSupportLog={vi.fn()}
         onSave={onSave}
         onSkipSetup={vi.fn()}
       />,
@@ -81,7 +83,9 @@ describe("SettingsDialog", () => {
         onCheckToolchain={vi.fn()}
         onCleanBuild={vi.fn()}
         onCleanupAuxiliary={vi.fn()}
+        onClearLocalData={vi.fn()}
         onClose={vi.fn()}
+        onExportSupportLog={vi.fn()}
         onSave={vi.fn()}
         onSkipSetup={onSkipSetup}
       />,
@@ -141,7 +145,9 @@ describe("SettingsDialog", () => {
         onCheckToolchain={vi.fn()}
         onCleanBuild={vi.fn()}
         onCleanupAuxiliary={vi.fn()}
+        onClearLocalData={vi.fn()}
         onClose={vi.fn()}
+        onExportSupportLog={vi.fn()}
         onSave={vi.fn()}
         onSkipSetup={vi.fn()}
       />,

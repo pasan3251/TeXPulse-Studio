@@ -19,6 +19,7 @@
     }
   },
   "scripts": {
+    "audit:dependencies": "pnpm audit --audit-level high",
     "app:start": "pnpm build && electron .",
     "build": "pnpm build:node && pnpm build:renderer && pnpm build:preload",
     "build:node": "tsc -p tsconfig.build.json",

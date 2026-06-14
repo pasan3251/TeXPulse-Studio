@@ -79,6 +79,7 @@ class SourceRecordingAdapter implements CompilerAdapter {
       synctexPath: null,
       stdout: "",
       stderr: "",
+      outputTruncated: false,
       failureReason: null,
     });
   }

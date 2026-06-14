@@ -100,8 +100,12 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "checkToolchain",
         "cleanBuild",
         "cleanupAuxiliary",
+        "clearLocalData",
+        "clearRecovery",
         "compileProject",
+        "exportSupportLog",
         "forwardSync",
+        "getRecovery",
         "getSettings",
         "inverseSync",
         "loadPdf",
@@ -112,6 +116,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "revealPdf",
         "saveGlobalSettings",
         "saveProjectSettings",
+        "saveRecovery",
         "writeTextFile",
       ],
     });
@@ -271,6 +276,104 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     await expect(introEditor).toContainText("Unsaved local intro");
   } finally {
     await electronApp.close();
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
+test("reviews and restores unsaved content after an abnormal shutdown", async () => {
+  test.setTimeout(60_000);
+  const projectDirectory = await mkdtemp(
+    join(tmpdir(), "texpulse recovery e2e "),
+  );
+  const mainPath = join(projectDirectory, "main.tex");
+  const userDataDirectory = join(projectDirectory, ".texpulse", "e2e-profile");
+  const originalSource =
+    "\\documentclass{article}\n\\begin{document}\nOriginal\n\\end{document}\n";
+  const recoveredSource =
+    "\\documentclass{article}\n\\begin{document}\nRecovered unsaved text\n\\end{document}\n";
+  await writeFile(mainPath, originalSource);
+  const environment = {
+    ...process.env,
+    NODE_ENV: "production",
+    TEXPULSE_E2E_LATEXMK: fakeLatexmk,
+    TEXPULSE_E2E_NODE: process.execPath,
+    TEXPULSE_E2E_PROJECT: projectDirectory,
+    TEXPULSE_E2E_SYNCTEX: fakeSynctex,
+    TEXPULSE_E2E_USER_DATA: userDataDirectory,
+  };
+
+  const firstApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: environment,
+  });
+  try {
+    const page = await firstApp.firstWindow();
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    await page.getByLabel("Autosave").uncheck();
+    await page.getByLabel("Auto build").uncheck();
+    const editor = page.getByTestId("code-editor");
+    await editor.click();
+    await page.keyboard.press("Control+A");
+    await page.keyboard.type(recoveredSource);
+    await expect(page.getByText("1 modified")).toBeVisible();
+    await expect
+      .poll(async () => {
+        const recoveryDirectory = join(userDataDirectory, "recovery");
+        const entries = await readdir(recoveryDirectory).catch(() => []);
+        if (entries.length !== 1) {
+          return "";
+        }
+        return readFile(join(recoveryDirectory, entries[0]!), "utf8");
+      })
+      .toContain("Recovered unsaved text");
+
+    const process = firstApp.process();
+    const exited = new Promise<void>((resolveExit) => {
+      process.once("exit", () => resolveExit());
+    });
+    process.kill();
+    await exited;
+  } finally {
+    await firstApp.close().catch(() => undefined);
+  }
+
+  const secondApp = await electron.launch({
+    args: ["."],
+    chromiumSandbox: true,
+    cwd: repositoryRoot,
+    env: environment,
+  });
+  try {
+    const page = await secondApp.firstWindow();
+    await page.getByRole("button", { name: "Open project" }).first().click();
+    const recoveryDialog = page.getByRole("dialog", {
+      name: "Review unsaved editor content",
+    });
+    await expect(recoveryDialog).toBeVisible();
+    await expect(recoveryDialog).toContainText("Recovered unsaved text");
+    await expect.poll(() => readFile(mainPath, "utf8")).toBe(originalSource);
+    const screenshotDirectory = join(repositoryRoot, "output", "playwright");
+    await mkdir(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDirectory, "sprint-10-recovery-review.png"),
+    });
+
+    await recoveryDialog
+      .getByRole("button", { name: "Restore to editor" })
+      .click();
+    await expect(recoveryDialog).toBeHidden();
+    await expect(page.getByTestId("code-editor")).toContainText(
+      "Recovered unsaved text",
+    );
+    await expect(page.getByText("1 modified")).toBeVisible();
+    await expect.poll(() => readFile(mainPath, "utf8")).toBe(originalSource);
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => readFile(mainPath, "utf8")).toBe(recoveredSource);
+  } finally {
+    await secondApp.close();
     await rm(projectDirectory, { recursive: true, force: true });
   }
 });

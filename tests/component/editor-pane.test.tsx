@@ -35,6 +35,39 @@ const buffer = {
 };
 
 describe("EditorPane diagnostics", () => {
+  it("applies reviewed recovery content without reporting a user edit", async () => {
+    const onChange = vi.fn();
+    const { rerender, unmount } = render(
+      <EditorPane
+        buffer={buffer}
+        diagnostics={[]}
+        fontSize={15}
+        navigationTarget={null}
+        onChange={onChange}
+        onViewStateChange={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <EditorPane
+        buffer={{ ...buffer, content: "recovered content" }}
+        diagnostics={[]}
+        fontSize={15}
+        navigationTarget={null}
+        onChange={onChange}
+        onViewStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("code-editor")).toHaveTextContent(
+        "recovered content",
+      );
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it("marks a diagnostic line and moves focus to the requested location", async () => {
     const diagnostic = {
       severity: "error" as const,

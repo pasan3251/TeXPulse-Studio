@@ -12,7 +12,8 @@
 | Sprint 7      | Complete on 2026-06-14 | Structured diagnostics, Problems panel, source links    |
 | Sprint 8      | Complete on 2026-06-14 | SyncTeX forward and inverse navigation                  |
 | Sprint 9      | Complete on 2026-06-14 | Recipes, settings, setup wizard, clean builds           |
-| Sprints 10-14 | Not started            | See `docs/SRS.md`                                       |
+| Sprint 10     | Complete on 2026-06-14 | Security, output bounds, recovery, support logs         |
+| Sprints 11-14 | Not started            | See `docs/SRS.md`                                       |
 
 ## Completed scope
 
@@ -70,15 +71,20 @@ defaults, explicit `latexmk` configuration trust, clean builds, allowlisted
 auxiliary cleanup, bibliography fixtures, Electron E2E workflows, and native
 MiKTeX recipe evidence. See `reports/SPRINT-9.md`.
 
+Sprint 10 adds the implementation-matched threat model, bounded process capture
+and generated output, generation retention, stricter CSP and navigation policy,
+dependency-audit release gating, bounded abnormal-shutdown recovery with
+explicit review, structured local application logs, redacted support export,
+user-controlled recovery/log cleanup, abuse-case tests, Electron crash-recovery
+E2E evidence, and native PDF inspection. See `reports/SPRINT-10.md`.
+
 ## Current environment limitation
 
 MiKTeX reports that updates have not yet been checked. MakeIndex is runnable but
-does not report a parseable version. Compiler output and generated-file counts
-remain unbounded until security hardening, and old generation directories do not
-yet have a retention policy. The renderer log copy is bounded to 2 MiB and PDF
-preview to 100 MiB, while structured output is bounded to 200 diagnostics, 4,096
-characters per message, 2,048 characters per excerpt, and 512 KiB of parsed
-SyncTeX result text. Total child-process output capture remains pending
-Sprint 10. The editor detects external changes through a bounded project watcher
-and still rejects stale version tokens. Automatic reload, side-by-side
-comparison, and merge actions remain future work.
+does not report a parseable version. TeX still runs with the local user's
+permissions: output quotas are checked after process exit, so transient resource
+use remains possible until timeout. Custom executables and trusted `latexmk`
+configuration remain explicit local trust decisions. Recovery is limited to 20
+buffers, 2 MiB per buffer, and 10 MiB total. Automatic external-file reload,
+side-by-side comparison, and merge actions remain future work. Packaging has not
+started.

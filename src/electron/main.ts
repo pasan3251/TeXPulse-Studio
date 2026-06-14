@@ -19,6 +19,12 @@ import { SynctexService } from "../synctex/synctex-service.js";
 import { GlobalSettingsStore } from "../settings/global-settings.js";
 import { defaultGlobalSettings } from "../settings/settings-types.js";
 import { runDoctor } from "../toolchain/doctor.js";
+import { RecoveryStore } from "../recovery/recovery-store.js";
+import { ApplicationLog } from "../support/application-log.js";
+import {
+  isAllowedRendererNavigation,
+  isExternalUrl,
+} from "./navigation-policy.js";
 import type {
   ToolchainCheckRequest,
   ToolchainReport,
@@ -35,23 +41,65 @@ void app.whenReady().then(async () => {
   configurePermissionPolicy();
 
   const preloadPath = join(currentDirectory, "preload.cjs");
-  const settingsStore = new GlobalSettingsStore(
+  const userDataDirectory =
     !app.isPackaged && process.env.TEXPULSE_E2E_USER_DATA !== undefined
       ? process.env.TEXPULSE_E2E_USER_DATA
-      : app.getPath("userData"),
-  );
+      : app.getPath("userData");
+  const settingsStore = new GlobalSettingsStore(userDataDirectory);
+  const recoveryStore = new RecoveryStore(userDataDirectory);
+  const applicationLog = new ApplicationLog(userDataDirectory);
+  applicationLog.record("info", "application_started", {
+    packaged: app.isPackaged,
+    version: app.getVersion(),
+  });
   mainWindow = new BrowserWindow(
     createSecureWindowOptions(
       preloadPath,
       !app.isPackaged && process.env.NODE_ENV !== "production",
     ),
   );
-  hardenNavigation(mainWindow);
+  hardenNavigation(mainWindow, (event, targetUrl) => {
+    applicationLog.record("warn", event, {
+      targetScheme: urlScheme(targetUrl),
+    });
+  });
 
   disposeProjectIpc = registerProjectIpc({
     createCompilerAdapter,
     createSynctexService,
     ipcMain,
+    clearLocalData: async () => {
+      const recoverySnapshots = await recoveryStore.clearAll();
+      await applicationLog.clear();
+      return { recoverySnapshots };
+    },
+    clearRecovery: (projectId) => recoveryStore.clear(projectId),
+    loadRecovery: (projectId) => recoveryStore.load(projectId),
+    saveRecovery: (request) => recoveryStore.save(request),
+    exportSupportLog: async (redactionPaths) => {
+      const e2ePath = process.env.TEXPULSE_E2E_SUPPORT_LOG;
+      let exportPath =
+        !app.isPackaged && e2ePath !== undefined ? e2ePath : null;
+      if (exportPath === null) {
+        if (mainWindow === null) {
+          return false;
+        }
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: "texpulse-support-log.txt",
+          filters: [{ name: "Text files", extensions: ["txt"] }],
+          title: "Export TeXPulse Studio support log",
+        });
+        exportPath = result.canceled ? null : result.filePath;
+      }
+      if (exportPath === null) {
+        return false;
+      }
+      await applicationLog.exportTo(exportPath, redactionPaths);
+      return true;
+    },
+    logEvent: (level, event, details) => {
+      applicationLog.record(level, event, details);
+    },
     openPath: (path) => shell.openPath(path),
     notifyProjectFileChange: (change) => {
       mainWindow?.webContents.send(PROJECT_EVENTS.fileChanged, change);
@@ -102,6 +150,12 @@ void app.whenReady().then(async () => {
     disposeProjectIpc?.();
     disposeProjectIpc = null;
     mainWindow = null;
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    applicationLog.record("error", "render_process_gone", {
+      exitCode: details.exitCode,
+      reason: details.reason,
+    });
   });
 
   await mainWindow.loadFile(
@@ -217,14 +271,37 @@ function configurePermissionPolicy(): void {
   );
 }
 
-function hardenNavigation(window: BrowserWindow): void {
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+function hardenNavigation(
+  window: BrowserWindow,
+  recordRejection: (event: string, targetUrl: string) => void,
+): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    recordRejection(
+      isExternalUrl(url) ? "external_window_rejected" : "window_rejected",
+      url,
+    );
+    return { action: "deny" };
+  });
   window.webContents.on("will-attach-webview", (event) => {
     event.preventDefault();
   });
   window.webContents.on("will-navigate", (event, targetUrl) => {
-    if (targetUrl !== window.webContents.getURL()) {
+    if (!isAllowedRendererNavigation(window.webContents.getURL(), targetUrl)) {
       event.preventDefault();
+      recordRejection(
+        isExternalUrl(targetUrl)
+          ? "external_navigation_rejected"
+          : "navigation_rejected",
+        targetUrl,
+      );
     }
   });
+}
+
+function urlScheme(targetUrl: string): string {
+  try {
+    return new URL(targetUrl).protocol;
+  } catch {
+    return "invalid";
+  }
 }

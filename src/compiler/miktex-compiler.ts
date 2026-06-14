@@ -3,6 +3,7 @@ import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import {
+  DEFAULT_MAX_PROCESS_OUTPUT_BYTES,
   NodeProcessRunner,
   type ProcessRunner,
 } from "../process/process-runner.js";
@@ -15,6 +16,12 @@ import {
   type CompileStatus,
 } from "./compile-types.js";
 import { buildLatexmkArguments } from "./latexmk-arguments.js";
+import {
+  DEFAULT_GENERATED_OUTPUT_LIMITS,
+  inspectGeneratedOutput,
+  removeGeneratedOutput,
+  type GeneratedOutputLimits,
+} from "./output-limits.js";
 import { validateCompilePaths } from "./path-validation.js";
 
 export interface ExecutableCommand {
@@ -26,6 +33,7 @@ export interface MiktexCompilerDependencies {
   processRunner?: ProcessRunner;
   latexmkCommand?: ExecutableCommand;
   engineExecutable?: string | null;
+  outputLimits?: GeneratedOutputLimits;
 }
 
 function failedResult(
@@ -54,6 +62,7 @@ function failedResult(
     synctexPath: null,
     stdout: "",
     stderr: "",
+    outputTruncated: false,
     failureReason: reason,
   };
 }
@@ -219,14 +228,38 @@ export async function compileProject(
         }),
   });
 
-  const readablePdfPath = await outputPathOrNull(pdfPath);
-  const readableLogPath = await outputPathOrNull(logPath);
-  const readableSynctexPath = await outputPathOrNull(synctexPath);
+  let outputViolation: string | null = null;
+  try {
+    outputViolation = (
+      await inspectGeneratedOutput(
+        paths.buildDirectory,
+        dependencies.outputLimits ?? DEFAULT_GENERATED_OUTPUT_LIMITS,
+      )
+    ).violation;
+  } catch (error) {
+    outputViolation =
+      error instanceof Error
+        ? `Generated output validation failed: ${error.message}`
+        : "Generated output validation failed.";
+  }
+  if (outputViolation !== null) {
+    await removeGeneratedOutput(paths.buildDirectory).catch(() => {
+      outputViolation += " Cleanup of the rejected generation failed.";
+    });
+  }
+
+  const readablePdfPath =
+    outputViolation === null ? await outputPathOrNull(pdfPath) : null;
+  const readableLogPath =
+    outputViolation === null ? await outputPathOrNull(logPath) : null;
+  const readableSynctexPath =
+    outputViolation === null ? await outputPathOrNull(synctexPath) : null;
 
   const succeeded =
     processResult.terminationReason === null &&
     processResult.error === null &&
     processResult.exitCode === 0 &&
+    outputViolation === null &&
     readablePdfPath !== null;
   const status: CompileStatus =
     processResult.terminationReason === "cancelled"
@@ -243,14 +276,20 @@ export async function compileProject(
   const failureReason =
     status === "succeeded"
       ? null
-      : status === "cancelled"
-        ? `Build was cancelled.${terminationDetail}`
-        : status === "timed-out"
-          ? `Build exceeded the ${String(timeoutMs)} ms timeout.${terminationDetail}`
-          : (processResult.error ??
-            (processResult.exitCode !== 0
-              ? `latexmk exited with code ${String(processResult.exitCode)}.`
-              : "latexmk exited successfully but did not produce a readable PDF."));
+      : outputViolation !== null
+        ? outputViolation
+        : status === "cancelled"
+          ? `Build was cancelled.${terminationDetail}`
+          : status === "timed-out"
+            ? `Build exceeded the ${String(timeoutMs)} ms timeout.${terminationDetail}`
+            : processResult.terminationReason === "output-limit"
+              ? `Compiler output exceeded the ${String(
+                  DEFAULT_MAX_PROCESS_OUTPUT_BYTES,
+                )} byte capture limit.${terminationDetail}`
+              : (processResult.error ??
+                (processResult.exitCode !== 0
+                  ? `latexmk exited with code ${String(processResult.exitCode)}.`
+                  : "latexmk exited successfully but did not produce a readable PDF."));
 
   return {
     buildId,
@@ -270,6 +309,7 @@ export async function compileProject(
     synctexPath: readableSynctexPath,
     stdout: processResult.stdout,
     stderr: processResult.stderr,
+    outputTruncated: processResult.outputTruncated || outputViolation !== null,
     failureReason,
   };
 }

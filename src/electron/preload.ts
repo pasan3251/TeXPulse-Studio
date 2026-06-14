@@ -4,7 +4,9 @@ import {
   BUILD_CHANNELS,
   PROJECT_CHANNELS,
   PROJECT_EVENTS,
+  RECOVERY_CHANNELS,
   SETTINGS_CHANNELS,
+  SUPPORT_CHANNELS,
   SYNCTEX_CHANNELS,
 } from "../ipc/channels.js";
 import type { TeXPulseApi } from "../ipc/api-contract.js";
@@ -27,6 +29,7 @@ import type {
   ProjectSettings,
   ToolchainCheckRequest,
 } from "../ipc/settings-contracts.js";
+import type { SaveRecoveryRequest } from "../ipc/recovery-contracts.js";
 
 const api: TeXPulseApi = Object.freeze({
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
@@ -57,6 +60,12 @@ const api: TeXPulseApi = Object.freeze({
     ipcRenderer.invoke(SETTINGS_CHANNELS.saveProject, settings),
   checkToolchain: (request: ToolchainCheckRequest) =>
     ipcRenderer.invoke(SETTINGS_CHANNELS.toolchainCheck, request),
+  saveRecovery: (request: SaveRecoveryRequest) =>
+    ipcRenderer.invoke(RECOVERY_CHANNELS.saveRecovery, request),
+  getRecovery: () => ipcRenderer.invoke(RECOVERY_CHANNELS.getRecovery),
+  clearRecovery: () => ipcRenderer.invoke(RECOVERY_CHANNELS.clearRecovery),
+  exportSupportLog: () => ipcRenderer.invoke(SUPPORT_CHANNELS.exportSupportLog),
+  clearLocalData: () => ipcRenderer.invoke(SUPPORT_CHANNELS.clearLocalData),
   onProjectFileChanged: (listener: (change: ProjectFileChange) => void) => {
     const handleChange = (
       _event: Electron.IpcRendererEvent,

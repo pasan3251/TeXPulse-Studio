@@ -48,6 +48,7 @@ function compileResult(
         : null,
     stdout: "",
     stderr: "",
+    outputTruncated: false,
     failureReason: succeeded ? null : `Fake ${status} result.`,
   };
 }

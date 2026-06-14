@@ -102,6 +102,11 @@ output should exist under
 In the desktop editor, open the raw build log. A failed or missing-output build
 keeps the previous successful PDF visible and labels it `Last successful build`.
 
+If the failure says output exceeded a limit, reduce generated data before
+retrying. One accepted generation is limited to 4,096 regular files, 128 MiB per
+file, and 512 MiB total. Child stdout/stderr capture is limited to 8 MiB. Output
+containing links or non-regular entries is rejected and removed.
+
 ## A build failed but no source line is shown
 
 Open `Problems` after the build. Located errors and warnings are buttons that
@@ -241,8 +246,31 @@ Missing or renamed files are skipped.
 
 Workspace state is stored in validated application-local browser storage keyed
 by an opaque project ID. Settings use the main-process global and project
-stores. Source content, PDFs, logs, and build state are not stored, so a
-restored editor may show no preview until the next successful build.
+stores. Normal workspace state does not contain source content. Bounded dirty
+buffers are stored separately for abnormal-shutdown recovery; PDFs and build
+state are not stored, so a restored editor may show no preview until the next
+successful build.
+
+## Unsaved recovery was offered
+
+Review the listed files before choosing `Restore to editor`. Restoration marks
+the recovered text as modified in the editor and does not write project files.
+Use Save only after comparing the recovery with any external edits.
+
+Choose `Discard recovery` to remove the current project's snapshot. Settings
+also provide actions to clear project recovery or all recovery and application
+logs. Recovery is best effort and limited to 20 dirty buffers, 2 MiB per buffer,
+and 10 MiB total.
+
+## Export or clear support data
+
+Open Settings and use `Export support log` to choose a local text file. The
+export contains bounded structured application events, not document content by
+default, and redacts the user-home and active-project paths where practical.
+Native compiler logs are separate and may still contain local paths.
+
+Use `Clear recovery and logs` to remove all recovery snapshots and current or
+rotated application logs. Global and project settings are preserved.
 
 ## Project path is rejected
 

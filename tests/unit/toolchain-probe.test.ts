@@ -22,6 +22,7 @@ class ProbeRunner implements ProcessRunner {
       signal: null,
       stdout: configured.stdout ?? "",
       stderr: configured.stderr ?? "",
+      outputTruncated: configured.outputTruncated ?? false,
       startedAt: "2026-06-13T00:00:00.000Z",
       endedAt: "2026-06-13T00:00:00.001Z",
       durationMs: 1,

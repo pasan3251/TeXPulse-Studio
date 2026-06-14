@@ -1,12 +1,14 @@
 # Security
 
-## Sprint 9 posture
+## Sprint 10 posture
 
-Sprint 9 keeps the Electron renderer outside the trusted computing boundary
-while adding narrow settings, toolchain-check, clean-build, and auxiliary
-cleanup capabilities. It adds no network service, telemetry, remote content,
-arbitrary filesystem access, general renderer process capability, or production
-dependency.
+Sprint 10 keeps the Electron renderer outside the trusted computing boundary
+while adding process/output bounds, abnormal-shutdown recovery, local structured
+logging, redacted support export, stricter navigation policy, and a
+dependency-audit release gate. It adds no network service, telemetry, remote
+content, arbitrary filesystem access, general renderer process capability, or
+production dependency. The implementation-matched threat model is
+`THREAT_MODEL.md`.
 
 The application:
 
@@ -20,11 +22,19 @@ The application:
 - always passes `-no-shell-escape`;
 - reports only output paths that exist;
 - enforces a default 120-second compiler timeout;
+- limits aggregate child stdout/stderr capture to 8 MiB and terminates the
+  process tree when the limit is reached;
 - cancels by build ID through `AbortController`;
 - terminates Windows compiler descendants with direct, shell-free
   `taskkill.exe /T /F`;
 - isolates outputs by generation so stale or failed builds cannot overwrite the
   retained successful PDF;
+- accepts only regular generated files, with at most 4,096 files, 128 MiB per
+  file, and 512 MiB total per generation;
+- rejects and link-safely removes output that exceeds quotas or contains links
+  or non-regular entries;
+- retains at most eight recognized build generations while preserving the
+  current and visible successful output;
 - rejects adapter results with mismatched build identity;
 - canonicalizes the selected project directory;
 - accepts only relative project entry paths and verifies resolved paths remain
@@ -42,12 +52,15 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes seventeen frozen project/build/PDF/SyncTeX/settings/event preload
-  methods, never `ipcRenderer`;
+- exposes twenty-two frozen project/build/PDF/SyncTeX/settings/recovery/event
+  preload methods, never `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
 - denies permission requests, popups, webviews, and unexpected navigation;
+- denies renderer-originated external navigation instead of exposing an
+  external-URL capability;
+- logs only the rejected URL scheme rather than the complete URL;
 - disables DevTools for production and packaged windows; and
 - applies a local-only Content Security Policy with no network connections,
   objects, forms, external bases, inline scripts, or evaluated scripts;
@@ -73,6 +86,16 @@ The application:
 - rejects build and PDF results when the renderer source revision changed; and
 - persists only validated relative workspace state and preferences, never source
   text, PDF bytes, logs, canonical paths, or credentials;
+- stores bounded dirty-buffer recovery separately under Electron `userData`,
+  keyed by opaque project ID;
+- limits recovery to 20 buffers, 2 MiB per buffer, and 10 MiB total;
+- restores recovery into dirty editor state only after explicit user review and
+  never writes project files automatically;
+- records bounded structured application events in a 1 MiB current log plus one
+  rotated log without storing document content by default;
+- exports support logs only after user action and redacts home and active
+  project paths where practical;
+- lets the user clear project recovery or all recovery and application logs;
 - parses only the bounded renderer log copy in a pure module without filesystem
   or process access;
 - limits each build response to 200 diagnostics, 4,096 message characters, and
@@ -135,9 +158,11 @@ field. A path becomes selectable only when it matches a known project-relative
 entry. Raw excerpts may still contain the original local path text because they
 are troubleshooting text, not capabilities.
 
-It is not approved for untrusted TeX input because total compiler output and
-generated-file counts are not yet bounded and the complete threat model is
-scheduled for Sprint 10.
+The product remains a trusted local-project editor rather than a hostile-code
+sandbox. TeX executes with the desktop user's permissions. Generated-output
+quotas are checked after process exit, so transient disk or resource use is
+possible until timeout. Multi-user or hosted compilation requires a separately
+reviewed sandboxed execution design.
 
 A custom executable directory and enabled `latexmk` configuration are explicit
 local trust decisions. They do not enable TeX shell escape, but they can select
@@ -172,13 +197,13 @@ or execute user-controlled local programs and Perl configuration respectively.
 
 ## Future work
 
-A detailed threat model, trusted-project policy, bounded total compiler output,
-generation cleanup, and TeX execution review remain required before release.
-Automatic external-file reload/merge, external URL handling, and any new preload
-capability require their own validated contracts and tests. ADR-0005 defines the
-path/link policy; ADR-0006 defines the Electron boundary; ADR-0007 defines
-completed PDF loading and artifact actions; ADR-0008 defines live build and
-project watching; ADR-0009 defines structured diagnostic parsing and source
-links; ADR-0010 defines the SyncTeX process, artifact, path, and renderer
-boundary. ADR-0011 defines settings ownership, toolchain readiness, `latexmk`
-trust, clean-build, and auxiliary-cleanup behavior.
+Packaging, installer paths, signing, clean-profile behavior, and installed
+runtime assumptions require Sprint 11 review. Automatic external-file
+reload/merge and any new preload or external-URL capability require their own
+validated contracts and tests. ADR-0005 defines the path/link policy; ADR-0006
+defines the Electron boundary; ADR-0007 defines completed PDF loading and
+artifact actions; ADR-0008 defines live build and project watching; ADR-0009
+defines structured diagnostic parsing and source links; ADR-0010 defines the
+SyncTeX process, artifact, path, and renderer boundary; ADR-0011 defines
+settings, toolchain readiness, `latexmk` trust, and cleanup; ADR-0012 defines
+output bounds, recovery, support data, and navigation denial.

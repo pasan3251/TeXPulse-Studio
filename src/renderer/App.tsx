@@ -15,6 +15,7 @@ import { BuildLog } from "./components/BuildLog.js";
 import { ProblemsPanel } from "./components/ProblemsPanel.js";
 import { ProjectExplorer } from "./components/ProjectExplorer.js";
 import { SettingsDialog } from "./components/SettingsDialog.js";
+import { RecoveryDialog } from "./components/RecoveryDialog.js";
 import { LiveBuildCoordinator } from "./live-build-coordinator.js";
 import {
   initialWorkspaceState,
@@ -33,6 +34,10 @@ import type {
   ProjectSettings,
   ToolchainReport,
 } from "../ipc/settings-contracts.js";
+import {
+  MAX_RECOVERY_BUFFERS,
+  type RecoverySnapshot,
+} from "../ipc/recovery-contracts.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -47,6 +52,11 @@ const PdfViewer = lazy(async () => {
 interface AppProps {
   api?: TeXPulseApi;
 }
+
+type RecoveryState =
+  | null
+  | { projectId: string; status: "active" | "loading"; snapshot: null }
+  | { projectId: string; status: "review"; snapshot: RecoverySnapshot };
 
 function persistWorkspaceState(
   storage: Pick<Storage, "setItem">,
@@ -74,6 +84,7 @@ export function App({ api = window.texpulse }: AppProps) {
   const stateRef = useRef(state);
   const coordinatorRef = useRef<LiveBuildCoordinator | null>(null);
   const saveTailRef = useRef<Promise<void>>(Promise.resolve());
+  const recoverySaveTailRef = useRef<Promise<void>>(Promise.resolve());
   const restoredProjectIdRef = useRef<string | null>(null);
   const openRequestRef = useRef(0);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -91,6 +102,8 @@ export function App({ api = window.texpulse }: AppProps) {
   );
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [toolchain, setToolchain] = useState<ToolchainReport | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   stateRef.current = state;
   globalSettingsRef.current = globalSettings;
 
@@ -260,6 +273,11 @@ export function App({ api = window.texpulse }: AppProps) {
         : (files[0]?.path ?? null);
 
     restoredProjectIdRef.current = result.value.projectId;
+    setRecovery({
+      projectId: result.value.projectId,
+      status: "loading",
+      snapshot: null,
+    });
     dispatch({
       type: "project-opened",
       project: result.value,
@@ -287,6 +305,33 @@ export function App({ api = window.texpulse }: AppProps) {
       activePath,
       views: preferences.bufferViews,
     });
+    const recoveryResult = await api.getRecovery();
+    if (requestId !== openRequestRef.current) {
+      return;
+    }
+    if (!recoveryResult.ok) {
+      setRecovery({
+        projectId: result.value.projectId,
+        status: "active",
+        snapshot: null,
+      });
+      dispatch({
+        type: "operation-failed",
+        message: recoveryResult.error.message,
+      });
+    } else if (recoveryResult.value === null) {
+      setRecovery({
+        projectId: result.value.projectId,
+        status: "active",
+        snapshot: null,
+      });
+    } else {
+      setRecovery({
+        projectId: result.value.projectId,
+        status: "review",
+        snapshot: recoveryResult.value,
+      });
+    }
   };
 
   const requestCompile = async (
@@ -647,6 +692,53 @@ export function App({ api = window.texpulse }: AppProps) {
   ]);
 
   useEffect(() => {
+    const project = state.project;
+    if (
+      project === null ||
+      recovery?.projectId !== project.projectId ||
+      recovery.status !== "active"
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const current = stateRef.current;
+      if (current.project?.projectId !== project.projectId) {
+        return;
+      }
+      const modified = Object.values(current.buffers)
+        .filter(isBufferModified)
+        .sort((left, right) => left.path.localeCompare(right.path))
+        .slice(0, MAX_RECOVERY_BUFFERS);
+      const operation = recoverySaveTailRef.current.then(async () => {
+        const result =
+          modified.length === 0
+            ? await api.clearRecovery()
+            : await api.saveRecovery({
+                projectId: project.projectId,
+                buffers: modified.map((buffer) => ({
+                  path: buffer.path,
+                  content: buffer.content,
+                  version: buffer.version,
+                })),
+              });
+        if (!result.ok) {
+          dispatch({
+            type: "operation-failed",
+            message: `Recovery snapshot failed: ${result.error.message}`,
+          });
+        }
+      });
+      recoverySaveTailRef.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [api, recovery, state.buffers, state.project]);
+
+  useEffect(() => {
     const persistBeforePageHide = () => {
       const current = stateRef.current;
       if (
@@ -786,6 +878,97 @@ export function App({ api = window.texpulse }: AppProps) {
         message: result.error.message,
       });
     }
+  };
+
+  const exportSupportLog = async (): Promise<void> => {
+    setSettingsBusy(true);
+    const result = await api.exportSupportLog();
+    setSettingsBusy(false);
+    dispatch({
+      type: result.ok ? "external-change-detected" : "operation-failed",
+      message: result.ok
+        ? result.value.saved
+          ? "Support log exported."
+          : "Support-log export was cancelled."
+        : result.error.message,
+    });
+  };
+
+  const clearLocalData = async (): Promise<void> => {
+    setSettingsBusy(true);
+    const result = await api.clearLocalData();
+    setSettingsBusy(false);
+    if (!result.ok) {
+      dispatch({ type: "operation-failed", message: result.error.message });
+      return;
+    }
+    setRecovery(null);
+    dispatch({
+      type: "external-change-detected",
+      message: `Cleared application logs and ${String(
+        result.value.recoverySnapshots,
+      )} recovery snapshot(s).`,
+    });
+  };
+
+  const discardRecovery = async (): Promise<void> => {
+    const current = recovery;
+    if (current === null || current.status !== "review") {
+      return;
+    }
+    setRecoveryBusy(true);
+    const result = await api.clearRecovery();
+    setRecoveryBusy(false);
+    if (!result.ok) {
+      dispatch({ type: "operation-failed", message: result.error.message });
+      return;
+    }
+    setRecovery({
+      projectId: current.projectId,
+      status: "active",
+      snapshot: null,
+    });
+  };
+
+  const restoreRecovery = async (): Promise<void> => {
+    const current = recovery;
+    if (current === null || current.status !== "review") {
+      return;
+    }
+    setRecoveryBusy(true);
+    const fileResults = await Promise.all(
+      current.snapshot.buffers.map((buffer) =>
+        api.readTextFile({ path: buffer.path }),
+      ),
+    );
+    const files = fileResults.flatMap((result) =>
+      result.ok ? [result.value] : [],
+    );
+    if (files.length === 0) {
+      setRecoveryBusy(false);
+      dispatch({
+        type: "operation-failed",
+        message: "Recovered files are no longer available in the project.",
+      });
+      return;
+    }
+    dispatch({
+      type: "recovery-restored",
+      files,
+      contents: Object.fromEntries(
+        current.snapshot.buffers.map((buffer) => [buffer.path, buffer.content]),
+      ),
+    });
+    const cleared = await api.clearRecovery();
+    setRecoveryBusy(false);
+    if (!cleared.ok) {
+      dispatch({ type: "operation-failed", message: cleared.error.message });
+    }
+    setRecovery({
+      projectId: current.projectId,
+      status: "active",
+      snapshot: null,
+    });
   };
 
   const updateGlobalQuick = (changes: Partial<GlobalSettings>): void => {
@@ -1258,8 +1441,14 @@ export function App({ api = window.texpulse }: AppProps) {
           onCleanupAuxiliary={() => {
             void cleanupAuxiliary();
           }}
+          onClearLocalData={() => {
+            void clearLocalData();
+          }}
           onClose={() => {
             setSettingsMode(null);
+          }}
+          onExportSupportLog={() => {
+            void exportSupportLog();
           }}
           onSave={(requestedGlobal, requestedProject) => {
             void saveSettings(requestedGlobal, requestedProject);
@@ -1268,6 +1457,18 @@ export function App({ api = window.texpulse }: AppProps) {
             void checkToolchain(requestedGlobal.customBinDirectory, true).then(
               () => saveSettings(requestedGlobal, requestedProject),
             );
+          }}
+        />
+      ) : null}
+      {recovery?.status === "review" ? (
+        <RecoveryDialog
+          busy={recoveryBusy}
+          snapshot={recovery.snapshot}
+          onDiscard={() => {
+            void discardRecovery();
+          }}
+          onRestore={() => {
+            void restoreRecovery();
           }}
         />
       ) : null}

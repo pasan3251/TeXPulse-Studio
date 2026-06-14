@@ -30,6 +30,14 @@ import type {
   ToolchainCheckRequest,
   ToolchainCheckResult,
 } from "./settings-contracts.js";
+import type {
+  ClearLocalDataResult,
+  ClearRecoveryResult,
+  ExportSupportLogResult,
+  GetRecoveryResult,
+  SaveRecoveryRequest,
+  SaveRecoveryResult,
+} from "./recovery-contracts.js";
 
 export interface TeXPulseApi {
   openProject(): Promise<OpenProjectResult>;
@@ -52,6 +60,11 @@ export interface TeXPulseApi {
     settings: ProjectSettings,
   ): Promise<SaveProjectSettingsResult>;
   checkToolchain(request: ToolchainCheckRequest): Promise<ToolchainCheckResult>;
+  saveRecovery(request: SaveRecoveryRequest): Promise<SaveRecoveryResult>;
+  getRecovery(): Promise<GetRecoveryResult>;
+  clearRecovery(): Promise<ClearRecoveryResult>;
+  exportSupportLog(): Promise<ExportSupportLogResult>;
+  clearLocalData(): Promise<ClearLocalDataResult>;
   onProjectFileChanged(
     listener: (change: ProjectFileChange) => void,
   ): () => void;

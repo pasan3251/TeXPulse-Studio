@@ -66,6 +66,25 @@ const undefinedControlSequence = {
 };
 
 describe("workspaceReducer", () => {
+  it("restores recovery content as unsaved editor state", () => {
+    let state = workspaceReducer(initialWorkspaceState, {
+      type: "project-opened",
+      project,
+    });
+    state = workspaceReducer(state, {
+      type: "recovery-restored",
+      files: [file("main.tex", "disk content")],
+      contents: { "main.tex": "recovered content" },
+    });
+
+    expect(state.buffers["main.tex"]).toMatchObject({
+      content: "recovered content",
+      savedContent: "disk content",
+    });
+    expect(isBufferModified(state.buffers["main.tex"]!)).toBe(true);
+    expect(state.notice).toContain("remains unsaved");
+  });
+
   it("tracks modified state and preserves newer edits after a save completes", () => {
     let state = workspaceReducer(initialWorkspaceState, {
       type: "project-opened",

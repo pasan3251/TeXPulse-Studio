@@ -23,7 +23,9 @@ import {
 import {
   ALL_CHANNELS,
   BUILD_CHANNELS,
+  RECOVERY_CHANNELS,
   SETTINGS_CHANNELS,
+  SUPPORT_CHANNELS,
 } from "../ipc/channels.js";
 import { SYNCTEX_CHANNELS } from "../ipc/channels.js";
 import {
@@ -69,6 +71,26 @@ import {
 } from "../ipc/settings-contracts.js";
 import { defaultGlobalSettings } from "../settings/settings-types.js";
 import type { GlobalSettings } from "../settings/settings-types.js";
+import { RecoveryStoreError } from "../recovery/recovery-store.js";
+import {
+  clearLocalDataRequestSchema,
+  clearLocalDataResultSchema,
+  clearRecoveryRequestSchema,
+  clearRecoveryResultSchema,
+  exportSupportLogRequestSchema,
+  exportSupportLogResultSchema,
+  getRecoveryRequestSchema,
+  getRecoveryResultSchema,
+  saveRecoveryRequestSchema,
+  saveRecoveryResultSchema,
+  type ClearLocalDataResult,
+  type ClearRecoveryResult,
+  type ExportSupportLogResult,
+  type GetRecoveryResult,
+  type RecoverySnapshot,
+  type SaveRecoveryRequest,
+  type SaveRecoveryResult,
+} from "../ipc/recovery-contracts.js";
 
 export interface ProjectIpcOptions {
   createCompilerAdapter?: () => CompilerAdapter;
@@ -87,6 +109,16 @@ export interface ProjectIpcOptions {
   checkToolchain?: (
     request: ToolchainCheckRequest,
   ) => Promise<Extract<ToolchainCheckResult, { ok: true }>["value"]>;
+  saveRecovery?: (request: SaveRecoveryRequest) => Promise<RecoverySnapshot>;
+  loadRecovery?: (projectId: string) => Promise<RecoverySnapshot | null>;
+  clearRecovery?: (projectId: string) => Promise<boolean>;
+  exportSupportLog?: (redactionPaths: readonly string[]) => Promise<boolean>;
+  clearLocalData?: () => Promise<{ recoverySnapshots: number }>;
+  logEvent?: (
+    level: "error" | "info" | "warn",
+    event: string,
+    details?: Readonly<Record<string, boolean | number | string | null>>,
+  ) => void;
 }
 
 interface ApiFailure {
@@ -134,10 +166,165 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
         options.createSynctexService?.(),
         async () => (await loadGlobalSettings()).settings,
       );
+      options.logEvent?.("info", "project_opened", {
+        projectId: projectSession.describe().projectId,
+      });
       return {
         ok: true,
         value: projectSession.describe(),
       };
+    },
+  );
+
+  registerHandler(
+    options,
+    RECOVERY_CHANNELS.saveRecovery,
+    saveRecoveryRequestSchema,
+    saveRecoveryResultSchema,
+    async (request): Promise<SaveRecoveryResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before saving recovery data.",
+        );
+      }
+      if (request.projectId !== projectSession.describe().projectId) {
+        return failure(
+          "invalid-request",
+          "Recovery data did not match the open project.",
+        );
+      }
+      const paths = new Set<string>();
+      for (const buffer of request.buffers) {
+        if (paths.has(buffer.path)) {
+          return failure(
+            "invalid-request",
+            "Recovery data contained a duplicate project path.",
+          );
+        }
+        paths.add(buffer.path);
+        await projectSession.readTextFile(buffer.path);
+      }
+      if (options.saveRecovery === undefined) {
+        return failure("internal", "Recovery storage is unavailable.");
+      }
+      const snapshot = await options.saveRecovery(request);
+      return { ok: true, value: { savedAt: snapshot.savedAt } };
+    },
+  );
+
+  registerHandler(
+    options,
+    RECOVERY_CHANNELS.getRecovery,
+    getRecoveryRequestSchema,
+    getRecoveryResultSchema,
+    async (): Promise<GetRecoveryResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before loading recovery data.",
+        );
+      }
+      if (options.loadRecovery === undefined) {
+        return failure("internal", "Recovery storage is unavailable.");
+      }
+      const projectId = projectSession.describe().projectId;
+      const snapshot = await options.loadRecovery(projectId);
+      if (snapshot === null) {
+        return { ok: true, value: null };
+      }
+      const validBuffers = [];
+      for (const buffer of snapshot.buffers) {
+        try {
+          await projectSession.readTextFile(buffer.path);
+          validBuffers.push(buffer);
+        } catch {
+          options.logEvent?.("warn", "recovery_path_rejected", {
+            projectId,
+          });
+        }
+      }
+      if (validBuffers.length === 0) {
+        await options.clearRecovery?.(projectId);
+        return { ok: true, value: null };
+      }
+      return {
+        ok: true,
+        value: { ...snapshot, buffers: validBuffers },
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    RECOVERY_CHANNELS.clearRecovery,
+    clearRecoveryRequestSchema,
+    clearRecoveryResultSchema,
+    async (): Promise<ClearRecoveryResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before clearing recovery data.",
+        );
+      }
+      if (options.clearRecovery === undefined) {
+        return failure("internal", "Recovery storage is unavailable.");
+      }
+      return {
+        ok: true,
+        value: {
+          cleared: await options.clearRecovery(
+            projectSession.describe().projectId,
+          ),
+        },
+      };
+    },
+  );
+
+  registerHandler(
+    options,
+    SUPPORT_CHANNELS.exportSupportLog,
+    exportSupportLogRequestSchema,
+    exportSupportLogResultSchema,
+    async (): Promise<ExportSupportLogResult> => {
+      if (options.exportSupportLog === undefined) {
+        return failure(
+          "support-export-failed",
+          "Support-log export is unavailable.",
+        );
+      }
+      try {
+        return {
+          ok: true,
+          value: {
+            saved: await options.exportSupportLog(
+              projectSession?.supportRedactionPaths() ?? [],
+            ),
+          },
+        };
+      } catch (error) {
+        options.logEvent?.("error", "support_export_failed", {
+          error:
+            error instanceof Error ? error.message : "Unknown export error.",
+        });
+        return failure(
+          "support-export-failed",
+          "The support log could not be exported.",
+        );
+      }
+    },
+  );
+
+  registerHandler(
+    options,
+    SUPPORT_CHANNELS.clearLocalData,
+    clearLocalDataRequestSchema,
+    clearLocalDataResultSchema,
+    async (): Promise<ClearLocalDataResult> => {
+      if (options.clearLocalData === undefined) {
+        return failure("internal", "Local-data cleanup is unavailable.");
+      }
+      return { ok: true, value: await options.clearLocalData() };
     },
   );
 
@@ -223,9 +410,15 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       if (projectSession === null) {
         return failure("no-project", "Open a project before compiling.");
       }
+      const value = await projectSession.cleanBuild(request.rootFile);
+      options.logEvent?.("info", "build_completed", {
+        clean: true,
+        durationMs: value.durationMs,
+        status: value.status,
+      });
       return {
         ok: true,
-        value: await projectSession.cleanBuild(request.rootFile),
+        value,
       };
     },
   );
@@ -278,9 +471,15 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       if (projectSession === null) {
         return failure("no-project", "Open a project before compiling.");
       }
+      const value = await projectSession.compile(request.rootFile);
+      options.logEvent?.("info", "build_completed", {
+        clean: false,
+        durationMs: value.durationMs,
+        status: value.status,
+      });
       return {
         ok: true,
-        value: await projectSession.compile(request.rootFile),
+        value,
       };
     },
   );
@@ -416,6 +615,7 @@ function registerHandler<Request, Response>(
         event.senderFrame !== event.sender.mainFrame
       ) {
         console.warn(`[security] Rejected untrusted IPC call on ${channel}.`);
+        options.logEvent?.("warn", "ipc_sender_rejected", { channel });
         return responseSchema.parse(
           failure("unauthorized", "IPC sender is not trusted."),
         );
@@ -424,6 +624,7 @@ function registerHandler<Request, Response>(
       const parsed = requestSchema.safeParse(payload);
       if (!parsed.success) {
         console.warn(`[security] Rejected invalid IPC payload on ${channel}.`);
+        options.logEvent?.("warn", "ipc_payload_rejected", { channel });
         return responseSchema.parse(
           failure("invalid-request", "IPC request was invalid."),
         );
@@ -440,7 +641,22 @@ function registerHandler<Request, Response>(
         if (error instanceof ProjectSessionError) {
           return responseSchema.parse(failure(error.code, error.message));
         }
+        if (error instanceof RecoveryStoreError) {
+          return responseSchema.parse(
+            failure(
+              error.reason === "too-large"
+                ? "recovery-too-large"
+                : "recovery-invalid",
+              error.message,
+            ),
+          );
+        }
         console.error(`IPC handler failed on ${channel}.`, error);
+        options.logEvent?.("error", "ipc_handler_failed", {
+          channel,
+          error:
+            error instanceof Error ? error.message : "Unknown handler error.",
+        });
         return responseSchema.parse(
           failure("internal", "The requested operation failed."),
         );

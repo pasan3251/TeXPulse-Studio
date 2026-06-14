@@ -70,6 +70,11 @@ export type WorkspaceAction =
       activePath: string | null;
       views: Record<string, { cursor: number; scrollTop: number }>;
     }
+  | {
+      type: "recovery-restored";
+      files: OpenedTextFile[];
+      contents: Record<string, string>;
+    }
   | { type: "file-loading"; path: string }
   | { type: "file-opened"; file: OpenedTextFile }
   | { type: "file-selected"; path: string }
@@ -168,6 +173,35 @@ export function workspaceReducer(
             ? action.activePath
             : (action.files[0]?.path ?? null),
         loadingPath: null,
+      };
+    }
+    case "recovery-restored": {
+      const buffers = { ...state.buffers };
+      for (const file of action.files) {
+        const previous = buffers[file.path];
+        const recovered = action.contents[file.path];
+        if (recovered === undefined) {
+          continue;
+        }
+        buffers[file.path] = {
+          path: file.path,
+          content: recovered,
+          savedContent: file.content,
+          version: file.version,
+          cursor: previous?.cursor ?? 0,
+          scrollTop: previous?.scrollTop ?? 0,
+        };
+      }
+      return {
+        ...state,
+        buffers,
+        activePath: action.files[0]?.path ?? state.activePath,
+        build: null,
+        pdf: null,
+        navigationTarget: null,
+        pdfSyncTarget: null,
+        problemsOpen: false,
+        notice: "Recovered content is open in the editor and remains unsaved.",
       };
     }
     case "file-loading":

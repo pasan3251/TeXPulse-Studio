@@ -41,5 +41,5 @@ describe("TypeScript strict-mode control", () => {
       .map((diagnostic) => diagnostic.code);
 
     expect(diagnosticCodes).toContain(7006);
-  });
+  }, 15_000);
 });

@@ -41,4 +41,17 @@ describe("NodeProcessRunner", () => {
       "$(not-executed)",
     ]);
   });
+
+  it("terminates and truncates a process that exceeds its output allowance", async () => {
+    const result = await new NodeProcessRunner().run({
+      executable: process.execPath,
+      args: ["-e", "process.stdout.write('x'.repeat(1024 * 1024));"],
+      maxOutputBytes: 1_024,
+    });
+
+    expect(result.terminationReason).toBe("output-limit");
+    expect(result.outputTruncated).toBe(true);
+    expect(Buffer.byteLength(result.stdout, "utf8")).toBeLessThanOrEqual(1_024);
+    expect(result.stderr).toBe("");
+  });
 });

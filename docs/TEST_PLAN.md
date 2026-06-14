@@ -1,24 +1,25 @@
 # Test Plan
 
-## Sprint 9 scope
+## Sprint 10 scope
 
-Sprint 9 verifies all existing controls plus settings schemas and migration,
-global/project persistence, honest toolchain readiness, recipe argument arrays,
-explicit `latexmk` configuration trust, clean builds, safe auxiliary cleanup,
-and native engine and bibliography workflows.
+Sprint 10 verifies all existing controls plus process/output bounds, generation
+retention, navigation and CSP policy, bounded recovery, explicit restore,
+structured support logging, path redaction, data cleanup, dependency audit, and
+the implementation-matched threat model.
 
-| Check        | Command                 | Current evidence                                       |
-| ------------ | ----------------------- | ------------------------------------------------------ |
-| Formatting   | `pnpm format:check`     | Prettier checks repository text files                  |
-| Linting      | `pnpm lint`             | ESLint checks TS, TSX, configuration, and tests        |
-| Strict types | `pnpm typecheck`        | Strict main, preload, renderer, watcher, and tests     |
-| Unit tests   | `pnpm test:unit`        | Settings migration, recipes, cleanup, reducer, core    |
-| Component    | `pnpm test:component`   | Setup/settings, source/PDF targets, Problems, tree     |
-| Integration  | `pnpm test:integration` | Settings stores, cleanup, session, compiler, IPC       |
-| Coverage     | `pnpm test:coverage`    | Enforces 85% aggregate statements and branches         |
-| E2E          | `pnpm test:e2e`         | Existing flows plus setup, settings, clean and cleanup |
-| Build        | `pnpm build`            | Main, renderer chunks, and sandbox preload bundle      |
-| Aggregate    | `pnpm check`            | Runs every current gate in sequence                    |
+| Check        | Command                   | Current evidence                                      |
+| ------------ | ------------------------- | ----------------------------------------------------- |
+| Formatting   | `pnpm format:check`       | Prettier checks repository text files                 |
+| Linting      | `pnpm lint`               | ESLint checks TS, TSX, configuration, and tests       |
+| Strict types | `pnpm typecheck`          | Strict main, preload, renderer, watcher, and tests    |
+| Unit tests   | `pnpm test:unit`          | Bounds, retention, logging, navigation, reducer, core |
+| Component    | `pnpm test:component`     | Recovery, settings, editor, PDF, Problems, tree       |
+| Integration  | `pnpm test:integration`   | Recovery, process, output, session, compiler, IPC     |
+| Coverage     | `pnpm test:coverage`      | Enforces 85% aggregate statements and branches        |
+| E2E          | `pnpm test:e2e`           | Existing flows plus abnormal-shutdown recovery        |
+| Build        | `pnpm build`              | Main, renderer chunks, and sandbox preload bundle     |
+| Aggregate    | `pnpm check`              | Runs every current gate in sequence                   |
+| Audit        | `pnpm audit:dependencies` | Fails on known high or critical findings              |
 
 ## Determinism
 
@@ -41,13 +42,32 @@ and native engine and bibliography workflows.
   malformed metadata, ignored output, external edits/deletion, links or
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
-  folder/compiler/SyncTeX/toolchain overrides. It verifies the seventeen-method
+  folder/compiler/SyncTeX/toolchain overrides. It verifies the twenty-two-method
   bridge and absent Node globals, rapid typing coalescence, queued handoff,
   non-overlapping compiler trace intervals, newest-result display, disabled
   auto-build plus manual compile, responsive editing, stale-result rejection,
   workspace restoration, minimum-window layout, version-conflict preservation,
   settings persistence, recipe and clean arguments, allowlisted cleanup,
   first-run readiness states, screenshots, clean shutdown, and fixture removal.
+- Crash-recovery E2E waits for a persisted snapshot, terminates the first
+  Electron process, reviews recovery in a second process, verifies disk remains
+  unchanged, restores to the editor, and saves explicitly.
+- Process-runner tests cover timeout, cancellation, descendant cleanup, shell
+  metacharacters, aggregate output overflow, and bounded cleanup stderr.
+- Generated-output tests cover file count, per-file size, aggregate size, links,
+  non-regular entries, rejected-generation cleanup, and eight-generation
+  retention.
+- Recovery tests cover strict schemas, malformed JSON, project-ID mismatch,
+  aggregate limits, path validation, atomic replacement, clear-one, and
+  clear-all behavior.
+- Application-log tests cover bounded values, source-free event design,
+  rotation, failure containment, home/project path redaction including JSON
+  escaping, export, and cleanup.
+- Navigation and window tests cover exact local renderer navigation, popup and
+  external-scheme denial, drag/drop navigation disabling, and the restrictive
+  CSP.
+- Recipe tests continue to assert `-no-shell-escape` with default and explicitly
+  trusted `latexmk` configuration.
 - Diagnostic golden tests cover undefined commands, missing packages, undefined
   references/citations, box warnings, emergency stops, BibTeX, Biber, timeout,
   cancellation, malformed output, explicit severities, MiKTeX 79-column wraps,

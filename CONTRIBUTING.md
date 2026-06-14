@@ -19,6 +19,7 @@ Run the complete current quality gate:
 
 ```powershell
 pnpm check
+pnpm audit:dependencies
 ```
 
 For editor/PDF work, run the focused renderer and Electron suites:
@@ -46,6 +47,10 @@ pnpm texpulse-doctor
 The intentional infinite-loop fixture under `fixtures/timeout/` must only be run
 through a path that supplies an enforced compiler timeout.
 
+Preserve the 8 MiB process-capture limit, generated-output quotas, link-safe
+rejection cleanup, and generation retention. Changes to any limit require
+threat-model, test, and documentation updates.
+
 For project-filesystem work, preserve the canonical-root boundary, reject
 internal links and junctions, and use read-version tokens for destructive file
 replacement. Add integration coverage for Windows path behavior, Unicode,
@@ -62,6 +67,11 @@ non-color-only states, and the CodeMirror cursor/scroll contract. Add component
 or Electron E2E coverage for user-visible workflows. Live-build changes must
 preserve serialized saves, newest-only compile behavior, and source-revision
 revalidation before accepting build or PDF results.
+
+Recovery changes must remain main-process validated and bounded, restore only to
+dirty editor buffers after explicit review, and never bypass version-token
+saves. Application logs must remain structured, bounded, local, source-free by
+default, user-clearable, and practically path-redacted when exported.
 
 For diagnostic changes, keep parsing pure and bounded, retain the raw log, and
 resolve source links only against enumerated project-relative files. Add or

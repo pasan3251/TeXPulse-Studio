@@ -83,7 +83,9 @@ if (
   }
   await writeFile(
     join(outputDirectory, `${baseName}.log`),
-    "fake latexmk log\n",
+    args.includes("--fake-large-log")
+      ? "x".repeat(2 * 1024 * 1024 + 4_096)
+      : "fake latexmk log\n",
   );
   if (!args.includes("--fake-no-synctex")) {
     await writeFile(

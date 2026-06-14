@@ -2,17 +2,18 @@
 
 ## Current state
 
-Sprint 9 adds persistent settings, first-run toolchain setup, selectable
-recipes, explicit `latexmk` configuration trust, clean builds, and bounded
-auxiliary cleanup while preserving the editor, build, PDF, diagnostic, SyncTeX,
-and project controls:
+Sprint 10 adds compiler/output bounds, generation retention, abnormal-shutdown
+recovery, local support diagnostics, redacted export, and navigation/CSP
+hardening while preserving the editor, build, PDF, diagnostic, SyncTeX,
+settings, and project controls:
 
-- `process/`: shell-free child process boundary.
+- `process/`: shell-free child process boundary with timeout, cancellation,
+  process-tree cleanup, and bounded aggregate capture.
 - `toolchain/`: executable discovery, version parsing, readiness probe, and
   isolated doctor self-test.
 - `compiler/`: validated project paths, fixed recipe and clean-build `latexmk`
-  argument arrays, allowlisted auxiliary cleanup, and cancellable structured
-  compile results.
+  argument arrays, allowlisted auxiliary cleanup, generated-output quotas,
+  generation retention, and cancellable structured compile results.
 - `build/`: per-project state machine, generation IDs, newest-only queue,
   debounce foundation, stale-result rejection, timeout, and last-successful
   metadata.
@@ -24,11 +25,14 @@ and project controls:
   project metadata, recent-project storage, and filtered Chokidar events.
 - `settings/`: strict global and project schemas, safe defaults, migration, and
   atomic application-data persistence.
+- `recovery/`: atomic, bounded, project-ID-keyed unsaved-buffer snapshots.
+- `support/`: bounded structured application logging, rotation, practical path
+  redaction, export, and cleanup.
 - `ipc/`: strict Zod request/response schemas and stable project, build, PDF,
   and SyncTeX channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, a session owning project/build state, and
-  a frozen seventeen-method preload bridge.
+  a frozen twenty-two-method preload bridge.
 - `renderer/`: React workspace state, deterministic project hierarchy,
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
   persistence, resizable panes, build controls, source-linked Problems and raw
@@ -37,7 +41,7 @@ and project controls:
   layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
-There is still no abnormal-shutdown recovery workflow or production packaging.
+There is still no production packaging.
 
 ## System boundaries
 
@@ -50,7 +54,8 @@ The implemented and planned boundaries are:
 4. A compiler adapter interface separating MiKTeX/`latexmk` from application
    state and deterministic fake compilers used by tests.
 5. Pure modules for path validation, build generations, diagnostics, settings,
-   and SyncTeX parsing.
+   recovery, support logging, navigation policy, output limits, retention, and
+   SyncTeX parsing.
 
 ## Sprint 4 editor flow
 
@@ -205,6 +210,31 @@ validated generation directories and known auxiliary suffixes. It skips links
 and preserves PDFs, logs, SyncTeX files, and unknown output. Project-settings
 changes, builds, and cleanup cannot race within one project session.
 
+## Sprint 10 recovery and support flow
+
+```text
+dirty editor buffers
+  -> 500 ms bounded snapshot request
+  -> strict recovery schema and active-project identity check
+  -> atomic application-data snapshot
+  -> abnormal restart and explicit review dialog
+  -> restore to dirty reducer buffers without filesystem writes
+  -> existing version-token Save writes only after user action
+```
+
+The renderer submits at most 20 dirty buffers, 2 MiB each and 10 MiB total.
+Stored paths must still match validated files in the active project. Invalid or
+malformed snapshots are rejected and cleared rather than applied.
+
+Security-relevant IPC rejection, build completion summaries, renderer crashes,
+application startup, support export, and data cleanup become bounded structured
+events. Values are sanitized and truncated. The current application log is
+limited to 1 MiB with one rotated predecessor. Export is user initiated and
+redacts the Windows home path and active project path where practical.
+
+Renderer navigation and popup requests are denied. The product does not expose
+an external-URL method because no implemented workflow requires one.
+
 ## Project flow
 
 ```text
@@ -245,7 +275,11 @@ CLI or desktop `ProjectSession`
   -> Node process runner with shell disabled
   -> latexmk recipe with timeout, cancellation, shell escape disabled,
      and configuration files disabled unless explicitly trusted
+  -> bounded aggregate stdout/stderr capture
   -> Windows process-tree cleanup with taskkill /T /F
+  -> regular-file, count, per-file, and total-byte output inspection
+  -> reject and remove invalid generations without following links
+  -> retain at most eight recognized generations
   -> current result or stale result rejected from current state
   -> retained last-successful PDF metadata
 ```
@@ -266,6 +300,9 @@ after the self-test, so it does not modify user projects.
 - `latexmk` configuration files are disabled by default and require explicit
   project trust.
 - Builds support timeout, cancellation, and stale-result rejection.
+- Child process capture and accepted generated output are bounded.
+- Generation retention preserves current visible output and removes only
+  recognized application-owned generation directories.
 - Clean builds retain the normal generation and stale-result controls.
 - Auxiliary cleanup is allowlisted, project-bounded, and never traverses links.
 - Source files remain local and are not silently rewritten.
@@ -286,6 +323,9 @@ after the self-test, so it does not modify user projects.
 - The renderer receives no canonical PDF path capability; artifact actions
   require a current opaque build token. Raw compiler logs may contain path text.
 - PDF preview bytes and renderer log text are bounded before crossing IPC.
+- Recovery requires explicit review and never writes source automatically.
+- Application logs avoid source content by default and support redacted export
+  and user-controlled cleanup.
 
 ## Decision records
 
@@ -300,5 +340,6 @@ after the self-test, so it does not modify user projects.
 - `adr/ADR-0009-structured-diagnostics.md`
 - `adr/ADR-0010-synctex-navigation-boundary.md`
 - `adr/ADR-0011-settings-toolchain-and-latexmk-trust.md`
+- `adr/ADR-0012-security-recovery-and-support-data.md`
 
 Packaging requires a later ADR before implementation.

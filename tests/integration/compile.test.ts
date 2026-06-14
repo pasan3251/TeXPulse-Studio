@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,6 +156,41 @@ describe("compileProject", () => {
       pdfPath: null,
       failureReason:
         "latexmk exited successfully but did not produce a readable PDF.",
+    });
+  });
+
+  it("rejects and removes a generation that exceeds output quotas", async () => {
+    const project = await mkdtemp(join(tmpdir(), "texpulse output quota "));
+    temporaryDirectories.push(project);
+    await copyFile(minimalFixture, join(project, "main.tex"));
+
+    const result = await compileProject(
+      {
+        projectDirectory: project,
+        rootFile: "main.tex",
+      },
+      {
+        latexmkCommand: {
+          executable: process.execPath,
+          prefixArgs: [fakeLatexmk],
+        },
+        engineExecutable: process.execPath,
+        outputLimits: {
+          maxFileBytes: 1024 * 1024,
+          maxFiles: 2,
+          maxTotalBytes: 10 * 1024 * 1024,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "failed",
+      pdfPath: null,
+      outputTruncated: true,
+      failureReason: "Generated output exceeded 2 files.",
+    });
+    await expect(stat(result.buildDirectory!)).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 });

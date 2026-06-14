@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, realpath, stat } from "node:fs/promises";
+import { open, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, relative } from "node:path";
 
 import { BuildController } from "../build/build-controller.js";
@@ -7,6 +7,7 @@ import type { BuildCompletion } from "../build/build-types.js";
 import type { CompilerAdapter } from "../compiler/compiler-adapter.js";
 import type { CompileRecipe } from "../compiler/compile-types.js";
 import { cleanupAuxiliaryFiles } from "../compiler/auxiliary-cleanup.js";
+import { pruneGenerationDirectories } from "../compiler/generation-retention.js";
 import { parseBuildDiagnostics } from "../diagnostics/diagnostic-parser.js";
 import type {
   BuildView,
@@ -43,6 +44,8 @@ import type {
 
 const MAX_PDF_BYTES = 100 * 1024 * 1024;
 const MAX_DISPLAY_LOG_CHARACTERS = 2 * 1024 * 1024;
+const DISPLAY_TRUNCATION_NOTICE =
+  "\n\n[Display truncated. The full bounded build log remains in the build directory.]";
 
 type OpenProjectValue = Extract<OpenProjectResult, { ok: true }>["value"];
 
@@ -138,6 +141,10 @@ export class ProjectSession {
 
   describe(): OpenProjectValue {
     return this.projectDescription;
+  }
+
+  supportRedactionPaths(): string[] {
+    return [this.service.root];
   }
 
   readTextFile(path: string) {
@@ -250,7 +257,13 @@ export class ProjectSession {
         : { customBinDirectory: globalSettings.customBinDirectory }),
     });
     const completion = await ticket.completion;
-    return this.buildView(ticket.buildId, ticket.generation, completion);
+    const view = await this.buildView(
+      ticket.buildId,
+      ticket.generation,
+      completion,
+    );
+    await this.pruneBuildGenerations(completion);
+    return view;
   }
 
   private assertBuildIdle(message: string): void {
@@ -416,6 +429,7 @@ export class ProjectSession {
       result.logPath,
       result.stdout,
       result.stderr,
+      result.outputTruncated,
     );
     const diagnostics = parseBuildDiagnostics({
       log: rawLog.text,
@@ -440,6 +454,30 @@ export class ProjectSession {
     };
   }
 
+  private async pruneBuildGenerations(
+    completion: BuildCompletion,
+  ): Promise<void> {
+    const generationsPath = await resolveProjectPath(
+      this.service.root,
+      `${normalizeProjectPath(this.metadata.buildDirectory)}/generations`,
+      { allowMissing: true },
+    );
+    const preserveNames = new Set<string>();
+    const current = completion.result?.buildDirectory;
+    if (current !== null && current !== undefined) {
+      preserveNames.add(basename(current));
+    }
+    const successful = this.controller.getSnapshot().lastSuccessfulBuild;
+    if (successful !== null) {
+      preserveNames.add(basename(dirname(successful.pdfPath)));
+    }
+    await pruneGenerationDirectories(generationsPath, preserveNames).catch(
+      (error: unknown) => {
+        console.error("Build generation retention failed.", error);
+      },
+    );
+  }
+
   private visiblePdfArtifact(): PdfArtifact | null {
     const snapshot = this.controller.getSnapshot();
     if (snapshot.visiblePdf === null || snapshot.lastSuccessfulBuild === null) {
@@ -458,13 +496,18 @@ export class ProjectSession {
     logPath: string | null,
     stdout: string,
     stderr: string,
+    processOutputTruncated: boolean,
   ): Promise<{ text: string; truncated: boolean }> {
     const sections: string[] = [];
+    let truncated = processOutputTruncated;
     if (logPath !== null) {
       try {
-        sections.push(
-          await readFile(await this.safeGeneratedPath(logPath), "utf8"),
+        const buildLog = await readBoundedUtf8(
+          await this.safeGeneratedPath(logPath),
+          MAX_DISPLAY_LOG_CHARACTERS,
         );
+        sections.push(buildLog.text);
+        truncated ||= buildLog.truncated;
       } catch (error) {
         sections.push(
           `The build log could not be read: ${
@@ -481,11 +524,15 @@ export class ProjectSession {
     }
 
     const text = sections.join("\n\n");
-    if (text.length <= MAX_DISPLAY_LOG_CHARACTERS) {
+    if (!truncated && text.length <= MAX_DISPLAY_LOG_CHARACTERS) {
       return { text, truncated: false };
     }
+    const contentLimit = Math.max(
+      MAX_DISPLAY_LOG_CHARACTERS - DISPLAY_TRUNCATION_NOTICE.length,
+      0,
+    );
     return {
-      text: `${text.slice(0, MAX_DISPLAY_LOG_CHARACTERS)}\n\n[Display truncated. The full log remains in the build directory.]`,
+      text: `${text.slice(0, contentLimit)}${DISPLAY_TRUNCATION_NOTICE}`,
       truncated: true,
     };
   }
@@ -553,6 +600,23 @@ export class ProjectSession {
         "SyncTeX data for the current build is no longer available.",
       );
     }
+  }
+}
+
+async function readBoundedUtf8(
+  path: string,
+  maxBytes: number,
+): Promise<{ text: string; truncated: boolean }> {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return {
+      text: buffer.subarray(0, Math.min(bytesRead, maxBytes)).toString("utf8"),
+      truncated: bytesRead > maxBytes,
+    };
+  } finally {
+    await handle.close();
   }
 }
 

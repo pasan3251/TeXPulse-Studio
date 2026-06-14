@@ -214,6 +214,7 @@ export class BuildController {
         synctexPath: null,
         stdout: "",
         stderr: "",
+        outputTruncated: false,
         failureReason:
           error instanceof Error
             ? error.message
@@ -243,6 +244,7 @@ export class BuildController {
         synctexPath: null,
         stdout: "",
         stderr: "",
+        outputTruncated: false,
         failureReason:
           "Compiler adapter returned a result for a different build identity.",
       };

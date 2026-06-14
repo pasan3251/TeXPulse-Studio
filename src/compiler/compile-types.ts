@@ -34,5 +34,6 @@ export interface CompileResult {
   synctexPath: string | null;
   stdout: string;
   stderr: string;
+  outputTruncated: boolean;
   failureReason: string | null;
 }
