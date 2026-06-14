@@ -97,10 +97,11 @@ matching editor-originated writes. Watcher events are validated, project-scoped
 notices and never direct save or compile triggers.
 
 The renderer is sandboxed with Node integration disabled. Its frozen preload
-bridge exposes thirty-one fixed
-project/build/PDF/SyncTeX/settings/recovery/event methods. PDF paths remain in
-the main process as actionable values, and renderer PDF loads require an active
-opaque artifact token. Raw compiler logs may contain local path text.
+bridge exposes thirty-two fixed
+project/build/PDF/SyncTeX/settings/recovery/Git/event methods. PDF paths remain
+in the main process as actionable values, and renderer PDF loads require an
+active opaque artifact token. Raw compiler logs may contain local path text.
+Read-only Git status returns only bounded summary counts and branch metadata.
 
 Recovery snapshots are bounded, project-scoped, stored under application data,
 and restored only to dirty editor buffers after explicit review. Structured

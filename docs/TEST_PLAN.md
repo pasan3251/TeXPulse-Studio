@@ -49,7 +49,7 @@ real compilation/PDF preview, and uninstall behavior.
   junctions, and deterministic read-only failure.
 - Electron E2E uses isolated projects and development-only
   folder/compiler/SyncTeX/toolchain overrides. It verifies the complete
-  thirty-one-method bridge and absent Node globals, rapid typing coalescence,
+  thirty-two-method bridge and absent Node globals, rapid typing coalescence,
   queued handoff, non-overlapping compiler trace intervals, newest-result
   display, disabled auto-build plus manual compile, responsive editing,
   stale-result rejection, workspace restoration, minimum-window layout,
@@ -61,7 +61,7 @@ real compilation/PDF preview, and uninstall behavior.
 - The packaged Electron test uses the installed executable rather than
   development Electron. It installs into a path containing spaces, redirects
   Electron user data to a clean temporary profile, confirms the sandboxed
-  thirty-one-method bridge, runs the real MiKTeX self-test, opens the fixed
+  thirty-two-method bridge, runs the real MiKTeX self-test, opens the fixed
   sample, disables automation, edits and saves, compiles, renders the PDF,
   captures a 150% scale screenshot, closes, reopens, verifies the edit, loads a
   previous-beta settings profile without data loss, and uninstalls.

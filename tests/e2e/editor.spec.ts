@@ -110,6 +110,7 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
         "exportProject",
         "exportSupportLog",
         "forwardSync",
+        "getGitStatus",
         "getRecentProjects",
         "getRecovery",
         "getSettings",

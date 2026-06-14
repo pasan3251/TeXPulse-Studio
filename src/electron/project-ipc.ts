@@ -36,6 +36,8 @@ import {
   deleteProjectEntryRequestSchema,
   exportProjectRequestSchema,
   exportProjectResultSchema,
+  getGitStatusRequestSchema,
+  gitStatusResultSchema,
   getRecentProjectsRequestSchema,
   openProjectRequestSchema,
   openProjectResultSchema,
@@ -50,6 +52,7 @@ import {
   renameProjectEntryRequestSchema,
   writeTextFileResultSchema,
   type ExportProjectResult,
+  type GitStatusResult,
   type OpenProjectResult,
   type ProjectMutationResult,
   type ReadTextFileResult,
@@ -240,6 +243,22 @@ export function registerProjectIpc(options: ProjectIpcOptions): () => void {
       ok: true,
       value: (await options.loadRecentProjects?.()) ?? [],
     }),
+  );
+
+  registerHandler(
+    options,
+    PROJECT_CHANNELS.getGitStatus,
+    getGitStatusRequestSchema,
+    gitStatusResultSchema,
+    async (): Promise<GitStatusResult> => {
+      if (projectSession === null) {
+        return failure(
+          "no-project",
+          "Open a project before reading Git status.",
+        );
+      }
+      return { ok: true, value: await projectSession.gitStatus() };
+    },
   );
 
   registerHandler(

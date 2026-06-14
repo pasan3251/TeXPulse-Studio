@@ -1,21 +1,22 @@
 # Sprint Status
 
-| Sprint        | Status                 | Summary                                                 |
-| ------------- | ---------------------- | ------------------------------------------------------- |
-| Sprint 0      | Complete on 2026-06-13 | Repository, requirements, and engineering controls      |
-| Sprint 1      | Complete on 2026-06-13 | Toolchain probe and minimal compile CLI                 |
-| Sprint 2      | Complete on 2026-06-13 | Build orchestration, cancellation, timeout, generations |
-| Sprint 3      | Complete on 2026-06-13 | Project model and safe filesystem service               |
-| Sprint 4      | Complete on 2026-06-13 | Secure Electron shell and editor                        |
-| Sprint 5      | Complete on 2026-06-13 | Manual compilation and PDF preview                      |
-| Sprint 6      | Complete on 2026-06-14 | Autosave, live compilation, watching, restoration       |
-| Sprint 7      | Complete on 2026-06-14 | Structured diagnostics, Problems panel, source links    |
-| Sprint 8      | Complete on 2026-06-14 | SyncTeX forward and inverse navigation                  |
-| Sprint 9      | Complete on 2026-06-14 | Recipes, settings, setup wizard, clean builds           |
-| Sprint 10     | Complete on 2026-06-14 | Security, output bounds, recovery, support logs         |
-| Sprint 11     | Complete on 2026-06-14 | Windows packaging and first-run sample workflow         |
-| Sprint 12     | Complete on 2026-06-14 | Release-candidate hardening and full product validation |
-| Sprints 13-14 | Not started            | Optional post-release work; see `docs/SRS.md`           |
+| Sprint    | Status                 | Summary                                                 |
+| --------- | ---------------------- | ------------------------------------------------------- |
+| Sprint 0  | Complete on 2026-06-13 | Repository, requirements, and engineering controls      |
+| Sprint 1  | Complete on 2026-06-13 | Toolchain probe and minimal compile CLI                 |
+| Sprint 2  | Complete on 2026-06-13 | Build orchestration, cancellation, timeout, generations |
+| Sprint 3  | Complete on 2026-06-13 | Project model and safe filesystem service               |
+| Sprint 4  | Complete on 2026-06-13 | Secure Electron shell and editor                        |
+| Sprint 5  | Complete on 2026-06-13 | Manual compilation and PDF preview                      |
+| Sprint 6  | Complete on 2026-06-14 | Autosave, live compilation, watching, restoration       |
+| Sprint 7  | Complete on 2026-06-14 | Structured diagnostics, Problems panel, source links    |
+| Sprint 8  | Complete on 2026-06-14 | SyncTeX forward and inverse navigation                  |
+| Sprint 9  | Complete on 2026-06-14 | Recipes, settings, setup wizard, clean builds           |
+| Sprint 10 | Complete on 2026-06-14 | Security, output bounds, recovery, support logs         |
+| Sprint 11 | Complete on 2026-06-14 | Windows packaging and first-run sample workflow         |
+| Sprint 12 | Complete on 2026-06-14 | Release-candidate hardening and full product validation |
+| Sprint 13 | Complete on 2026-06-14 | Read-only Git status awareness                          |
+| Sprint 14 | Not started            | Optional collaboration research; see `docs/SRS.md`      |
 
 ## Completed scope
 
@@ -96,6 +97,13 @@ release-candidate provenance tooling, complete regression and installed
 lifecycle evidence, explicit deferred-issue review, and the `v0.1.0-rc.1`
 release-candidate tag. See `reports/SPRINT-12.md`.
 
+Sprint 13 adds the optional read-only Git-awareness slice only: a shell-free,
+timed main-process `git status` summary service, one no-argument typed preload
+method, bounded summary schemas without path lists, renderer status-bar display,
+refreshes after project changes, and focused parser/IPC/integration tests.
+Templates, local revision history, diff views, and commit assistance remain
+deferred. See `reports/SPRINT-13.md`.
+
 ## Current environment limitation
 
 The release-candidate installer is unsigned and may trigger Windows SmartScreen
@@ -108,5 +116,7 @@ transient resource use remains possible until timeout. Custom executables and
 trusted `latexmk` configuration remain explicit local trust decisions. Recovery
 is limited to 20 buffers, 2 MiB per buffer, and 10 MiB total. Automatic
 external-file reload, side-by-side comparison, and merge actions remain future
-work. MiKTeX and Perl are not bundled, application data is preserved on
-uninstall, and automatic updates remain deferred.
+work. Local revision history, templates beyond the minimal starter, diff views,
+Git commit assistance, and collaboration remain deferred. MiKTeX and Perl are
+not bundled, application data is preserved on uninstall, and automatic updates
+remain deferred.

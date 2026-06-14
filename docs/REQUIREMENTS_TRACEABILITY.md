@@ -579,3 +579,37 @@ The automated traceability test confirms that every one of the 145 unique SRS
 requirement and acceptance-scenario IDs appears in this document. The Sprint 12
 review found no mandatory requirement without an implemented, SRS-deferred, or
 explicitly rejected disposition.
+
+## Sprint 13
+
+Sprint 13 implements only the optional read-only Git status portion of `SRS.md`
+section 10.12 and the Sprint 13 brief in section 16. Templates, local revision
+history, diff views, and commit assistance remain deferred.
+
+| Requirement     | Sprint 13 evidence                                                                       | Status                 |
+| --------------- | ---------------------------------------------------------------------------------------- | ---------------------- |
+| `NFR-REL-005`   | Git parser, label, IPC, real temporary-repository, E2E bridge, and packaged bridge tests | Complete               |
+| `NFR-SEC-001`   | Existing Electron sandbox, context isolation, CSP, and navigation denial remain in force | Complete for Sprint 13 |
+| `NFR-SEC-004`   | Frozen bridge adds one no-argument read-only Git method, totaling thirty-two methods     | Current scope complete |
+| `NFR-SEC-005`   | Git-status request and response use strict schemas and trusted sender checks             | Complete               |
+| `NFR-SEC-006`   | Git runs from the active canonical project session; renderer receives no path list       | Complete               |
+| `NFR-MAINT-002` | Git status parsing and renderer labeling are pure, focused modules                       | Complete               |
+| `NFR-MAINT-003` | Status refresh is additive and does not couple Git to compilation or file mutation       | Complete               |
+| `NFR-MAINT-005` | Tests use temporary folders/repositories, controlled process results, and bounded waits  | Complete               |
+| `NFR-PRIV-001`  | Git status remains local to the user's machine and active project                        | Complete for Sprint 13 |
+| `NFR-PRIV-002`  | No analytics, telemetry, updater, network service, or remote Git integration was added   | Complete for Sprint 13 |
+| `NFR-UX-004`    | Status-bar Git summary is visible text and does not expose local path lists              | Complete               |
+
+### Sprint 13 evidence
+
+- Sprint report: `reports/SPRINT-13.md`
+- Git status service and parser: `../src/project/git-status.ts`
+- Typed Git IPC and preload method: `../src/ipc/`, `../src/electron/`, and
+  `../src/electron/preload.ts`
+- Renderer status summary: `../src/renderer/App.tsx` and
+  `../src/renderer/git-status-label.ts`
+- Tests: `../tests/unit/git-status.test.ts`,
+  `../tests/unit/git-status-label.test.ts`,
+  `../tests/integration/git-status.test.ts`,
+  `../tests/integration/project-ipc.test.ts`, `../tests/e2e/`, and
+  `../tests/packaged/`

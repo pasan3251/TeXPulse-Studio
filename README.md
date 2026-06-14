@@ -1,15 +1,15 @@
 # TeXPulse Studio
 
 TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. Sprint 12 provides an installable Windows release candidate plus a
-secure Electron editor with autosave, debounced live compilation, project change
-detection, workspace restoration, structured source-linked diagnostics, raw
-build logs, SyncTeX forward/inverse navigation, selectable recipes, persistent
-settings, first-run toolchain setup, clean-build controls, bounded compiler
-output, abnormal-shutdown recovery, local support diagnostics, and a PDF.js
-preview that retains the last successful output when a later build fails.
-Project files and generated artifact paths remain behind a validated
-main-process IPC boundary.
+development. The current build provides an installable Windows release candidate
+plus a secure Electron editor with autosave, debounced live compilation, project
+change detection, workspace restoration, structured source-linked diagnostics,
+raw build logs, SyncTeX forward/inverse navigation, selectable recipes,
+persistent settings, first-run toolchain setup, clean-build controls, bounded
+compiler output, abnormal-shutdown recovery, local support diagnostics,
+read-only Git status awareness, and a PDF.js preview that retains the last
+successful output when a later build fails. Project files and generated artifact
+paths remain behind a validated main-process IPC boundary.
 
 It also creates projects from a minimal template, manages project files and
 folders with confirmed destructive actions, remembers recent projects, and
@@ -203,7 +203,7 @@ The renderer receives project-relative paths, build metadata, opaque artifact
 tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
 contain local path text, but no path becomes a filesystem capability. The
 renderer cannot access the filesystem or compiler except through the
-thirty-one-method typed preload bridge.
+thirty-two-method typed preload bridge.
 
 ## Project service
 

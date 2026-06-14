@@ -23,6 +23,7 @@ export const deleteProjectEntryRequestSchema = createProjectEntryRequestSchema
   })
   .strict();
 export const exportProjectRequestSchema = z.undefined();
+export const getGitStatusRequestSchema = z.undefined();
 export const getRecentProjectsRequestSchema = z.undefined();
 export const openProjectRequestSchema = z.undefined();
 export const openRecentProjectRequestSchema = z
@@ -165,6 +166,22 @@ const recentProjectSchema = z
   })
   .strict();
 
+const gitStatusSchema = z
+  .object({
+    state: z.enum(["not-a-repository", "repository", "unavailable"]),
+    branch: z.string().max(1_024).nullable(),
+    upstream: z.string().max(1_024).nullable(),
+    ahead: z.number().int().nonnegative(),
+    behind: z.number().int().nonnegative(),
+    stagedCount: z.number().int().nonnegative(),
+    modifiedCount: z.number().int().nonnegative(),
+    untrackedCount: z.number().int().nonnegative(),
+    conflictedCount: z.number().int().nonnegative(),
+    hasChanges: z.boolean(),
+    message: z.string().max(4_096).nullable(),
+  })
+  .strict();
+
 export const recentProjectsResultSchema = z.discriminatedUnion("ok", [
   z
     .object({
@@ -172,6 +189,11 @@ export const recentProjectsResultSchema = z.discriminatedUnion("ok", [
       value: z.array(recentProjectSchema).max(20),
     })
     .strict(),
+  z.object({ ok: z.literal(false), error: apiErrorSchema }).strict(),
+]);
+
+export const gitStatusResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), value: gitStatusSchema }).strict(),
   z.object({ ok: z.literal(false), error: apiErrorSchema }).strict(),
 ]);
 
@@ -202,6 +224,8 @@ export const writeTextFileResultSchema = readTextFileResultSchema;
 export type OpenProjectResult = z.infer<typeof openProjectResultSchema>;
 export type ProjectMutationResult = z.infer<typeof projectMutationResultSchema>;
 export type RecentProjectsResult = z.infer<typeof recentProjectsResultSchema>;
+export type GitStatusSummary = z.infer<typeof gitStatusSchema>;
+export type GitStatusResult = z.infer<typeof gitStatusResultSchema>;
 export type ExportProjectResult = z.infer<typeof exportProjectResultSchema>;
 export type ReadTextFileResult = z.infer<typeof readTextFileResultSchema>;
 export type WriteTextFileResult = z.infer<typeof writeTextFileResultSchema>;

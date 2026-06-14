@@ -15,6 +15,8 @@ import type {
   PdfArtifactRequest,
 } from "../ipc/build-contracts.js";
 import type { OpenProjectResult } from "../ipc/project-contracts.js";
+import { readGitStatus } from "../project/git-status.js";
+import type { GitStatusSummary } from "../project/git-status.js";
 import type { ProjectFileChange } from "../ipc/project-contracts.js";
 import {
   loadProjectMetadata,
@@ -155,6 +157,10 @@ export class ProjectSession {
 
   describe(): OpenProjectValue {
     return this.projectDescription;
+  }
+
+  gitStatus(): Promise<GitStatusSummary> {
+    return readGitStatus(this.service.root);
   }
 
   supportRedactionPaths(): string[] {

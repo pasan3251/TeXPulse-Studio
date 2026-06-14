@@ -4,6 +4,7 @@ export const PROJECT_CHANNELS = {
   createTextFile: "project:create-text-file",
   deleteEntry: "project:delete-entry",
   exportZip: "project:export-zip",
+  getGitStatus: "project:get-git-status",
   getRecent: "project:get-recent",
   open: "project:open",
   openRecent: "project:open-recent",

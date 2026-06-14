@@ -13,6 +13,7 @@ import type {
   CreateTextFileRequest,
   DeleteProjectEntryRequest,
   ExportProjectResult,
+  GitStatusResult,
   OpenProjectResult,
   OpenRecentProjectRequest,
   ProjectMutationResult,
@@ -59,6 +60,7 @@ export interface TeXPulseApi {
     request: DeleteProjectEntryRequest,
   ): Promise<ProjectMutationResult>;
   exportProject(): Promise<ExportProjectResult>;
+  getGitStatus(): Promise<GitStatusResult>;
   getRecentProjects(): Promise<RecentProjectsResult>;
   openProject(): Promise<OpenProjectResult>;
   openRecentProject(

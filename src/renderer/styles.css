@@ -1049,6 +1049,28 @@ button.tree-row:hover {
   white-space: nowrap;
 }
 
+.path-status {
+  flex: 1 1 auto;
+}
+
+.git-status {
+  flex: 0 1 auto;
+  max-width: min(280px, 30vw);
+}
+
+.git-status-repository {
+  color: #8ce1b1;
+}
+
+.git-status-dirty,
+.git-status-checking {
+  color: #f7c86a;
+}
+
+.git-status-unavailable {
+  color: #f5b6b6;
+}
+
 .notice {
   position: fixed;
   z-index: 10;

@@ -42,7 +42,11 @@ import {
   MAX_RECOVERY_BUFFERS,
   type RecoverySnapshot,
 } from "../ipc/recovery-contracts.js";
-import type { RecentProjectsResult } from "../ipc/project-contracts.js";
+import type {
+  GitStatusSummary,
+  RecentProjectsResult,
+} from "../ipc/project-contracts.js";
+import { formatGitStatus } from "./git-status-label.js";
 
 const EditorPane = lazy(async () => {
   const module = await import("./components/EditorPane.js");
@@ -106,6 +110,7 @@ export function App({ api = window.texpulse }: AppProps) {
   const draggingSplitRef = useRef(false);
   const diagnosticRequestRef = useRef(0);
   const synctexRequestRef = useRef(0);
+  const gitStatusRequestRef = useRef(0);
   const [syncBusy, setSyncBusy] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(
     defaultGlobalSettings(),
@@ -120,6 +125,7 @@ export function App({ api = window.texpulse }: AppProps) {
   const [recovery, setRecovery] = useState<RecoveryState>(null);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [gitStatus, setGitStatus] = useState<GitStatusSummary | null>(null);
   const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(
     null,
   );
@@ -140,6 +146,27 @@ export function App({ api = window.texpulse }: AppProps) {
       ),
     [state.buffers],
   );
+
+  const refreshGitStatus = async (
+    expectedProjectId = stateRef.current.project?.projectId,
+  ): Promise<void> => {
+    if (expectedProjectId === undefined) {
+      gitStatusRequestRef.current += 1;
+      setGitStatus(null);
+      return;
+    }
+    const requestId = ++gitStatusRequestRef.current;
+    const result = await api.getGitStatus();
+    const currentProjectId =
+      stateRef.current.project?.projectId ?? restoredProjectIdRef.current;
+    if (
+      requestId !== gitStatusRequestRef.current ||
+      currentProjectId !== expectedProjectId
+    ) {
+      return;
+    }
+    setGitStatus(result.ok ? result.value : null);
+  };
 
   const openFile = async (path: string): Promise<void> => {
     if (stateRef.current.buffers[path] !== undefined) {
@@ -206,6 +233,9 @@ export function App({ api = window.texpulse }: AppProps) {
         return { ok: false as const, path: buffer.path };
       }),
     );
+    if (results.some((result) => result.ok)) {
+      void refreshGitStatus();
+    }
 
     return results.every(
       (result) =>
@@ -274,6 +304,8 @@ export function App({ api = window.texpulse }: AppProps) {
       }
       return;
     }
+    gitStatusRequestRef.current += 1;
+    setGitStatus(null);
     setSelectedEntryPath(null);
     setProjectAction(null);
     void refreshRecentProjects();
@@ -377,6 +409,7 @@ export function App({ api = window.texpulse }: AppProps) {
         snapshot: recoveryResult.value,
       });
     }
+    void refreshGitStatus(result.value.projectId);
   };
 
   const requestCompile = async (
@@ -722,6 +755,7 @@ export function App({ api = window.texpulse }: AppProps) {
               ? `${change.path} ${detail}. Your unsaved editor content was preserved.`
               : `${change.path} ${detail}. Reopen the project to reload it.`,
         });
+        void refreshGitStatus(change.projectId);
       }),
     [api],
   );
@@ -889,6 +923,7 @@ export function App({ api = window.texpulse }: AppProps) {
         type: "project-settings-changed",
         settings: projectResult.value,
       });
+      void refreshGitStatus();
     }
     setGlobalSettings(globalResult.value);
     setSettingsIssues([]);
@@ -1062,7 +1097,9 @@ export function App({ api = window.texpulse }: AppProps) {
           type: "operation-failed",
           message: result.error.message,
         });
+        return;
       }
+      void refreshGitStatus();
     });
   };
 
@@ -1172,6 +1209,7 @@ export function App({ api = window.texpulse }: AppProps) {
             ? `Moved ${sourcePath ?? ""} to ${path}.`
             : `Created ${path}.`,
     });
+    void refreshGitStatus(result.value.projectId);
   };
 
   const exportProject = async (): Promise<void> => {
@@ -1227,6 +1265,15 @@ export function App({ api = window.texpulse }: AppProps) {
           (diagnostic) => diagnostic.file === activeBuffer.path,
         );
   const bottomPanelOpen = state.logOpen || state.problemsOpen;
+  const gitStatusClass = [
+    "git-status",
+    `git-status-${gitStatus?.state ?? (state.project === null ? "none" : "checking")}`,
+    gitStatus?.state === "repository" && gitStatus.hasChanges
+      ? "git-status-dirty"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="app-shell">
@@ -1648,7 +1695,10 @@ export function App({ api = window.texpulse }: AppProps) {
       </div>
 
       <footer className="statusbar">
-        <span>{state.activePath ?? "Ready"}</span>
+        <span className="path-status">{state.activePath ?? "Ready"}</span>
+        <span className={gitStatusClass}>
+          {formatGitStatus(gitStatus, state.project !== null)}
+        </span>
         <span className={`build-status status-${statusClass}`}>
           Build: {buildStatus}
         </span>

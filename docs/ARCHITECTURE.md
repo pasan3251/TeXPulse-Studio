@@ -29,10 +29,10 @@ security controls:
 - `support/`: bounded structured application logging, rotation, practical path
   redaction, export, and cleanup.
 - `ipc/`: strict Zod request/response schemas and stable project, build, PDF,
-  and SyncTeX channel names.
+  SyncTeX, and read-only Git-status channel names.
 - `electron/`: sandboxed BrowserWindow construction, permission/navigation
   denial, trusted-sender IPC handlers, packaged/development resource resolution,
-  a session owning project/build state, and a frozen thirty-one-method preload
+  a session owning project/build state, and a frozen thirty-two-method preload
   bridge.
 - `packaging`: Electron Builder x64 ASAR output, assisted per-user NSIS
   installer, metadata/icon resources, tagged source and artifact provenance, and
@@ -43,8 +43,8 @@ security controls:
   CodeMirror 6 LaTeX editor, pure live-build coordination, validated workspace
   persistence, resizable panes, build controls, source-linked Problems and raw
   log panels, diagnostic and SyncTeX target markers, lazy PDF.js viewer,
-  retained-output status, settings/setup dialog, error boundary, and desktop
-  layout.
+  retained-output status, read-only Git summary, settings/setup dialog, error
+  boundary, and desktop layout.
 - `cli/`: JSON `texpulse-doctor` and `texpulse-compile` entry points.
 
 The release candidate has no updater, bundled TeX distribution, code-signing
@@ -61,8 +61,8 @@ The implemented and planned boundaries are:
 4. A compiler adapter interface separating MiKTeX/`latexmk` from application
    state and deterministic fake compilers used by tests.
 5. Pure modules for path validation, build generations, diagnostics, settings,
-   recovery, support logging, navigation policy, output limits, retention, and
-   SyncTeX parsing.
+   recovery, support logging, navigation policy, output limits, retention,
+   Git-status parsing, and SyncTeX parsing.
 
 ## Sprint 4 editor flow
 

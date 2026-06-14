@@ -56,6 +56,7 @@ test("installed release candidate completes the sample workflow and reopens clea
       "exportProject",
       "exportSupportLog",
       "forwardSync",
+      "getGitStatus",
       "getRecentProjects",
       "getRecovery",
       "getSettings",

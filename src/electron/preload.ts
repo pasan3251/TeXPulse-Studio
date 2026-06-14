@@ -45,6 +45,7 @@ const api: TeXPulseApi = Object.freeze({
   deleteEntry: (request: DeleteProjectEntryRequest) =>
     ipcRenderer.invoke(PROJECT_CHANNELS.deleteEntry, request),
   exportProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.exportZip),
+  getGitStatus: () => ipcRenderer.invoke(PROJECT_CHANNELS.getGitStatus),
   getRecentProjects: () => ipcRenderer.invoke(PROJECT_CHANNELS.getRecent),
   openProject: () => ipcRenderer.invoke(PROJECT_CHANNELS.open),
   openRecentProject: (request: OpenRecentProjectRequest) =>

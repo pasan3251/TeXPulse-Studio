@@ -85,7 +85,7 @@ hardware guarantees.
 - Mandatory implemented behavior is covered by automated or native evidence.
 - SRS-deferred and rejected work is recorded in `DEFERRED_ISSUES.md`.
 - Multi-user compilation remains absent under `NFR-SEC-013`.
-- No Sprint 13 feature is included.
+- The tagged Sprint 12 release candidate includes no Sprint 13 feature.
 
 ## Release decision
 

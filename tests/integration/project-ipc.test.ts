@@ -102,6 +102,7 @@ describe("project IPC", () => {
       ],
       [PROJECT_CHANNELS.deleteEntry, { path: "main.tex", recursive: false }],
       [PROJECT_CHANNELS.exportZip, undefined],
+      [PROJECT_CHANNELS.getGitStatus, undefined],
       [PROJECT_CHANNELS.readTextFile, { path: "main.tex" }],
       [
         PROJECT_CHANNELS.writeTextFile,
@@ -348,6 +349,15 @@ describe("project IPC", () => {
     expect(read).toMatchObject({
       ok: true,
       value: { path: "main.tex", content: "\\documentclass{article}" },
+    });
+    await expect(
+      invoke(handlers, PROJECT_CHANNELS.getGitStatus, event(7)),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        state: "not-a-repository",
+        hasChanges: false,
+      },
     });
     await expect(
       invoke(handlers, PROJECT_CHANNELS.writeTextFile, event(7), {

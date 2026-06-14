@@ -51,8 +51,9 @@ The application:
 - uses `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`, and
   `webSecurity: true`;
 - disables renderer Node access in frames and workers;
-- exposes thirty-one frozen project/build/PDF/SyncTeX/settings/recovery/event
-  preload methods, never `ipcRenderer`;
+- exposes thirty-two frozen
+  project/build/PDF/SyncTeX/settings/recovery/Git/event preload methods, never
+  `ipcRenderer`;
 - validates the sending web contents and main frame for every IPC call;
 - validates every IPC request and response with strict Zod schemas;
 - keeps the absolute project root out of renderer responses;
@@ -80,6 +81,8 @@ The application:
   versions;
 - sends only an opaque project ID, relative path, and validated event kind to
   the renderer;
+- returns read-only Git status as bounded counts and branch metadata, never as
+  filesystem capabilities or path lists;
 - treats watcher events as informational rather than direct save/build triggers;
 - serializes saves and retains version-token checks before automatic builds;
 - rejects build and PDF results when the renderer source revision changed; and
