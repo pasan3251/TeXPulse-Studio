@@ -703,6 +703,45 @@ export function App({ api = window.texpulse }: AppProps) {
   }, [api]);
 
   useEffect(() => {
+    const handleCompileShortcut = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Enter" ||
+        !event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.repeat ||
+        event.isComposing ||
+        document.querySelector('[role="dialog"]') !== null
+      ) {
+        return;
+      }
+
+      const current = stateRef.current;
+      const rootFile = selectBuildRoot(
+        current.activePath,
+        current.project?.rootFile,
+        current.project?.rootCandidates.map((candidate) => candidate.path),
+      );
+      if (
+        current.project === null ||
+        rootFile === null ||
+        isBuildPhaseBusy(current.buildPhase)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      void coordinatorRef.current?.manualBuild();
+    };
+
+    window.addEventListener("keydown", handleCompileShortcut, true);
+    return () => {
+      window.removeEventListener("keydown", handleCompileShortcut, true);
+    };
+  }, []);
+
+  useEffect(() => {
     let disposed = false;
     void api.getRecentProjects().then((result) => {
       if (!disposed && result.ok) {
@@ -1342,9 +1381,7 @@ export function App({ api = window.texpulse }: AppProps) {
   const isAnyFileSaving = state.savingPaths.length > 0;
   const isSaving =
     activeBuffer !== undefined && state.savingPaths.includes(activeBuffer.path);
-  const buildBusy = ["saving", "queued", "compiling", "loading-pdf"].includes(
-    state.buildPhase,
-  );
+  const buildBusy = isBuildPhaseBusy(state.buildPhase);
   const buildStatus =
     state.buildPhase === "debouncing"
       ? "Debouncing"
@@ -1502,13 +1539,14 @@ export function App({ api = window.texpulse }: AppProps) {
           <button
             type="button"
             className="button compile"
+            aria-keyshortcuts="Control+Enter"
             disabled={
               selectedBuildRoot === null || state.project === null || buildBusy
             }
             title={
               selectedBuildRoot === null
-                ? "Open a .tex file or configure a project root."
-                : `Compile ${selectedBuildRoot}`
+                ? "Open a .tex file or configure a project root. Shortcut: Ctrl+Enter"
+                : `Compile ${selectedBuildRoot} (Ctrl+Enter)`
             }
             onClick={() => {
               void coordinatorRef.current?.manualBuild();
@@ -1974,6 +2012,10 @@ function projectBaseName(path: string): string {
 
 function joinProjectPath(directoryPath: string, name: string): string {
   return directoryPath === "" ? name : `${directoryPath}/${name}`;
+}
+
+function isBuildPhaseBusy(phase: WorkspaceState["buildPhase"]): boolean {
+  return ["saving", "queued", "compiling", "loading-pdf"].includes(phase);
 }
 
 function sourcePosition(

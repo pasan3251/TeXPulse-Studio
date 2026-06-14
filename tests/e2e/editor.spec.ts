@@ -181,7 +181,10 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     await expect(page.getByText("1 modified")).toBeVisible();
     await expect(page.getByText("All changes saved")).toBeVisible();
 
-    await page.getByRole("button", { name: "Compile", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Compile", exact: true }),
+    ).toHaveAttribute("aria-keyshortcuts", "Control+Enter");
+    await editor.press("Control+Enter");
     await expect(page.getByText("Build: Compiling")).toBeVisible();
     await editor.click();
     await page.keyboard.press("Control+End");
@@ -333,7 +336,7 @@ test("compiles the active TeX file instead of always using main.tex", async () =
     await expect(page.getByLabel("Editor for appendix.tex")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Compile", exact: true }),
-    ).toHaveAttribute("title", "Compile appendix.tex");
+    ).toHaveAttribute("title", "Compile appendix.tex (Ctrl+Enter)");
 
     await page.getByRole("button", { name: "Compile", exact: true }).click();
     await expect(page.getByText("Build: succeeded")).toBeVisible();

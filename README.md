@@ -182,6 +182,7 @@ The Sprint 12 release candidate:
 - saves modified buffers before a manual compile and stops on save conflict;
 - compiles the active standalone `.tex` root when applicable and otherwise
   preserves the configured project root for included fragments;
+- triggers the same save-and-compile command from the editor with `Ctrl+Enter`;
 - displays build status and supports cancellation;
 - renders every page of a completed PDF through PDF.js in one continuous
   scrolling viewport, with page shortcuts, zoom, fit-width, and fit-page
