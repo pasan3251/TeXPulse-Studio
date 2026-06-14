@@ -10,9 +10,10 @@ a continuous multi-page PDF preview. Existing security, stale-result, retained
 PDF, SyncTeX, and configured-root behavior remains in force.
 
 A post-completion CI stabilization makes the SyncTeX workflow wait for the
-rendered PDF page and makes the export workflow wait for file creation to
-finish. The SyncTeX scenario has a bounded 60-second test budget for slower
-Windows runners; no arbitrary sleep was added.
+rendered PDF page, makes the export workflow wait for file creation and the ZIP
+artifact, and verifies queued-build collapse through its completed build trace.
+The SyncTeX scenario has a bounded 60-second test budget for slower Windows
+runners; no arbitrary sleep was added.
 
 ## 2. Requirement IDs implemented
 
@@ -74,7 +75,7 @@ pnpm build
 pnpm check
 pnpm audit:dependencies
 pnpm test:packaged
-pnpm exec playwright test tests/e2e/editor.spec.ts -g "navigates forward|creates, manages" --repeat-each=10
+pnpm exec playwright test tests/e2e/editor.spec.ts -g "autosaves, collapses|navigates forward|creates, manages" --repeat-each=5
 pnpm texpulse-compile -- --project <sprint-15-fixture> --root appendix.tex --timeout 120000
 pdfinfo <appendix.pdf>
 pdftotext <appendix.pdf> <appendix.txt>
@@ -94,7 +95,7 @@ git diff --check
 - Coverage totals: 93.61% statements, 85.28% branches, 95.46% functions, and
   93.63% lines.
 - Development Electron E2E: 8 tests passed.
-- Focused SyncTeX/export stability run: 20 repeated tests passed.
+- Focused build/SyncTeX/export stability run: 15 repeated tests passed.
 - Installed release-candidate E2E: 2 tests passed.
 - Formatting, linting, strict type checking, production build, aggregate check,
   NSIS packaging, install/reopen/uninstall lifecycle, and dependency audit:

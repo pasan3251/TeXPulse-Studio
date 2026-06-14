@@ -117,9 +117,9 @@ New File/New Folder actions, scoped file/folder/background context menus,
 validated recursive copy and desktop reveal operations, active standalone TeX
 root selection with configured-root fallback for fragments, and a continuous
 multi-page PDF.js viewport that retains page, zoom, scroll, and SyncTeX
-behavior. Its E2E workflows wait for rendered PDF and completed project
-mutations before navigation or export, avoiding CI timing races. See
-`reports/SPRINT-15.md`.
+behavior. Its E2E workflows verify completed build traces and ZIP artifacts,
+wait for rendered PDF and completed project mutations, and avoid assertions on
+fleeting intermediate states. See `reports/SPRINT-15.md`.
 
 ## Current environment limitation
 

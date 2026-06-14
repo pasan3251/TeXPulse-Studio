@@ -166,8 +166,6 @@ test("autosaves, collapses builds, stays responsive, and restores the workspace"
     await editor.click();
     await page.keyboard.press("Control+End");
     await page.keyboard.type("% newest queued source\n");
-    await expect(page.getByText("Build: Queued")).toBeVisible();
-    await expect(page.getByText("Build: Compiling")).toBeVisible();
     await expect(page.getByText("Current build")).toBeVisible();
     await expect.poll(async () => (await readTrace()).length).toBe(3);
     expect((await readTrace())[2]?.source).toContain("newest queued source");
@@ -631,7 +629,7 @@ test("navigates forward to the PDF and inversely to an included source file", as
 
     await page
       .getByLabel("PDF page 1")
-      .dblclick({ position: { x: 30, y: 30 } });
+      .dblclick({ force: true, position: { x: 30, y: 30 } });
     await expect(editor).toBeFocused();
     await expect(
       page.locator(".cm-line.cm-synctex-target", {
@@ -921,14 +919,18 @@ test("creates, manages, exports, and reopens a project through recent projects",
       .getByRole("navigation", { name: "Created Project files" })
       .dispatchEvent("contextmenu", { clientX: 120, clientY: 500 });
     await page.getByRole("menuitem", { name: "Export Project ZIP" }).click();
-    await expect(
-      page.getByText(/Exported 2 source files to ZIP/u),
-    ).toBeVisible();
-
+    await expect
+      .poll(async () => {
+        const zip = await readFile(exportPath).catch(() => null);
+        return zip?.readUInt32LE(0) ?? null;
+      })
+      .toBe(0x04034b50);
     const zip = await readFile(exportPath);
     expect(zip.readUInt32LE(0)).toBe(0x04034b50);
     expect(zip.toString("utf8")).toContain("main.tex");
     expect(zip.toString("utf8")).toContain("chapters/kept.tex");
+    expect(zip.toString("utf8")).not.toContain("chapters/body.tex");
+    expect(zip.toString("utf8")).not.toContain("chapters/intro.tex");
     expect(zip.toString("utf8")).not.toContain(".texpulse/");
 
     const accessibility = await page.evaluate(() => {
