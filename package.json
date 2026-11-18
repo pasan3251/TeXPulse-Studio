@@ -1,6 +1,6 @@
 {
   "name": "texpulse-studio",
-  "version": "2.0.0-alpha.1",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.12.1",
@@ -12,7 +12,10 @@
     "typecheck": "pnpm --filter @texpulse/shared run build && pnpm --filter @texpulse/log-parser run build && pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "dev": "pnpm --filter @texpulse/client run dev",
-    "dev:server": "pnpm --filter @texpulse/server run dev"
+    "dev:server": "pnpm --filter @texpulse/server run dev",
+    "start": "node packages/server/dist/index.js --serve-client",
+    "desktop:start": "node packages/server/dist/desktop-launcher.js",
+    "desktop:package": "node packages/server/dist/desktop-package.js"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

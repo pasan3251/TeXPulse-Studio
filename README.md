@@ -1,286 +1,69 @@
-# TeXPulse Studio
+# TeXPulse Studio 2.0
 
-TeXPulse Studio is an offline Windows LaTeX editor under incremental
-development. The current build provides an installable Windows release candidate
-plus a secure Electron editor with autosave, debounced live compilation, project
-change detection, workspace restoration, structured source-linked diagnostics,
-raw build logs, SyncTeX forward/inverse navigation, selectable recipes,
-persistent settings, first-run toolchain setup, clean-build controls, bounded
-compiler output, abnormal-shutdown recovery, local support diagnostics,
-read-only Git status awareness, a material-inspired project explorer with
-file-scoped context actions, and a continuously scrolling PDF.js preview that
-retains the last successful output when a later build fails. Standalone active
-TeX files can be compiled directly, while included fragments continue to use the
-configured root. Project files and generated artifact paths remain behind a
-validated main-process IPC boundary.
+Local-first, offline-capable real-time LaTeX workspace with sub-second `mylatexformat` preamble caching, Overleaf-grade `.log`/`.blg` diagnostics, bidirectional SyncTeX PDF preview, CodeMirror 6 Lezer AST intelligence, and 100% opt-in local AI assistance.
 
-It also creates projects from a minimal template, manages project files and
-folders with confirmed destructive actions, remembers recent projects, and
-exports source-only ZIP archives.
+## Workspace Architecture
 
-Collaboration is not implemented in the application runtime. Sprint 14 adds
-research-only collaboration controls in `docs/COLLABORATION_SRS.md`,
-`docs/COLLABORATION_THREAT_MODEL.md`, and ADR-0015.
+- `packages/shared`: Shared TypeScript contracts, `LATEXMK_BASE_FLAGS` (`-interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape`), `EditorSettingsConfig`, and the `IDocumentContextProvider` / `IAssistantService` seams.
+- `packages/log-parser`: Ported Overleaf `LatexLogParser`, `BibLogParser`, and `HumanReadableLogs` rules/hints/package-suggestion engine over settled `.log` and `.blg` files from disk.
+- `packages/client`: React 19 + TypeScript (strict) + Vite + CodeMirror 6 (`codemirror-lang-latex`, Lezer AST outline, cross-file Go-To-Definition, live KaTeX math popover) + `PDF.js` viewer with bottom-left-to-top-left Y-inversion for `synctex edit` + Visual Reading pane.
+- `packages/server`: Single-port Node.js HTTP server (`127.0.0.1:4317`) serving the built client SPA and `/api/*` routes (`mylatexformat` Tier 2 + `latexmk` Tier 3, `synctex`, `texcount`, atomic project persistence + `.zip` import/export, `AssistantService`, and standalone Edge/Chromium `--app=` desktop shell launcher).
 
-Repository: <https://github.com/pasan3251/TeXPulse-Studio>
+## Prerequisites
 
-License: MIT
+- **Node.js** `>= 24 < 25` with Corepack (`pnpm@10.12.1`)
+- **TeX distribution** on `PATH`: `pdflatex` (plus `xelatex` / `lualatex` optional), `latexmk`, `bibtex`, `synctex`, and `texcount` (TeX Live or MiKTeX)
 
-## Project roadmap
+## Quick Start
 
-- Full sprint roadmap: `docs/ROADMAP.md`
-- Upcoming implementations: `docs/UPCOMING_IMPLEMENTATIONS.md`
-- Current sprint status: `docs/SPRINT_STATUS.md`
-- Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
+```bash
+# Install dependencies and build all workspace packages
+pnpm install
+pnpm build
 
-## Screenshots
+# Run full unit test suite & strict TypeScript verification
+pnpm test
+pnpm typecheck
 
-### Editor, PDF preview, and real MiKTeX build
-
-![TeXPulse Studio packaged high-DPI PDF preview](docs/images/texpulse-packaged-high-dpi.png)
-
-### Project creation, file management, and ZIP export
-
-![TeXPulse Studio project workflow](docs/images/texpulse-project-workflow.png)
-
-### Rendered PDF evidence
-
-![Packaged release candidate PDF output](docs/images/texpulse-packaged-pdf.png)
-
-## Installed requirements
-
-- Windows 11 x64
-- MiKTeX with `latexmk`
-- Native Windows Perl available on `PATH`
-
-MiKTeX and Perl are not bundled. The first launch runs a real isolated toolchain
-self-test before reporting compilation readiness.
-
-## Install
-
-Download the installer from GitHub Releases or generate it locally with
-`pnpm package:win`. The release candidate installer is unsigned, so Windows
-SmartScreen may show a reputation warning. Verify the artifact against the
-release manifest before continuing.
-
-After setup, choose `Open sample project` from the welcome screen, edit
-`main.tex`, and compile. The editable copy is stored under TeXPulse Studio's
-application data and is preserved during uninstall.
-
-## Development requirements
-
-- Node.js 24.x
-- pnpm 10.12.1 through Corepack
-- Git
-- The installed requirements above
-
-## Development setup
-
-```powershell
-corepack prepare pnpm@10.12.1 --activate
-corepack enable pnpm --install-directory "$(npm config get prefix)"
-pnpm install --frozen-lockfile
+# Start the unified single-port production server (SPA + API on http://127.0.0.1:4317)
+pnpm start
 ```
 
-Start the desktop editor:
+### Standalone Desktop Shell (`Edge / Chromium --app` Mode)
 
-```powershell
-pnpm app:start
+```bash
+# Launch the single-port server inside a dedicated frameless desktop window
+pnpm desktop:start
+
+# Verify SPA + /api/health on an ephemeral port without opening a GUI window
+node packages/server/dist/desktop-launcher.js --smoke-test
+
+# Generate portable desktop launcher scripts and manifest in dist/desktop/
+pnpm desktop:package
 ```
 
-## Quality gate
+## Development Mode
 
-```powershell
-pnpm check
-pnpm audit:dependencies
+```bash
+# Terminal 1: API backend on http://127.0.0.1:4317
+pnpm dev:server
+
+# Terminal 2: Vite HMR frontend on http://127.0.0.1:5173
+pnpm dev
 ```
 
-The aggregate command runs formatting, linting, strict type checking, unit,
-component, integration, performance, coverage, and Electron E2E tests, then
-creates the production main, renderer, and preload bundles.
+## Keyboard Shortcuts
 
-Build and verify Windows packages:
+- `Ctrl/Cmd + S` or `Ctrl/Cmd + Enter`: Compile project (`mylatexformat` Tier 2 / `latexmk` Tier 3)
+- `F12` or `Ctrl/Cmd + Click`: Cross-file Go-To-Definition for `\input`, `\include`, `\ref`/`\eqref`/`\cref`, and single/multi-key `\cite{...}`
+- `Ctrl/Cmd + K`: Open the inline AI LaTeX command bar (requires local Ollama `:11434`, LM Studio `:1234`, custom OpenAI-compatible URL, or opt-in Gemini API via `Settings` or `GEMINI_API_KEY`; deterministic AST fallback stays offline)
+- `Ctrl/Cmd + B` / `Ctrl/Cmd + I`: Wrap selection in `\textbf{}` / `\textit{}`
+- `Ctrl/Cmd + /`: Toggle `%` comment
 
-```powershell
-pnpm package:dir
-pnpm package:win
-pnpm test:packaged
-pnpm release:manifest
-```
+## Core Engineering Invariants
 
-The packaged lifecycle installs to a path containing spaces, uses a clean app
-profile, runs the real MiKTeX self-test, edits and compiles the bundled sample,
-captures high-DPI evidence, verifies previous-beta settings, reopens the edit,
-and uninstalls. The release manifest records the tagged source archive,
-installer, packaged application archive, tool versions, and SHA-256 hashes.
-
-## Toolchain doctor
-
-Run the real isolated compile self-test:
-
-```powershell
-pnpm texpulse-doctor
-```
-
-Use a custom executable directory when needed:
-
-```powershell
-pnpm texpulse-doctor -- --custom-bin C:\Strawberry\perl\bin
-```
-
-The command emits structured JSON and reports readiness only after the compile
-self-test succeeds, unless `--skip-self-test` is explicitly supplied.
-
-## Minimal compile CLI
-
-```powershell
-pnpm texpulse-compile -- --project fixtures\minimal-success --root main.tex --timeout 120000
-```
-
-Output defaults to generation-isolated directories under
-`<project>\.texpulse\build\generations`. Supported recipes are `pdf`, `xelatex`,
-and `lualatex`. Pressing `Ctrl+C` cancels the active compiler tree.
-
-This developer service accepts trusted local projects only. Process capture,
-accepted generated output, and retained generation count are bounded, but TeX
-still runs with the local user's permissions and is not OS-sandboxed.
-
-## Desktop editor
-
-The current release candidate:
-
-- installs through an assisted per-user NSIS installer;
-- preserves application data during uninstall;
-- resolves bundled resources in development and packaged layouts;
-- opens an editable bundled sample without exposing an arbitrary path API;
-- opens an existing local project folder;
-- creates a project from the fixed minimal template;
-- creates, renames, moves, and deletes project entries through validated IPC,
-  with explicit confirmation before deletion;
-- remembers recent projects through opaque renderer IDs;
-- exports a local ZIP while excluding build output, metadata, dependencies, and
-  version-control data;
-- renders the bounded project entry list as a collapsible hierarchy with
-  material-inspired file-type icons;
-- keeps New File and New Folder at the explorer top while placing open, reveal,
-  cut, copy, paste, rename, delete, and export actions in scoped context menus;
-- edits valid UTF-8 project text with LaTeX highlighting, undo/redo, find, and
-  replace;
-- tracks modified files and preserves cursor/scroll state across switches;
-- saves one file or all modified files through version-checked atomic writes;
-- autosaves editing bursts and automatically compiles after a configurable
-  200-5,000 ms debounce, defaulting to 800 ms;
-- serializes saves before builds and shows debouncing, saving, queued, and
-  compiling phases;
-- keeps one compiler process active and only the newest pending build;
-- supports disabling automatic build while retaining manual compile;
-- stores global settings under Electron application data and project settings in
-  `.texpulse/project.json`, with validation and migration;
-- provides a first-run toolchain wizard with executable paths, versions, and a
-  real isolated compile self-test;
-- supports a trusted custom executable directory;
-- selects pdfLaTeX, XeLaTeX, or LuaLaTeX recipes per project;
-- configures compile timeout, editor font size, and default PDF zoom;
-- disables `latexmk` configuration files by default and requires explicit
-  per-project trust before loading them;
-- provides a clean build and allowlisted generation auxiliary cleanup;
-- limits aggregate process output to 8 MiB, accepted generations to 4,096 files,
-  128 MiB per file and 512 MiB total, and retained generations to eight;
-- saves modified buffers before a manual compile and stops on save conflict;
-- compiles the active standalone `.tex` root when applicable and otherwise
-  preserves the configured project root for included fragments;
-- triggers the same save-and-compile command from the editor with `Ctrl+Enter`;
-- displays build status and supports cancellation;
-- renders every page of a completed PDF through PDF.js in one continuous
-  scrolling viewport, with page shortcuts, zoom, fit-width, and fit-page
-  controls;
-- preserves page, zoom, and approximate scroll state across PDF reloads;
-- preserves and labels the last successful PDF after a failed build;
-- parses common LaTeX, `latexmk`, BibTeX, and Biber messages into bounded
-  structured diagnostics;
-- presents visible Error, Warning, and Info labels in a Problems panel;
-- marks affected CodeMirror lines and navigates to validated project-relative
-  files and source locations;
-- clears stale diagnostics after edits and rejects older build generations;
-- moves from the current source position to a marked PDF location;
-- inverse-searches by double-clicking the PDF, then opens and marks the
-  validated project source line;
-- disables SyncTeX navigation for edited or retained stale output and reports
-  unavailable data non-fatally;
-- shows a bounded raw build log while retaining the complete log on disk;
-- opens or reveals only a main-process-revalidated generated PDF;
-- watches the project without following links or generated output and reports
-  external changes without replacing local unsaved content;
-- restores open files, active file, cursor/scroll views, and pane ratio for the
-  same project;
-- offers bounded unsaved-buffer recovery after abnormal shutdown, restores only
-  to the editor after review, and never writes recovered text automatically;
-- records bounded local application events, exports a practically path-redacted
-  support log on request, and provides recovery/log cleanup; and
-- denies renderer Node access, arbitrary filesystem access, navigation, popups,
-  webviews, and permissions.
-
-The renderer receives project-relative paths, build metadata, opaque artifact
-tokens, bounded raw log text, and bounded PDF bytes. Raw compiler output may
-contain local path text, but no path becomes a filesystem capability. The
-renderer cannot access the filesystem or compiler except through the
-thirty-four-method typed preload bridge.
-
-## Project service
-
-The typed modules under `src/project/`:
-
-- canonicalize project roots and reject path escapes;
-- list files without traversing symbolic links, junctions, or ignored output;
-- read and write UTF-8 text with SHA-256 version tokens;
-- reject stale writes after external changes;
-- atomically replace saved files where the platform supports rename;
-- rank likely LaTeX root files;
-- validate `.texpulse/project.json`; and
-- persist a bounded recent-project list at an injected application-data path;
-  and
-- stream source-only ZIP exports without adding a production dependency.
-
-## Documentation
-
-- Product specification: `docs/SRS.md`
-- Full project roadmap: `docs/ROADMAP.md`
-- Upcoming implementations: `docs/UPCOMING_IMPLEMENTATIONS.md`
-- Architecture: `docs/ARCHITECTURE.md`
-- Test plan: `docs/TEST_PLAN.md`
-- Security baseline: `docs/SECURITY.md`
-- Threat model: `docs/THREAT_MODEL.md`
-- Collaboration SRS: `docs/COLLABORATION_SRS.md`
-- Collaboration threat model: `docs/COLLABORATION_THREAT_MODEL.md`
-- Troubleshooting: `docs/TROUBLESHOOTING.md`
-- Sprint status: `docs/SPRINT_STATUS.md`
-- Requirement traceability: `docs/REQUIREMENTS_TRACEABILITY.md`
-- Sprint 0 report: `docs/reports/SPRINT-0.md`
-- Sprint 1 report: `docs/reports/SPRINT-1.md`
-- Sprint 2 report: `docs/reports/SPRINT-2.md`
-- Sprint 3 report: `docs/reports/SPRINT-3.md`
-- Sprint 4 report: `docs/reports/SPRINT-4.md`
-- Sprint 5 report: `docs/reports/SPRINT-5.md`
-- Sprint 6 report: `docs/reports/SPRINT-6.md`
-- Sprint 7 report: `docs/reports/SPRINT-7.md`
-- Sprint 8 report: `docs/reports/SPRINT-8.md`
-- Sprint 9 report: `docs/reports/SPRINT-9.md`
-- Sprint 10 report: `docs/reports/SPRINT-10.md`
-- Sprint 11 report: `docs/reports/SPRINT-11.md`
-- Sprint 12 report: `docs/reports/SPRINT-12.md`
-- Sprint 13 report: `docs/reports/SPRINT-13.md`
-- Sprint 14 report: `docs/reports/SPRINT-14.md`
-- Sprint 15 report: `docs/reports/SPRINT-15.md`
-- Release-candidate checklist: `docs/RELEASE_CANDIDATE_CHECKLIST.md`
-- Deferred issues: `docs/DEFERRED_ISSUES.md`
-- Release notes: `docs/RELEASE_NOTES.md`
-- GitHub release description: `docs/GITHUB_RELEASE.md`
-
-## Acknowledgements
-
-TeXPulse Studio was planned, implemented, tested, reviewed, and documented with
-assistance from OpenAI and Codex. The project direction, requirements,
-repository ownership, release decisions, and final responsibility remain with
-Pasan Chathuranga.
-
-You just need a problem and a little bit of time.
+1. **Settled Log Parsing Only**: Diagnostics are parsed exclusively from settled `.log` and `.blg` files via `@texpulse/log-parser`, never compiler `stdout`.
+2. **Restricted Safe Compiler Invocation**: Local engines always run with `-interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape`.
+3. **Process-Group Cleanup**: Canceling or restarting builds terminates the entire process tree cleanly.
+4. **SyncTeX Y-Axis Inversion**: PDF.js bottom-left user coordinates are inverted against MediaBox height to top-left coordinates before calling `synctex edit`.
+5. **Opt-In Local-First AI**: All editor context flows through `IDocumentContextProvider` (`@texpulse/shared`) as compact, cursor-anchored snippets rather than full-project dumps.

@@ -227,14 +227,107 @@ export interface SyntaxTreeSnapshot {
 
 /**
  * Architectural seam connecting CodeMirror 6's live Lezer AST, cursor scope,
- * indexed project symbols, and parsed diagnostics. Version 1.0 uses this seam
- * solely for local intelligence; Version 2.0 attaches AI assistants here.
+ * indexed project symbols, and parsed diagnostics to both local intelligence
+ * and the v2.0 `IAssistantService`.
  */
 export interface IDocumentContextProvider {
   getSyntaxTree(): SyntaxTreeSnapshot;
   getCursorScope(): CursorScope;
   getProjectSymbols(): ProjectSymbolIndex;
   getDiagnostics(): readonly EditorDiagnostic[];
+}
+
+export interface TexCountSectionBreakdown {
+  title: string;
+  wordsInText: number;
+  wordsInHeaders: number;
+  wordsInCaptions: number;
+  mathInlines: number;
+  mathDisplay: number;
+  filePath?: string | undefined;
+  line?: number | undefined;
+}
+
+export interface TexCountResultPayload {
+  source: "texcount" | "ast-fallback";
+  wordsInText: number;
+  wordsInHeaders: number;
+  wordsInCaptions: number;
+  totalWords: number;
+  mathInlines: number;
+  mathDisplay: number;
+  characterCount: number;
+  sections: readonly TexCountSectionBreakdown[];
+}
+
+export type AssistantProviderKind =
+  | "ollama"
+  | "lmstudio"
+  | "custom-openai"
+  | "gemini"
+  | "offline-fallback";
+
+export interface AssistantProviderConfig {
+  provider: AssistantProviderKind;
+  endpointUrl: string;
+  model: string;
+  enabled: boolean;
+  apiKey?: string | undefined;
+}
+
+export interface EditorSettingsConfig {
+  engine: CompileEngine;
+  autoCompileOnPause: boolean;
+  assistant: AssistantProviderConfig;
+}
+
+export interface AssistantStatusPayload {
+  connected: boolean;
+  provider: AssistantProviderKind;
+  model: string;
+  endpointUrl: string;
+  statusLabel: string;
+  availableModels: readonly string[];
+}
+
+export interface ContextAnchoredPromptInput {
+  filePath: string;
+  line: number;
+  currentSection: string | null;
+  activeEnvironment: string | null;
+  loadedPackages: readonly string[];
+  surroundingLines: string;
+  validLabels: readonly string[];
+  validCitationKeys: readonly string[];
+  diagnostic?: DiagnosticItem | undefined;
+  instruction?: string | undefined;
+}
+
+export interface ErrorFixProposal {
+  provider: AssistantProviderKind;
+  summary: string;
+  targetFile: string;
+  startLine: number;
+  endLine: number;
+  originalSnippet: string;
+  replacementSnippet: string;
+  unifiedDiff: string;
+}
+
+export interface InlineGenerationResult {
+  provider: AssistantProviderKind;
+  mode: "latex-insert" | "citation-insert";
+  summary: string;
+  latex: string;
+  bibEntry?: string | undefined;
+  citationKey?: string | undefined;
+}
+
+export interface IAssistantService {
+  getStatus(): Promise<AssistantStatusPayload>;
+  configure(config: Partial<AssistantProviderConfig>): Promise<AssistantStatusPayload>;
+  proposeErrorFix(input: ContextAnchoredPromptInput): Promise<ErrorFixProposal>;
+  generateInlineLatex(input: ContextAnchoredPromptInput): Promise<InlineGenerationResult>;
 }
 
 export { buildProjectTree, rankRootCandidates, inferProjectFileKind } from "./project-helpers.js";

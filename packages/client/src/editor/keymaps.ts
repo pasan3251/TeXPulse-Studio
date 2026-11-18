@@ -22,13 +22,19 @@ function wrapSelectionWithCommand(view: EditorView, commandName: string): boolea
 }
 
 /**
- * Standard Overleaf keyboard shortcuts:
+ * Standard Overleaf keyboard shortcuts plus Mod-K Inline AI Command Bar and F12 Go-To-Definition:
  * - Mod-s / Mod-Enter: Trigger compile event
+ * - Mod-k: Open floating inline AI generator bar
+ * - F12: Cross-file Go-To-Definition (\input, \ref, \cite)
  * - Mod-/: Toggle `%` line comment
  * - Mod-b: Wrap selection in `\textbf{}`
  * - Mod-i: Wrap selection in `\textit{}`
  */
-export function createOverleafKeymap(onCompileTrigger: () => void): readonly KeyBinding[] {
+export function createOverleafKeymap(
+  onCompileTrigger: () => void,
+  onOpenCommandBar?: () => void,
+  onGoToDefinition?: (offset: number) => boolean,
+): readonly KeyBinding[] {
   return [
     {
       key: "Mod-s",
@@ -44,6 +50,22 @@ export function createOverleafKeymap(onCompileTrigger: () => void): readonly Key
       run: () => {
         onCompileTrigger();
         return true;
+      },
+    },
+    {
+      key: "Mod-k",
+      preventDefault: true,
+      run: () => {
+        onOpenCommandBar?.();
+        return true;
+      },
+    },
+    {
+      key: "F12",
+      preventDefault: true,
+      run: (view) => {
+        if (!onGoToDefinition) return false;
+        return onGoToDefinition(view.state.selection.main.head);
       },
     },
     {

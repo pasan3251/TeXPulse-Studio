@@ -346,11 +346,17 @@ export class CompilerRunner {
     });
   }
 
-  private runTier3Latexmk(
+  private async runTier3Latexmk(
     engine: CompileEngine,
     normalizedRoot: string,
     signal: AbortSignal,
   ): Promise<ProcessResult> {
+    // Tier 2 --fmt builds update .pdf/.aux without updating latexmk's .fdb_latexmk;
+    // remove stale .fdb_latexmk so Tier 3 never skips rebuilding out-of-sync targets.
+    const jobName = basename(normalizedRoot, extname(normalizedRoot));
+    await unlink(join(resolve(this.projectRoot, CACHE_DIRECTORY_NAME), `${jobName}.fdb_latexmk`)).catch(
+      () => undefined,
+    );
     return this.processRunner.run({
       executable: this.latexmkExecutable,
       args: buildLatexmkArguments(engine, normalizedRoot, CACHE_DIRECTORY_NAME),

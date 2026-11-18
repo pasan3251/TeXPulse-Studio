@@ -21,6 +21,7 @@ import { tags } from "@lezer/highlight";
 import type { Tree } from "@lezer/common";
 import type {
   ActiveMathBlock,
+  AssistantStatusPayload,
   DiagnosticItem,
   EditorDiagnostic,
   OutlineHeading,
@@ -38,6 +39,7 @@ import { createTexpulseCompletionSource } from "../editor/completions.js";
 import { createOverleafKeymap } from "../editor/keymaps.js";
 import { detectActiveMathBlock } from "../editor/math-detector.js";
 import { extractOutlineFromTree } from "../editor/outline.js";
+import { InlineCommandBar } from "./InlineCommandBar.js";
 import { MathPreviewPopover } from "./MathPreviewPopover.js";
 
 export interface EditorNavigationTarget {
@@ -45,6 +47,12 @@ export interface EditorNavigationTarget {
   offset?: number | undefined;
   line?: number | undefined;
   column?: number | undefined;
+  nonce: number;
+}
+
+export interface InlineInsertionPayload {
+  filePath: string;
+  text: string;
   nonce: number;
 }
 
@@ -63,10 +71,19 @@ interface LatexEditorPaneProps {
   symbolIndex: ProjectSymbolIndex;
   compilerDiagnostics: readonly DiagnosticItem[];
   navigationTarget: EditorNavigationTarget | null;
+  inlineInsertion?: InlineInsertionPayload | null | undefined;
+  commandBarOpen: boolean;
+  aiStatus: AssistantStatusPayload | null;
+  aiCommandBusy: boolean;
+  aiCommandError: string | null;
   onContentChange: (filePath: string, nextContent: string) => void;
   onSnapshotUpdate: (payload: EditorSnapshotPayload) => void;
   onDiagnosticsUpdate: (diagnostics: EditorDiagnostic[]) => void;
   onCompileTrigger: () => void;
+  onOpenCommandBar: () => void;
+  onCloseCommandBar: () => void;
+  onSubmitInlineCommand: (instruction: string) => void;
+  onGoToDefinition?: ((offset: number) => boolean) | undefined;
 }
 
 const texpulseHighlightStyle = HighlightStyle.define([
@@ -89,10 +106,19 @@ export function LatexEditorPane({
   symbolIndex,
   compilerDiagnostics,
   navigationTarget,
+  inlineInsertion,
+  commandBarOpen,
+  aiStatus,
+  aiCommandBusy,
+  aiCommandError,
   onContentChange,
   onSnapshotUpdate,
   onDiagnosticsUpdate,
   onCompileTrigger,
+  onOpenCommandBar,
+  onCloseCommandBar,
+  onSubmitInlineCommand,
+  onGoToDefinition,
 }: LatexEditorPaneProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -110,12 +136,16 @@ export function LatexEditorPane({
     onSnapshotUpdate,
     onDiagnosticsUpdate,
     onCompileTrigger,
+    onOpenCommandBar,
+    onGoToDefinition,
   });
   callbacksRef.current = {
     onContentChange,
     onSnapshotUpdate,
     onDiagnosticsUpdate,
     onCompileTrigger,
+    onOpenCommandBar,
+    onGoToDefinition,
   };
 
   const [activeMath, setActiveMath] = useState<ActiveMathBlock | null>(null);
@@ -195,9 +225,30 @@ export function LatexEditorPane({
       Prec.highest(
         keymap.of([
           ...autoCloseEnterKeymap,
-          ...createOverleafKeymap(() => callbacksRef.current.onCompileTrigger()),
+          ...createOverleafKeymap(
+            () => callbacksRef.current.onCompileTrigger(),
+            () => callbacksRef.current.onOpenCommandBar(),
+            (offset) => callbacksRef.current.onGoToDefinition?.(offset) ?? false,
+          ),
         ]),
       ),
+      EditorView.domEventHandlers({
+        mousedown: (event, view) => {
+          if (
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey &&
+            event.button === 0
+          ) {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (pos !== null && callbacksRef.current.onGoToDefinition?.(pos)) {
+              event.preventDefault();
+              return true;
+            }
+          }
+          return false;
+        },
+      }),
       keymap.of([
         ...defaultKeymap,
         ...historyKeymap,
@@ -305,9 +356,36 @@ export function LatexEditorPane({
     view.focus();
   }, [filePath, navigationTarget]);
 
+  // Insert generated LaTeX or citation from Mod-K InlineCommandBar at current cursor
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null || !inlineInsertion || inlineInsertion.filePath !== filePath) {
+      return;
+    }
+    const sel = view.state.selection.main;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: inlineInsertion.text },
+      selection: EditorSelection.cursor(sel.from + inlineInsertion.text.length),
+      effects: EditorView.scrollIntoView(sel.from + inlineInsertion.text.length, { y: "center" }),
+    });
+    view.focus();
+  }, [filePath, inlineInsertion]);
+
   return (
     <div className="tp-editor-stage" ref={stageRef}>
       <div className="tp-cm-host" ref={hostRef} />
+      {commandBarOpen ? (
+        <InlineCommandBar
+          status={aiStatus}
+          busy={aiCommandBusy}
+          errorMessage={aiCommandError}
+          onSubmit={onSubmitInlineCommand}
+          onClose={() => {
+            onCloseCommandBar();
+            viewRef.current?.focus();
+          }}
+        />
+      ) : null}
       {activeMath !== null ? (
         <MathPreviewPopover mathBlock={activeMath} topPx={popoverTopPx} />
       ) : null}

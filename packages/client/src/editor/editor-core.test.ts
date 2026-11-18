@@ -11,6 +11,13 @@ import {
   buildMergedDiagnosticsView,
   insertPackageIntoPreamble,
 } from "./diagnostics-merge.js";
+import {
+  applyLineReplacement,
+  buildSurroundingSnippet,
+  computeSelectionMetrics,
+  extractLoadedPackages,
+} from "../utils/word-count.js";
+import { resolveLatexDefinitionAtOffset } from "./go-to-definition.js";
 import { detectActiveMathBlock } from "./math-detector.js";
 
 describe("CodeMirror 6 editor core extensions", () => {
@@ -162,5 +169,101 @@ describe("CodeMirror 6 editor core extensions", () => {
     expect(merged.drawerItems).toHaveLength(2);
     expect(merged.drawerItems[0]?.source).toBe("latex-log");
     expect(merged.contextDiagnostics).toHaveLength(2);
+  });
+
+  it("computes selection word metrics, loaded packages, anchored AI snippets, and applies diffs cleanly", () => {
+    expect(computeSelectionMetrics("\\textbf{Quantum} error $x^2$").words).toBe(2);
+    expect(computeSelectionMetrics("").words).toBe(0);
+
+    const sampleTex = [
+      "\\documentclass{article}",
+      "\\usepackage{amsmath,booktabs}",
+      "\\begin{document}",
+      "Line 4",
+      "Line 5 \\badmacro",
+      "Line 6",
+      "\\end{document}",
+    ].join("\n");
+
+    expect(extractLoadedPackages(sampleTex)).toEqual(["amsmath", "booktabs"]);
+    const snippet = buildSurroundingSnippet(sampleTex, 5, 1);
+    expect(snippet).toBe("4: Line 4\n> 5: Line 5 \\badmacro\n6: Line 6");
+
+    const patched = applyLineReplacement(sampleTex, 5, 5, "Line 5 \\textbf{fixed}");
+    expect(patched).toContain("Line 4\nLine 5 \\textbf{fixed}\nLine 6");
+  });
+
+  it("resolves cross-file Go-To-Definition for \\input, \\ref, \\eqref, and multi-key \\cite", () => {
+    const mainFile = DEFAULT_PROJECT_FILES.find((f) => f.path === "main.tex")!;
+    const symbolIndex = buildProjectSymbolIndex(DEFAULT_PROJECT_FILES);
+
+    const inputOffset = mainFile.content.indexOf("chapters/methodology") + 4;
+    const inputTarget = resolveLatexDefinitionAtOffset({
+      docText: mainFile.content,
+      offset: inputOffset,
+      currentFilePath: "main.tex",
+      files: DEFAULT_PROJECT_FILES,
+      symbolIndex,
+    });
+    expect(inputTarget).toEqual({
+      kind: "file",
+      key: "chapters/methodology",
+      filePath: "chapters/methodology.tex",
+      line: 1,
+      column: 1,
+    });
+
+    const refOffset = mainFile.content.indexOf("sec:zne") + 2;
+    const refTarget = resolveLatexDefinitionAtOffset({
+      docText: mainFile.content,
+      offset: refOffset,
+      currentFilePath: "main.tex",
+      files: DEFAULT_PROJECT_FILES,
+      symbolIndex,
+    });
+    expect(refTarget?.filePath).toBe("chapters/methodology.tex");
+    expect(refTarget?.line).toBe(2);
+
+    const eqOffset = mainFile.content.indexOf("eq:lindblad") + 3;
+    const eqTarget = resolveLatexDefinitionAtOffset({
+      docText: mainFile.content,
+      offset: eqOffset,
+      currentFilePath: "main.tex",
+      files: DEFAULT_PROJECT_FILES,
+      symbolIndex,
+    });
+    expect(eqTarget?.filePath).toBe("main.tex");
+
+    const preskillOffset = mainFile.content.indexOf("preskill2018nisq") + 4;
+    const preskillTarget = resolveLatexDefinitionAtOffset({
+      docText: mainFile.content,
+      offset: preskillOffset,
+      currentFilePath: "main.tex",
+      files: DEFAULT_PROJECT_FILES,
+      symbolIndex,
+    });
+    expect(preskillTarget).toEqual({
+      kind: "citation",
+      key: "preskill2018nisq",
+      filePath: "references.bib",
+      line: 8,
+      column: 1,
+    });
+
+    const knuthOffset = mainFile.content.indexOf("knuth1984texbook") + 3;
+    const knuthTarget = resolveLatexDefinitionAtOffset({
+      docText: mainFile.content,
+      offset: knuthOffset,
+      currentFilePath: "main.tex",
+      files: DEFAULT_PROJECT_FILES,
+      symbolIndex,
+    });
+    expect(knuthTarget).toEqual({
+      kind: "citation",
+      key: "knuth1984texbook",
+      filePath: "references.bib",
+      line: 1,
+      column: 1,
+    });
   });
 });

@@ -13,4 +13,4 @@
 * ALWAYS invoke local compilers with `-interaction=nonstopmode -file-line-error -synctex=1 -no-shell-escape`.
 * ALWAYS kill the entire compiler process group when stopping or restarting a build so child `pdflatex` or `bibtex` processes never orphan.
 * ALWAYS invert the PDF.js Y-coordinate (bottom-left origin) to a top-left origin before passing click coordinates to `synctex edit`.
-* Version 1.0 contains ZERO external AI calls. Expose editor state exclusively through `IDocumentContextProvider` (typed Lezer AST + cursor scope + parsed diagnostics) to support Version 2.0 AI integration cleanly.
+* Version 2.0 AI assistance is 100% opt-in and local-first (Ollama / LM Studio OpenAI-compatible local endpoints by default, optional cloud Gemini API via `GEMINI_API_KEY`, or deterministic offline fallback). Consume editor context exclusively through `IDocumentContextProvider` and invoke inference solely through `IAssistantService` using contract-anchored snippets rather than raw full-project dumps.

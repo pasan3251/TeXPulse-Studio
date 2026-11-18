@@ -1,15 +1,22 @@
-import { stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { basename, dirname, resolve } from "node:path";
+import type { AddressInfo } from "node:net";
+import { basename, dirname, extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   DEFAULT_PROJECT_FILES,
   LATEXMK_BASE_FLAGS,
+  type AssistantProviderConfig,
   type CompileEngine,
   type CompileRequestPayload,
+  type ContextAnchoredPromptInput,
+  type ProjectFile,
   type RecoveryBufferSnapshot,
 } from "@texpulse/shared";
+import { AssistantService } from "./assistant/assistant-service.js";
 import { CompilerRunner } from "./compiler/compiler-runner.js";
+import { TexCountService } from "./compiler/texcount-service.js";
 import {
   LocalProjectStore,
   ProjectPathError,
@@ -25,6 +32,109 @@ const MAX_JSON_BODY_BYTES = 70 * 1024 * 1024;
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(THIS_FILE), "../../..");
 const DEFAULT_WORKSPACE = resolve(REPO_ROOT, ".texpulse-workspace");
+const DEFAULT_CLIENT_DIST = resolve(REPO_ROOT, "packages/client/dist");
+
+const STATIC_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".wasm": "application/wasm",
+  ".pdf": "application/pdf",
+};
+
+export interface StartLocalServerOptions {
+  serveClient?: boolean | undefined;
+  clientDistDir?: string | undefined;
+}
+
+async function tryServeStaticSpa(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  rawPathname: string,
+  clientDistDir: string,
+): Promise<boolean> {
+  if ((req.method !== "GET" && req.method !== "HEAD") || pathname.startsWith("/api/")) {
+    return false;
+  }
+
+  let decodedPath: string;
+  let decodedRawPath: string;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+    decodedRawPath = decodeURIComponent(rawPathname);
+  } catch {
+    sendJson(res, 400, { ok: false, error: "Malformed request path." });
+    return true;
+  }
+
+  if (
+    decodedPath.includes("\0") ||
+    decodedRawPath.includes("\0") ||
+    decodedPath.split(/[\\/]/u).includes("..") ||
+    decodedRawPath.split(/[\\/]/u).includes("..")
+  ) {
+    sendJson(res, 403, { ok: false, error: "Forbidden path traversal." });
+    return true;
+  }
+
+  const distRoot = resolve(clientDistDir);
+  const relPath = decodedPath.replace(/^\/+/u, "") || "index.html";
+  const resolvedCandidate = resolve(distRoot, relPath);
+
+  if (resolvedCandidate !== distRoot && !resolvedCandidate.startsWith(distRoot + sep)) {
+    sendJson(res, 403, { ok: false, error: "Forbidden path traversal." });
+    return true;
+  }
+
+  const sendFile = async (filePath: string, isImmutableAsset: boolean): Promise<void> => {
+    const ext = extname(filePath).toLowerCase();
+    const contentType = STATIC_MIME_TYPES[ext] ?? "application/octet-stream";
+    const data = await readFile(filePath);
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Content-Length": String(data.byteLength),
+      "Cache-Control": isImmutableAsset ? "public, max-age=31536000, immutable" : "no-cache",
+    });
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    res.end(data);
+  };
+
+  try {
+    const candidateStat = await stat(resolvedCandidate);
+    if (candidateStat.isFile()) {
+      await sendFile(resolvedCandidate, relPath.startsWith("assets/"));
+      return true;
+    }
+  } catch {
+    // Fall through to index.html SPA fallback for extensionless client routes
+  }
+
+  if (extname(relPath) !== "") {
+    return false;
+  }
+
+  const indexPath = resolve(distRoot, "index.html");
+  if (!existsSync(indexPath)) {
+    return false;
+  }
+  await sendFile(indexPath, false);
+  return true;
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -63,14 +173,27 @@ async function ensureSeededWorkspace(store: LocalProjectStore): Promise<void> {
 export async function startLocalServer(
   projectDirectory = DEFAULT_WORKSPACE,
   port = DEFAULT_PORT,
+  options: StartLocalServerOptions = {},
 ) {
   const { mkdir } = await import("node:fs/promises");
   await mkdir(projectDirectory, { recursive: true });
+
+  const clientDistDir = resolve(
+    options.clientDistDir ?? process.env.TEXPULSE_CLIENT_DIST ?? DEFAULT_CLIENT_DIST,
+  );
+  const serveClient =
+    options.serveClient ??
+    (process.argv.includes("--serve-client") ||
+      process.env.NODE_ENV === "production" ||
+      process.env.TEXPULSE_SERVE_CLIENT === "1" ||
+      existsSync(resolve(clientDistDir, "index.html")));
 
   let store = await LocalProjectStore.open(projectDirectory);
   await ensureSeededWorkspace(store);
   let compilerRunner = new CompilerRunner(store.rootDirectory);
   let recoveryService = new RecoveryService(store.rootDirectory);
+  let texcountService = new TexCountService(store.rootDirectory);
+  const assistantService = new AssistantService();
   const synctexService = new SynctexService();
   const recentDirectories: string[] = [store.rootDirectory];
 
@@ -87,6 +210,7 @@ export async function startLocalServer(
       return;
     }
 
+    const rawPathname = (req.url ?? "/").split(/[?#]/u)[0] ?? "/";
     const requestUrl = new URL(
       req.url ?? "/",
       `http://${req.headers.host ?? "127.0.0.1"}`,
@@ -96,7 +220,8 @@ export async function startLocalServer(
       if (req.method === "GET" && requestUrl.pathname === "/api/health") {
         sendJson(res, 200, {
           ok: true,
-          phase: 3,
+          version: "2.0.0",
+          phase: 5,
           compilerFlags: LATEXMK_BASE_FLAGS,
           projectRoot: store.rootDirectory,
         });
@@ -138,6 +263,7 @@ export async function startLocalServer(
         store = await LocalProjectStore.open(resolvedDir);
         compilerRunner = new CompilerRunner(store.rootDirectory);
         recoveryService = new RecoveryService(store.rootDirectory);
+        texcountService = new TexCountService(store.rootDirectory);
         recordRecentDirectory(store.rootDirectory);
         const [files, recovery] = await Promise.all([
           store.listTextFiles(),
@@ -395,6 +521,108 @@ export async function startLocalServer(
         return;
       }
 
+      if (req.method === "POST" && requestUrl.pathname === "/api/texcount") {
+        const body = (await readJsonBody(req)) as {
+          rootFile?: unknown;
+          files?: ReadonlyArray<{ path?: unknown; content?: unknown }>;
+        };
+        const rootFile =
+          typeof body.rootFile === "string" && body.rootFile.trim() !== ""
+            ? body.rootFile
+            : "main.tex";
+
+        let projectFiles: ProjectFile[];
+        if (Array.isArray(body.files) && body.files.length > 0) {
+          for (const item of body.files) {
+            if (typeof item.path === "string" && typeof item.content === "string") {
+              await store.writeProjectFile(item.path, item.content);
+            }
+          }
+          projectFiles = await store.listTextFiles();
+        } else {
+          projectFiles = await store.listTextFiles();
+        }
+
+        const counts = await texcountService.count({ rootFile, files: projectFiles });
+        sendJson(res, 200, { ok: true, counts });
+        return;
+      }
+
+      if (req.method === "GET" && requestUrl.pathname === "/api/assistant/status") {
+        const status = await assistantService.getStatus();
+        sendJson(res, 200, { ok: true, status });
+        return;
+      }
+
+      if (req.method === "POST" && requestUrl.pathname === "/api/assistant/config") {
+        const body = (await readJsonBody(req)) as Partial<AssistantProviderConfig>;
+        const status = await assistantService.configure(body);
+        sendJson(res, 200, { ok: true, status });
+        return;
+      }
+
+      if (req.method === "POST" && requestUrl.pathname === "/api/assistant/fix-error") {
+        const body = (await readJsonBody(req)) as Partial<ContextAnchoredPromptInput>;
+        if (typeof body.filePath !== "string" || typeof body.surroundingLines !== "string") {
+          sendJson(res, 400, {
+            ok: false,
+            error: "Expected ContextAnchoredPromptInput with filePath and surroundingLines.",
+          });
+          return;
+        }
+        const proposal = await assistantService.proposeErrorFix({
+          filePath: body.filePath,
+          line: typeof body.line === "number" ? body.line : 1,
+          currentSection: body.currentSection ?? null,
+          activeEnvironment: body.activeEnvironment ?? null,
+          loadedPackages: Array.isArray(body.loadedPackages) ? body.loadedPackages : [],
+          surroundingLines: body.surroundingLines,
+          validLabels: Array.isArray(body.validLabels) ? body.validLabels : [],
+          validCitationKeys: Array.isArray(body.validCitationKeys) ? body.validCitationKeys : [],
+          diagnostic: body.diagnostic,
+          instruction: body.instruction,
+        });
+        sendJson(res, 200, { ok: true, proposal });
+        return;
+      }
+
+      if (req.method === "POST" && requestUrl.pathname === "/api/assistant/generate") {
+        const body = (await readJsonBody(req)) as Partial<ContextAnchoredPromptInput>;
+        if (typeof body.instruction !== "string" || body.instruction.trim() === "") {
+          sendJson(res, 400, {
+            ok: false,
+            error: "Expected non-empty instruction string.",
+          });
+          return;
+        }
+        const result = await assistantService.generateInlineLatex({
+          filePath: typeof body.filePath === "string" ? body.filePath : "main.tex",
+          line: typeof body.line === "number" ? body.line : 1,
+          currentSection: body.currentSection ?? null,
+          activeEnvironment: body.activeEnvironment ?? null,
+          loadedPackages: Array.isArray(body.loadedPackages) ? body.loadedPackages : [],
+          surroundingLines: typeof body.surroundingLines === "string" ? body.surroundingLines : "",
+          validLabels: Array.isArray(body.validLabels) ? body.validLabels : [],
+          validCitationKeys: Array.isArray(body.validCitationKeys) ? body.validCitationKeys : [],
+          instruction: body.instruction,
+        });
+        sendJson(res, 200, { ok: true, result });
+        return;
+      }
+
+      if (
+        serveClient &&
+        (await tryServeStaticSpa(
+          req,
+          res,
+          requestUrl.pathname,
+          rawPathname,
+          clientDistDir,
+        ))
+      ) {
+        return;
+      }
+
       sendJson(res, 404, { ok: false, error: "Not found" });
     } catch (error) {
       const status =
@@ -420,10 +648,18 @@ export async function startLocalServer(
 if (process.argv[1] !== undefined && resolve(THIS_FILE) === resolve(process.argv[1])) {
   const port = Number(process.env.TEXPULSE_PORT ?? DEFAULT_PORT);
   const projectDir = process.env.TEXPULSE_PROJECT_DIR;
-  startLocalServer(projectDir, port)
-    .then(() => {
+  const serveClient =
+    process.argv.includes("--serve-client") ||
+    process.env.NODE_ENV === "production" ||
+    process.env.TEXPULSE_SERVE_CLIENT === "1" ||
+    existsSync(resolve(DEFAULT_CLIENT_DIST, "index.html"));
+
+  startLocalServer(projectDir, port, { serveClient })
+    .then((server) => {
+      const addr = server.address() as AddressInfo | null;
+      const boundPort = addr?.port ?? port;
       console.log(
-        `TeXPulse Studio 2.0 backend listening on http://127.0.0.1:${String(port)}`,
+        `TeXPulse Studio 2.0 server listening on http://127.0.0.1:${String(boundPort)} (${serveClient ? "Unified SPA + API" : "API"})`,
       );
     })
     .catch((err: unknown) => {

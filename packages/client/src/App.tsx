@@ -1,17 +1,25 @@
 import {
   rankRootCandidates,
+  type AssistantProviderConfig,
+  type AssistantStatusPayload,
   type CompileResultPayload,
   type CompileStatus,
+  type ContextAnchoredPromptInput,
   type DiagnosticCategory,
   type DiagnosticItem,
   type EditorDiagnostic,
+  type EditorSettingsConfig,
   type EditorViewMode,
+  type ErrorFixProposal,
   type ForwardSyncTarget,
+  type InlineGenerationResult,
   type InverseSyncTarget,
   type OutlineHeading,
   type PackageSuggestionAction,
   type ProjectFile,
   type RecoverySnapshotPayload,
+  type TexCountResultPayload,
+  type TexCountSectionBreakdown,
   type ThemeMode,
 } from "@texpulse/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,10 +28,13 @@ import {
   LatexEditorPane,
   type EditorNavigationTarget,
   type EditorSnapshotPayload,
+  type InlineInsertionPayload,
 } from "./components/LatexEditorPane.js";
 import { PdfView } from "./components/PdfView.js";
+import { SettingsModal } from "./components/SettingsModal.js";
 import { SidebarPane } from "./components/SidebarPane.js";
 import { VisualReadingPane } from "./components/VisualReadingPane.js";
+import { WordCountPopover } from "./components/WordCountPopover.js";
 import {
   DEFAULT_PROJECT_FILES,
   DEFAULT_PROJECT_NAME,
@@ -32,11 +43,80 @@ import {
   buildMergedDiagnosticsView,
   insertPackageIntoPreamble,
 } from "./editor/diagnostics-merge.js";
+import { resolveLatexDefinitionAtOffset } from "./editor/go-to-definition.js";
 import { DocumentContextProvider } from "./services/DocumentContext.js";
 import { buildProjectSymbolIndex } from "./services/WorkspaceIndexer.js";
+import {
+  applyLineReplacement,
+  buildSurroundingSnippet,
+  computeSelectionMetrics,
+  extractLoadedPackages,
+} from "./utils/word-count.js";
 
 const THEME_STORAGE_KEY = "texpulse.theme";
 const RECOVERY_STORAGE_KEY = "texpulse.recovery.v1";
+const SETTINGS_STORAGE_KEY = "texpulse.settings.v2";
+
+const DEFAULT_SETTINGS: EditorSettingsConfig = {
+  engine: "pdflatex",
+  autoCompileOnPause: false,
+  assistant: {
+    provider: "ollama",
+    endpointUrl: "http://127.0.0.1:11434/v1",
+    model: "qwen2.5-coder:7b",
+    enabled: true,
+  },
+};
+
+function loadPersistedSettings(): EditorSettingsConfig {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<EditorSettingsConfig>;
+    const engine =
+      parsed.engine === "xelatex" || parsed.engine === "lualatex"
+        ? parsed.engine
+        : "pdflatex";
+    const assistant = parsed.assistant;
+    const provider =
+      assistant?.provider === "ollama" ||
+      assistant?.provider === "lmstudio" ||
+      assistant?.provider === "custom-openai" ||
+      assistant?.provider === "gemini" ||
+      assistant?.provider === "offline-fallback"
+        ? assistant.provider
+        : DEFAULT_SETTINGS.assistant.provider;
+    return {
+      engine,
+      autoCompileOnPause: parsed.autoCompileOnPause === true,
+      assistant: {
+        provider,
+        endpointUrl:
+          typeof assistant?.endpointUrl === "string" && assistant.endpointUrl.trim()
+            ? assistant.endpointUrl.trim()
+            : DEFAULT_SETTINGS.assistant.endpointUrl,
+        model:
+          typeof assistant?.model === "string" && assistant.model.trim()
+            ? assistant.model.trim()
+            : DEFAULT_SETTINGS.assistant.model,
+        enabled: assistant?.enabled !== false,
+        ...(typeof assistant?.apiKey === "string" && assistant.apiKey.trim()
+          ? { apiKey: assistant.apiKey.trim() }
+          : {}),
+      },
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function savePersistedSettings(next: EditorSettingsConfig): void {
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
 
 function loadPersistedTheme(): ThemeMode {
   try {
@@ -100,6 +180,27 @@ function formatIssueCounts(errors: number, warnings: number): string {
   return parts.join(" · ");
 }
 
+function computeLocalFallbackWordCount(files: readonly ProjectFile[]): TexCountResultPayload {
+  const activeTex = files.filter((f) => f.kind === "tex");
+  let totalChars = 0;
+  let totalWords = 0;
+  for (const f of activeTex) {
+    totalChars += f.content.length;
+    totalWords += computeSelectionMetrics(f.content).words;
+  }
+  return {
+    source: "ast-fallback",
+    wordsInText: totalWords,
+    wordsInHeaders: 0,
+    wordsInCaptions: 0,
+    totalWords,
+    mathInlines: 0,
+    mathDisplay: 0,
+    characterCount: totalChars,
+    sections: [],
+  };
+}
+
 export function App() {
   const [theme, setTheme] = useState<ThemeMode>(loadPersistedTheme);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -131,6 +232,7 @@ export function App() {
     section: null as string | null,
     env: null as string | null,
     astNodes: 0,
+    selectedText: "",
   });
 
   const [compiling, setCompiling] = useState(false);
@@ -140,6 +242,31 @@ export function App() {
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
   const [navigationTarget, setNavigationTarget] =
     useState<EditorNavigationTarget | null>(null);
+
+  // Phase 4 v1.1 Word Count Popover state
+  const [texCounts, setTexCounts] = useState<TexCountResultPayload>(() =>
+    computeLocalFallbackWordCount(DEFAULT_PROJECT_FILES),
+  );
+  const [wordCountPopoverOpen, setWordCountPopoverOpen] = useState(false);
+  const [wordCountLoading, setWordCountLoading] = useState(false);
+
+  // Phase 4 v2.0 AI Assistant & Phase 5 Settings state (Local-first via IAssistantService)
+  const [settings, setSettings] = useState<EditorSettingsConfig>(loadPersistedSettings);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AssistantStatusPayload | null>(null);
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
+  const [aiCommandBusy, setAiCommandBusy] = useState(false);
+  const [aiCommandError, setAiCommandError] = useState<string | null>(null);
+  const [inlineInsertion, setInlineInsertion] =
+    useState<InlineInsertionPayload | null>(null);
+  const [aiFixLoadingId, setAiFixLoadingId] = useState<string | null>(null);
+  const [aiFixProposal, setAiFixProposal] = useState<{
+    diagnosticId: string;
+    proposal: ErrorFixProposal;
+  } | null>(null);
+
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -224,7 +351,120 @@ export function App() {
     });
   }, [activeFile.content, activeFile.path, mergedDiagnostics.contextDiagnostics, symbolIndex]);
 
-  // Initial load from local server workspace + crash recovery overlay
+  const refreshTexCount = useCallback(
+    async (targetRoot?: string, overrideFiles?: readonly ProjectFile[]) => {
+      const currentFiles = overrideFiles ?? filesRef.current;
+      const root =
+        targetRoot ??
+        rankRootCandidates(
+          currentFiles.map((f) => ({ path: f.path, content: f.content })),
+        )[0]?.path ??
+        "main.tex";
+      setWordCountLoading(true);
+      try {
+        const res = await fetch("/api/texcount", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rootFile: root,
+            files: currentFiles.map((f) => ({ path: f.path, content: f.content })),
+          }),
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          ok?: boolean;
+          counts?: TexCountResultPayload;
+        };
+        if (json.ok && json.counts) {
+          setTexCounts(json.counts);
+        }
+      } catch {
+        setTexCounts(computeLocalFallbackWordCount(currentFiles));
+      } finally {
+        setWordCountLoading(false);
+      }
+    },
+    [],
+  );
+
+  const refreshAssistantStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/assistant/status");
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        ok?: boolean;
+        status?: AssistantStatusPayload;
+      };
+      if (json.ok && json.status) {
+        setAiStatus(json.status);
+      }
+    } catch {
+      // Ignore offline status probe errors
+    }
+  }, []);
+
+  const syncAssistantConfig = useCallback(
+    async (
+      config: AssistantProviderConfig,
+      verifyStatusRoute = false,
+    ): Promise<AssistantStatusPayload> => {
+      try {
+        const cfgRes = await fetch("/api/assistant/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(config),
+        });
+        const cfgJson = (await cfgRes.json().catch(() => ({}))) as {
+          ok?: boolean;
+          status?: AssistantStatusPayload;
+        };
+
+        if (verifyStatusRoute) {
+          const statusRes = await fetch("/api/assistant/status");
+          if (statusRes.ok) {
+            const statusJson = (await statusRes.json()) as {
+              ok?: boolean;
+              status?: AssistantStatusPayload;
+            };
+            if (statusJson.ok && statusJson.status) {
+              setAiStatus(statusJson.status);
+              return statusJson.status;
+            }
+          }
+        }
+
+        if (cfgJson.ok && cfgJson.status) {
+          setAiStatus(cfgJson.status);
+          return cfgJson.status;
+        }
+      } catch {
+        // Fallback offline descriptor below
+      }
+
+      const offlineFallback: AssistantStatusPayload = {
+        connected: false,
+        provider: config.provider,
+        model: config.model,
+        endpointUrl: config.endpointUrl,
+        statusLabel: "Offline: Backend server unreachable",
+        availableModels: [],
+      };
+      setAiStatus(offlineFallback);
+      return offlineFallback;
+    },
+    [],
+  );
+
+  const handleSaveSettings = useCallback(
+    (next: EditorSettingsConfig) => {
+      setSettings(next);
+      savePersistedSettings(next);
+      void syncAssistantConfig(next.assistant);
+    },
+    [syncAssistantConfig],
+  );
+
+  // Initial load from local server workspace, recovery overlay, texcount, and assistant probe
   useEffect(() => {
     let cancelled = false;
     const hydrate = async () => {
@@ -290,8 +530,10 @@ export function App() {
           saveLocalRecoverySnapshot(null);
           setSaveState("saved");
         }
+
+        void refreshTexCount(ranked[0]?.path ?? "main.tex", hydratedFiles);
+        void syncAssistantConfig(settingsRef.current.assistant);
       } catch {
-        // Offline / Vite-only fallback keeps local recovery buffers if any
         const localRec = loadLocalRecoverySnapshot();
         if (localRec && localRec.buffers.length > 0) {
           setFiles((prev) =>
@@ -313,9 +555,9 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshTexCount, syncAssistantConfig]);
 
-  // Immediate local recovery + debounced (600ms) atomic disk autosave
+  // Immediate local recovery + debounced (600ms) atomic disk autosave + texcount refresh
   useEffect(() => {
     if (!workspaceHydrated || dirtyPaths.size === 0) return;
 
@@ -363,6 +605,7 @@ export function App() {
             }
             return next;
           });
+          void refreshTexCount();
         } catch {
           setSaveState("unsaved");
         }
@@ -370,7 +613,7 @@ export function App() {
     }, 600);
 
     return () => window.clearTimeout(timer);
-  }, [activeFilePath, dirtyPaths, files, workspaceHydrated]);
+  }, [activeFilePath, dirtyPaths, files, refreshTexCount, workspaceHydrated]);
 
   // Flush dirty buffers to server recovery snapshot before page unload
   useEffect(() => {
@@ -443,6 +686,7 @@ export function App() {
         section: scope.currentSection,
         env: scope.activeEnvironment,
         astNodes: ast.nodeCount,
+        selectedText: payload.selectedText,
       });
     },
     [activeFile.path, mergedDiagnostics.contextDiagnostics, symbolIndex],
@@ -468,7 +712,7 @@ export function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             rootFile: rankedRoot,
-            engine: "pdflatex",
+            engine: settingsRef.current.engine,
             forceFullBuild,
             files: payloadFiles.map((f) => ({ path: f.path, content: f.content })),
           }),
@@ -488,6 +732,7 @@ export function App() {
           : [];
         setLastBuild(result);
         setCompilerDiagnostics(settledDiagnostics);
+        setAiFixProposal(null);
 
         setDirtyPaths(new Set());
         saveLocalRecoverySnapshot(null);
@@ -510,12 +755,13 @@ export function App() {
             setPdfBytes(new Uint8Array(buf));
           }
         }
+        void refreshTexCount(rankedRoot, payloadFiles);
       } catch (err) {
         setLastBuild({
           buildId: "offline",
           status: "failed",
           tier: "tier3-latexmk",
-          engine: "pdflatex",
+          engine: settingsRef.current.engine,
           durationMs: 0,
           preambleHash: "",
           preambleCacheHit: false,
@@ -534,16 +780,214 @@ export function App() {
         setCompiling(false);
       }
     },
-    [],
+    [refreshTexCount],
   );
 
   const handleCompileTrigger = useCallback(() => {
     void triggerCompile(false);
   }, [triggerCompile]);
 
+  // Opt-in Auto-Compile on Pause (Debounce 800ms)
+  useEffect(() => {
+    if (
+      !workspaceHydrated ||
+      !settings.autoCompileOnPause ||
+      dirtyPaths.size === 0 ||
+      compiling
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void triggerCompile(false);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    compiling,
+    dirtyPaths,
+    files,
+    settings.autoCompileOnPause,
+    triggerCompile,
+    workspaceHydrated,
+  ]);
+
+  const handleGoToDefinition = useCallback(
+    (offset: number): boolean => {
+      const currentFile =
+        filesRef.current.find((f) => f.path === activeFilePathRef.current) ??
+        filesRef.current[0];
+      if (!currentFile) return false;
+      const target = resolveLatexDefinitionAtOffset({
+        docText: currentFile.content,
+        offset,
+        currentFilePath: currentFile.path,
+        files: filesRef.current,
+        symbolIndex,
+      });
+      if (!target) return false;
+
+      setActiveFilePath(target.filePath);
+      setViewMode("code");
+      setNavigationTarget({
+        filePath: target.filePath,
+        line: target.line,
+        column: target.column,
+        nonce: Date.now(),
+      });
+      return true;
+    },
+    [symbolIndex],
+  );
+
   const handleCancelCompile = useCallback(async () => {
     await fetch("/api/compile/cancel", { method: "POST" }).catch(() => undefined);
   }, []);
+
+  const buildAnchoredContextInput = useCallback(
+    (params: {
+      filePath: string;
+      line: number;
+      diagnostic?: DiagnosticItem | undefined;
+      instruction?: string | undefined;
+    }): ContextAnchoredPromptInput => {
+      const targetFileObj =
+        filesRef.current.find((f) => f.path === params.filePath) ?? activeFile;
+      const rootObj =
+        filesRef.current.find((f) => f.path === rootFilePath) ?? targetFileObj;
+      const scope = contextProviderRef.current.getCursorScope();
+      const syms = contextProviderRef.current.getProjectSymbols();
+
+      return {
+        filePath: targetFileObj.path,
+        line: params.line,
+        currentSection: scope.currentSection,
+        activeEnvironment: scope.activeEnvironment,
+        loadedPackages: extractLoadedPackages(rootObj.content),
+        surroundingLines: buildSurroundingSnippet(targetFileObj.content, params.line, 7),
+        validLabels: syms.labels.map((l) => l.key),
+        validCitationKeys: syms.citations.map((c) => c.key),
+        diagnostic: params.diagnostic,
+        instruction: params.instruction,
+      };
+    },
+    [activeFile, rootFilePath],
+  );
+
+  const handleRequestAiFix = useCallback(
+    (item: DiagnosticItem) => {
+      void (async () => {
+        setAiFixLoadingId(item.id);
+        try {
+          const payload = buildAnchoredContextInput({
+            filePath: item.file,
+            line: item.line,
+            diagnostic: item,
+          });
+          const response = await fetch("/api/assistant/fix-error", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const json = (await response.json()) as {
+            ok: boolean;
+            proposal?: ErrorFixProposal;
+          };
+          if (json.ok && json.proposal) {
+            setAiFixProposal({ diagnosticId: item.id, proposal: json.proposal });
+          }
+        } finally {
+          setAiFixLoadingId(null);
+        }
+      })();
+    },
+    [buildAnchoredContextInput],
+  );
+
+  const handleApplyAiFix = useCallback(
+    (proposal: ErrorFixProposal) => {
+      const updatedFiles = filesRef.current.map((file) => {
+        if (file.path !== proposal.targetFile) return file;
+        return {
+          ...file,
+          content: applyLineReplacement(
+            file.content,
+            proposal.startLine,
+            proposal.endLine,
+            proposal.replacementSnippet,
+          ),
+          lastModified: Date.now(),
+        };
+      });
+      filesRef.current = updatedFiles;
+      setFiles(updatedFiles);
+      setDirtyPaths(new Set([proposal.targetFile]));
+      setAiFixProposal(null);
+      void triggerCompile(false, updatedFiles);
+    },
+    [triggerCompile],
+  );
+
+  const handleSubmitInlineCommand = useCallback(
+    (instruction: string) => {
+      void (async () => {
+        setAiCommandBusy(true);
+        setAiCommandError(null);
+        try {
+          const scope = contextProviderRef.current.getCursorScope();
+          const payload = buildAnchoredContextInput({
+            filePath: activeFile.path,
+            line: scope.line,
+            instruction,
+          });
+          const response = await fetch("/api/assistant/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const json = (await response.json()) as {
+            ok: boolean;
+            result?: InlineGenerationResult;
+            error?: string;
+          };
+          if (!json.ok || !json.result) {
+            setAiCommandError(json.error ?? "Generation failed.");
+            return;
+          }
+
+          const gen = json.result;
+          // If Smart Citation returned a new BibTeX entry, append cleanly to references.bib
+          if (gen.bibEntry && gen.citationKey) {
+            const bibTarget =
+              filesRef.current.find((f) => f.kind === "bib")?.path ?? "references.bib";
+            const updatedFiles = filesRef.current.map((file) => {
+              if (file.path !== bibTarget) return file;
+              if (file.content.includes(`{${gen.citationKey!},`)) return file;
+              const sep = file.content.endsWith("\n") ? "\n" : "\n\n";
+              return {
+                ...file,
+                content: `${file.content}${sep}${gen.bibEntry!}\n`,
+                lastModified: Date.now(),
+              };
+            });
+            filesRef.current = updatedFiles;
+            setFiles(updatedFiles);
+            setDirtyPaths((prev) => new Set([...prev, bibTarget]));
+          }
+
+          setInlineInsertion({
+            filePath: activeFile.path,
+            text: gen.latex,
+            nonce: Date.now(),
+          });
+          setCommandBarOpen(false);
+        } catch {
+          setAiCommandError("Assistant endpoint unreachable.");
+        } finally {
+          setAiCommandBusy(false);
+        }
+      })();
+    },
+    [activeFile.path, buildAnchoredContextInput],
+  );
 
   const handleApplyPackageQuickFix = useCallback(
     (action: PackageSuggestionAction) => {
@@ -595,116 +1039,131 @@ export function App() {
     })();
   }, [projectName]);
 
-  const handleImportZip = useCallback((zipFile: File) => {
-    void (async () => {
-      const buffer = new Uint8Array(await zipFile.arrayBuffer());
-      const response = await fetch("/api/project/import-zip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          archiveBase64: bytesToBase64(buffer),
-          filename: zipFile.name,
-        }),
-      });
-      if (!response.ok) return;
-      const json = (await response.json()) as {
-        ok?: boolean;
-        files?: ProjectFile[];
-      };
-      if (!json.ok || !Array.isArray(json.files) || json.files.length === 0) return;
+  const handleImportZip = useCallback(
+    (zipFile: File) => {
+      void (async () => {
+        const buffer = new Uint8Array(await zipFile.arrayBuffer());
+        const response = await fetch("/api/project/import-zip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            archiveBase64: bytesToBase64(buffer),
+            filename: zipFile.name,
+          }),
+        });
+        if (!response.ok) return;
+        const json = (await response.json()) as {
+          ok?: boolean;
+          files?: ProjectFile[];
+        };
+        if (!json.ok || !Array.isArray(json.files) || json.files.length === 0) return;
 
-      setFiles(json.files);
-      filesRef.current = json.files;
-      setDirtyPaths(new Set());
-      saveLocalRecoverySnapshot(null);
-      setSaveState("saved");
-      setCompilerDiagnostics([]);
-      setLastBuild(null);
-      setPdfBytes(null);
-      setSyncTarget(null);
+        setFiles(json.files);
+        filesRef.current = json.files;
+        setDirtyPaths(new Set());
+        saveLocalRecoverySnapshot(null);
+        setSaveState("saved");
+        setCompilerDiagnostics([]);
+        setLastBuild(null);
+        setPdfBytes(null);
+        setSyncTarget(null);
 
-      const bestRoot =
-        rankRootCandidates(json.files.map((f) => ({ path: f.path, content: f.content })))[0]
-          ?.path ?? json.files[0]!.path;
-      setActiveFilePath(bestRoot);
-    })();
-  }, []);
+        const bestRoot =
+          rankRootCandidates(json.files.map((f) => ({ path: f.path, content: f.content })))[0]
+            ?.path ?? json.files[0]!.path;
+        setActiveFilePath(bestRoot);
+        void refreshTexCount(bestRoot, json.files);
+      })();
+    },
+    [refreshTexCount],
+  );
 
-  const handleOpenFolder = useCallback((directoryPath: string) => {
-    void (async () => {
-      const response = await fetch("/api/project/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ directory: directoryPath }),
-      });
-      const json = (await response.json()) as {
-        ok?: boolean;
-        projectRoot?: string;
-        projectName?: string;
-        files?: ProjectFile[];
-        error?: string;
-      };
-      if (!response.ok || !json.ok || !Array.isArray(json.files)) {
-        setSyncStatusMessage(json.error ?? "Failed to open directory");
+  const handleOpenFolder = useCallback(
+    (directoryPath: string) => {
+      void (async () => {
+        const response = await fetch("/api/project/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ directory: directoryPath }),
+        });
+        const json = (await response.json()) as {
+          ok?: boolean;
+          projectRoot?: string;
+          projectName?: string;
+          files?: ProjectFile[];
+          error?: string;
+        };
+        if (!response.ok || !json.ok || !Array.isArray(json.files)) {
+          setSyncStatusMessage(json.error ?? "Failed to open directory");
+          return;
+        }
+
+        if (json.projectRoot) setProjectRoot(json.projectRoot);
+        if (json.projectName) setProjectName(json.projectName);
+        setFiles(json.files);
+        filesRef.current = json.files;
+        setDirtyPaths(new Set());
+        saveLocalRecoverySnapshot(null);
+        setSaveState("saved");
+        setCompilerDiagnostics([]);
+        setLastBuild(null);
+        setPdfBytes(null);
+        setSyncTarget(null);
+
+        if (json.files.length > 0) {
+          const bestRoot =
+            rankRootCandidates(
+              json.files.map((f) => ({ path: f.path, content: f.content })),
+            )[0]?.path ?? json.files[0]!.path;
+          setActiveFilePath(bestRoot);
+          void refreshTexCount(bestRoot, json.files);
+        }
+      })();
+    },
+    [refreshTexCount],
+  );
+
+  const runForwardSyncAt = useCallback(
+    async (sourcePathRel: string, line: number, column = 1) => {
+      if (!lastBuild?.synctexAvailable) {
+        setSyncStatusMessage("Compile PDF before SyncTeX");
         return;
       }
-
-      if (json.projectRoot) setProjectRoot(json.projectRoot);
-      if (json.projectName) setProjectName(json.projectName);
-      setFiles(json.files);
-      filesRef.current = json.files;
-      setDirtyPaths(new Set());
-      saveLocalRecoverySnapshot(null);
-      setSaveState("saved");
-      setCompilerDiagnostics([]);
-      setLastBuild(null);
-      setPdfBytes(null);
-      setSyncTarget(null);
-
-      if (json.files.length > 0) {
-        const bestRoot =
-          rankRootCandidates(
-            json.files.map((f) => ({ path: f.path, content: f.content })),
-          )[0]?.path ?? json.files[0]!.path;
-        setActiveFilePath(bestRoot);
+      try {
+        const response = await fetch("/api/synctex/forward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rootFile: rootFilePath,
+            path: sourcePathRel,
+            line,
+            column,
+          }),
+        });
+        const json = (await response.json()) as {
+          ok: boolean;
+          target?: ForwardSyncTarget;
+          error?: string;
+        };
+        if (json.ok && json.target !== undefined) {
+          setSyncTarget(json.target);
+          setSyncStatusMessage(
+            `Fwd → P${String(json.target.page)} (${Math.round(json.target.x)}, ${Math.round(json.target.y)})`,
+          );
+        } else {
+          setSyncStatusMessage(json.error ?? "No forward target");
+        }
+      } catch {
+        setSyncStatusMessage("Forward search unavailable");
       }
-    })();
-  }, []);
+    },
+    [lastBuild, rootFilePath],
+  );
 
   const handleForwardSearch = useCallback(async () => {
-    if (!lastBuild?.synctexAvailable) {
-      setSyncStatusMessage("Compile PDF before SyncTeX");
-      return;
-    }
     const { line, column } = cursorMetricsRef.current;
-    try {
-      const response = await fetch("/api/synctex/forward", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rootFile: rootFilePath,
-          path: activeFile.path,
-          line,
-          column,
-        }),
-      });
-      const json = (await response.json()) as {
-        ok: boolean;
-        target?: ForwardSyncTarget;
-        error?: string;
-      };
-      if (json.ok && json.target !== undefined) {
-        setSyncTarget(json.target);
-        setSyncStatusMessage(
-          `Fwd → P${String(json.target.page)} (${Math.round(json.target.x)}, ${Math.round(json.target.y)})`,
-        );
-      } else {
-        setSyncStatusMessage(json.error ?? "No forward target");
-      }
-    } catch {
-      setSyncStatusMessage("Forward search unavailable");
-    }
-  }, [activeFile.path, lastBuild, rootFilePath]);
+    await runForwardSyncAt(activeFile.path, line, column);
+  }, [activeFile.path, runForwardSyncAt]);
 
   const handleInverseSearch = useCallback(
     async (page: number, x: number, y: number) => {
@@ -766,8 +1225,34 @@ export function App() {
         column: 1,
         nonce: Date.now(),
       });
+      if (lastBuild?.synctexAvailable) {
+        void runForwardSyncAt(activeFile.path, lineNumber, 1);
+      }
+    },
+    [activeFile.path, lastBuild, runForwardSyncAt],
+  );
+
+  const handleSelectTexCountSection = useCallback(
+    (sec: TexCountSectionBreakdown) => {
+      const targetPath = sec.filePath ?? activeFile.path;
+      if (filesRef.current.some((f) => f.path === targetPath)) {
+        setActiveFilePath(targetPath);
+      }
+      setViewMode("code");
+      setNavigationTarget({
+        filePath: targetPath,
+        line: sec.line ?? 1,
+        column: 1,
+        nonce: Date.now(),
+      });
+      setWordCountPopoverOpen(false);
     },
     [activeFile.path],
+  );
+
+  const selectionMetrics = useMemo(
+    () => computeSelectionMetrics(cursorMetrics.selectedText),
+    [cursorMetrics.selectedText],
   );
 
   const errorCount = mergedDiagnostics.drawerItems.filter(
@@ -829,6 +1314,7 @@ export function App() {
             <button
               type="button"
               className={`tp-segmented-btn${viewMode === "code" ? " active" : ""}`}
+              data-testid="mode-code-btn"
               onClick={() => setViewMode("code")}
             >
               Code
@@ -836,6 +1322,7 @@ export function App() {
             <button
               type="button"
               className={`tp-segmented-btn${viewMode === "visual" ? " active" : ""}`}
+              data-testid="mode-visual-btn"
               onClick={() => setViewMode("visual")}
             >
               Visual
@@ -900,6 +1387,17 @@ export function App() {
           >
             PDF
           </button>
+
+          <button
+            type="button"
+            className={`tp-icon-btn${settingsModalOpen ? " active" : ""}`}
+            onClick={() => setSettingsModalOpen(true)}
+            data-testid="settings-button"
+            aria-label="Compiler and Local AI Settings"
+            title="Compiler and Local AI Settings"
+          >
+            Settings
+          </button>
         </div>
       </header>
 
@@ -928,10 +1426,23 @@ export function App() {
               symbolIndex={symbolIndex}
               compilerDiagnostics={compilerDiagnostics}
               navigationTarget={navigationTarget}
+              inlineInsertion={inlineInsertion}
+              commandBarOpen={commandBarOpen}
+              aiStatus={aiStatus}
+              aiCommandBusy={aiCommandBusy}
+              aiCommandError={aiCommandError}
               onContentChange={handleContentChange}
               onSnapshotUpdate={handleSnapshotUpdate}
               onDiagnosticsUpdate={handleDiagnosticsUpdate}
               onCompileTrigger={handleCompileTrigger}
+              onOpenCommandBar={() => {
+                setAiCommandError(null);
+                void refreshAssistantStatus();
+                setCommandBarOpen(true);
+              }}
+              onCloseCommandBar={() => setCommandBarOpen(false)}
+              onSubmitInlineCommand={handleSubmitInlineCommand}
+              onGoToDefinition={handleGoToDefinition}
             />
           ) : (
             <VisualReadingPane
@@ -948,8 +1459,13 @@ export function App() {
               onTabChange={setDrawerTab}
               failureReason={lastBuild?.failureReason ?? null}
               activeFilePath={activeFile.path}
+              aiFixLoadingId={aiFixLoadingId}
+              aiFixProposal={aiFixProposal}
               onSelectDiagnostic={handleSelectDiagnostic}
               onApplyPackageQuickFix={handleApplyPackageQuickFix}
+              onRequestAiFix={handleRequestAiFix}
+              onApplyAiFix={handleApplyAiFix}
+              onDiscardAiFix={() => setAiFixProposal(null)}
               onClose={() => setDrawerOpen(false)}
             />
           ) : null}
@@ -970,7 +1486,27 @@ export function App() {
         ) : null}
       </main>
 
-      {/* Tabular-Nums Status Strip with IDocumentContextProvider Seam Telemetry */}
+      {wordCountPopoverOpen ? (
+        <WordCountPopover
+          counts={texCounts}
+          loading={wordCountLoading}
+          onRefresh={() => void refreshTexCount()}
+          onSelectSection={handleSelectTexCountSection}
+          onClose={() => setWordCountPopoverOpen(false)}
+        />
+      ) : null}
+
+      {settingsModalOpen ? (
+        <SettingsModal
+          settings={settings}
+          aiStatus={aiStatus}
+          onSave={handleSaveSettings}
+          onTestAiConnection={(config) => syncAssistantConfig(config, true)}
+          onClose={() => setSettingsModalOpen(false)}
+        />
+      ) : null}
+
+      {/* Tabular-Nums Status Strip with Word Count, Mod-K Trigger & Context Telemetry */}
       <footer className="tp-statusbar">
         <div className="tp-statusbar-group">
           <span>
@@ -979,9 +1515,22 @@ export function App() {
           {cursorMetrics.section !== null ? (
             <span>§ {cursorMetrics.section}</span>
           ) : null}
-          {cursorMetrics.env !== null ? (
-            <span>\begin&#123;{cursorMetrics.env}&#125;</span>
-          ) : null}
+          <button
+            type="button"
+            className={`tp-statusbar-btn${wordCountPopoverOpen ? " active" : ""}`}
+            data-testid="word-count-trigger"
+            onClick={() => {
+              if (!wordCountPopoverOpen) {
+                void refreshTexCount();
+              }
+              setWordCountPopoverOpen((open) => !open);
+            }}
+            title="View per-section texcount breakdown"
+          >
+            {cursorMetrics.selectedText.length > 0
+              ? `Selection: ${String(selectionMetrics.words)} words · ${String(selectionMetrics.chars)} chars`
+              : `${String(texCounts.wordsInText)} words · ${String(texCounts.characterCount)} chars`}
+          </button>
           <span data-testid="autosave-status">
             {saveState === "saving"
               ? "Autosaving..."
@@ -993,6 +1542,23 @@ export function App() {
           </span>
         </div>
         <div className="tp-statusbar-group">
+          <button
+            type="button"
+            className={`tp-statusbar-btn${commandBarOpen ? " active" : ""}`}
+            data-testid="open-command-bar-btn"
+            onClick={() => {
+              setViewMode("code");
+              setAiCommandError(null);
+              void refreshAssistantStatus();
+              setCommandBarOpen((open) => !open);
+            }}
+            title="Open Mod-K AI Inline Command Bar"
+          >
+            {typeof navigator !== "undefined" &&
+            /Mac|iPhone|iPad/iu.test(navigator.platform)
+              ? "⌘K AI"
+              : "Ctrl+K AI"}
+          </button>
           <span>Lezer AST: {String(cursorMetrics.astNodes)} nodes</span>
           <span>IDocumentContextProvider: Active</span>
         </div>

@@ -1,7 +1,10 @@
+import { request as httpRequest } from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { startLocalServer } from "./index.js";
 import { LocalProjectStore, normalizeProjectPath } from "./project-store.js";
 import { RecoveryService } from "./recovery-service.js";
 import { exportProjectZipBuffer, importProjectZipBuffer } from "./zip-service.js";
@@ -72,6 +75,67 @@ describe("@texpulse/server project store", () => {
     } finally {
       await rm(sourceRoot, { recursive: true, force: true });
       await rm(destRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("serves static SPA assets and /api/* routes from a single unified port and blocks traversal", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "texpulse-spa-proj-"));
+    const clientDist = await mkdtemp(join(tmpdir(), "texpulse-spa-dist-"));
+    let server: Awaited<ReturnType<typeof startLocalServer>> | null = null;
+    try {
+      await mkdir(join(clientDist, "assets"), { recursive: true });
+      await writeFile(join(clientDist, "index.html"), "<!doctype html><html><body><div id=\"root\">TeXPulse</div></body></html>", "utf8");
+      await writeFile(join(clientDist, "assets", "bundle.js"), "console.log('ok');", "utf8");
+
+      server = await startLocalServer(projectRoot, 0, {
+        serveClient: true,
+        clientDistDir: clientDist,
+      });
+      const port = (server.address() as AddressInfo).port;
+      const base = `http://127.0.0.1:${String(port)}`;
+
+      const rawTraversalStatus = await new Promise<number>((resolveStatus, rejectStatus) => {
+        const req = httpRequest(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: "/assets/%2e%2e/%2e%2e/secret.txt",
+            method: "GET",
+          },
+          (res) => {
+            res.resume();
+            resolveStatus(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", rejectStatus);
+        req.end();
+      });
+
+      const [rootRes, assetRes, fallbackRes, healthRes, apiMissingRes] = await Promise.all([
+        fetch(`${base}/`),
+        fetch(`${base}/assets/bundle.js`),
+        fetch(`${base}/workspace/editor`),
+        fetch(`${base}/api/health`),
+        fetch(`${base}/api/does-not-exist`),
+      ]);
+
+      expect(rootRes.status).toBe(200);
+      expect(await rootRes.text()).toContain("TeXPulse");
+      expect(assetRes.status).toBe(200);
+      expect(assetRes.headers.get("content-type")).toContain("application/javascript");
+      expect(await assetRes.text()).toContain("console.log('ok')");
+      expect(fallbackRes.status).toBe(200);
+      expect(await fallbackRes.text()).toContain('<div id="root">');
+      expect(healthRes.status).toBe(200);
+      expect(((await healthRes.json()) as { ok: boolean }).ok).toBe(true);
+      expect(rawTraversalStatus).toBe(403);
+      expect(apiMissingRes.status).toBe(404);
+    } finally {
+      if (server) {
+        await new Promise<void>((resolveClose) => server!.close(() => resolveClose()));
+      }
+      await rm(projectRoot, { recursive: true, force: true });
+      await rm(clientDist, { recursive: true, force: true });
     }
   });
 });
