@@ -11,6 +11,25 @@ interface MutableProjectTreeNode extends ProjectTreeNode {
 
 const ROOT_NAMES = new Set(["main.tex", "root.tex", "thesis.tex"]);
 
+export const ASSET_FILE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".pdf",
+  ".eps",
+  ".svg",
+] as const;
+
+export function isBinaryAssetPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return ASSET_FILE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+export function buildIncludeGraphicsSnippet(assetPath: string): string {
+  const normalized = assetPath.replaceAll("\\", "/").replace(/^\/+/u, "");
+  return `\\includegraphics[width=0.8\\textwidth]{${normalized}}`;
+}
+
 /**
  * Infers the logical LaTeX workspace file kind from a relative file path.
  */
@@ -20,6 +39,7 @@ export function inferProjectFileKind(path: string): ProjectFileKind {
   if (lower.endsWith(".bib")) return "bib";
   if (lower.endsWith(".sty")) return "sty";
   if (lower.endsWith(".cls")) return "cls";
+  if (isBinaryAssetPath(lower)) return "asset";
   return "other";
 }
 

@@ -1,6 +1,7 @@
 import {
   buildProjectTree,
   type OutlineHeading,
+  type ProjectAssetFile,
   type ProjectFile,
   type ProjectSymbolIndex,
   type ProjectTreeNode,
@@ -9,29 +10,58 @@ import { useMemo, useRef, useState } from "react";
 
 interface SidebarPaneProps {
   files: readonly ProjectFile[];
+  assets: readonly ProjectAssetFile[];
   activeFilePath: string;
   outline: readonly OutlineHeading[];
   symbolIndex: ProjectSymbolIndex;
   projectRoot: string;
   widthPx?: number | undefined;
+  fileActionError?: string | null | undefined;
   onSelectFile: (filePath: string) => void;
+  onInsertAssetSnippet: (assetPath: string) => void;
+  onCreateFile: (filePath: string) => void;
+  onUploadFiles: (files: readonly File[]) => void;
+  onDeleteFile: (filePath: string) => void;
   onSelectOutlineHeading: (heading: OutlineHeading) => void;
   onExportZip: () => void;
   onImportZip: (file: File) => void;
   onOpenFolder: (directoryPath: string) => void;
 }
 
-function extensionBadge(path: string): string {
+function extensionBadge(path: string, isAsset: boolean): string {
+  if (isAsset) {
+    const ext = path.split(".").at(-1)?.toLowerCase() ?? "fig";
+    return ext;
+  }
   const parts = path.split(".");
   return parts.length > 1 ? (parts.at(-1) ?? "file") : "file";
 }
 
-function renderTreeNodes(
-  nodes: readonly ProjectTreeNode[],
-  activeFilePath: string,
-  onSelectFile: (filePath: string) => void,
+interface TreeRenderParams {
+  nodes: readonly ProjectTreeNode[];
+  activeFilePath: string;
+  assetPaths: ReadonlySet<string>;
+  confirmDeletePath: string | null;
+  onSelectFile: (filePath: string) => void;
+  onInsertAssetSnippet: (assetPath: string) => void;
+  onRequestDelete: (path: string) => void;
+  onConfirmDelete: (path: string) => void;
+  onCancelDelete: () => void;
+  depth?: number;
+}
+
+function renderTreeNodes({
+  nodes,
+  activeFilePath,
+  assetPaths,
+  confirmDeletePath,
+  onSelectFile,
+  onInsertAssetSnippet,
+  onRequestDelete,
+  onConfirmDelete,
+  onCancelDelete,
   depth = 0,
-) {
+}: TreeRenderParams) {
   return nodes.map((node) => {
     if (node.kind === "directory") {
       return (
@@ -43,54 +73,148 @@ function renderTreeNodes(
             <span>▾</span>
             <span>{node.name}</span>
           </div>
-          {renderTreeNodes(node.children, activeFilePath, onSelectFile, depth + 1)}
+          {renderTreeNodes({
+            nodes: node.children,
+            activeFilePath,
+            assetPaths,
+            confirmDeletePath,
+            onSelectFile,
+            onInsertAssetSnippet,
+            onRequestDelete,
+            onConfirmDelete,
+            onCancelDelete,
+            depth: depth + 1,
+          })}
         </div>
       );
     }
 
-    const isActive = node.path === activeFilePath;
+    const isAsset = assetPaths.has(node.path);
+    const isActive = !isAsset && node.path === activeFilePath;
+    const isConfirming = confirmDeletePath === node.path;
+
     return (
-      <button
+      <div
         key={node.path}
-        type="button"
-        className={`tp-tree-btn${isActive ? " active" : ""}`}
-        style={{ paddingLeft: `${String(10 + depth * 12)}px` }}
-        onClick={() => onSelectFile(node.path)}
+        className={`tp-tree-row${isActive ? " active" : ""}`}
+        data-testid={`tree-row-${node.path}`}
       >
-        <span className="tp-tree-btn-label">{node.name}</span>
-        <span className="tp-file-badge">{extensionBadge(node.path)}</span>
-      </button>
+        {isConfirming ? (
+          <div
+            className="tp-tree-confirm-row"
+            style={{ paddingLeft: `${String(10 + depth * 12)}px` }}
+          >
+            <span className="tp-tree-btn-label">{node.name}</span>
+            <div className="tp-tree-confirm-actions">
+              <button
+                type="button"
+                className="tp-tree-confirm-btn danger"
+                data-testid="confirm-delete-file-btn"
+                onClick={() => onConfirmDelete(node.path)}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="tp-tree-confirm-btn"
+                onClick={onCancelDelete}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`tp-tree-btn${isActive ? " active" : ""}`}
+              style={{ paddingLeft: `${String(10 + depth * 12)}px` }}
+              data-testid={isAsset ? `asset-item-${node.path}` : `file-item-${node.path}`}
+              title={
+                isAsset
+                  ? `Click to insert \\includegraphics[width=0.8\\textwidth]{${node.path}}`
+                  : node.path
+              }
+              onClick={() => {
+                if (isAsset) {
+                  onInsertAssetSnippet(node.path);
+                } else {
+                  onSelectFile(node.path);
+                }
+              }}
+            >
+              <span className="tp-tree-btn-label">{node.name}</span>
+              <span className={`tp-file-badge${isAsset ? " asset" : ""}`}>
+                {extensionBadge(node.path, isAsset)}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="tp-tree-delete-btn"
+              data-testid={`delete-file-${node.path}`}
+              aria-label={`Delete ${node.path}`}
+              title={`Delete ${node.path}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestDelete(node.path);
+              }}
+            >
+              ×
+            </button>
+          </>
+        )}
+      </div>
     );
   });
 }
 
 export function SidebarPane({
   files,
+  assets,
   activeFilePath,
   outline,
   symbolIndex,
   projectRoot,
   widthPx = 240,
+  fileActionError = null,
   onSelectFile,
+  onInsertAssetSnippet,
+  onCreateFile,
+  onUploadFiles,
+  onDeleteFile,
   onSelectOutlineHeading,
   onExportZip,
   onImportZip,
   onOpenFolder,
 }: SidebarPaneProps) {
   const [activeTab, setActiveTab] = useState<"files" | "outline">("files");
+  const [newFileFormOpen, setNewFileFormOpen] = useState(false);
+  const [newFileInput, setNewFileInput] = useState("");
+  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
+  const [dragOverTree, setDragOverTree] = useState(false);
   const [folderFormOpen, setFolderFormOpen] = useState(false);
   const [folderInput, setFolderInput] = useState(projectRoot);
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const assetUploadInputRef = useRef<HTMLInputElement>(null);
+
+  const assetPaths = useMemo(
+    () => new Set(assets.map((asset) => asset.path)),
+    [assets],
+  );
 
   const tree = useMemo(
     () =>
-      buildProjectTree(
-        files.map((f) => ({
+      buildProjectTree([
+        ...files.map((f) => ({
           path: f.path,
           kind: "file" as const,
         })),
-      ),
-    [files],
+        ...assets.map((a) => ({
+          path: a.path,
+          kind: "file" as const,
+        })),
+      ]),
+    [assets, files],
   );
 
   return (
@@ -121,11 +245,133 @@ export function SidebarPane({
             Outline ({String(outline.length)})
           </button>
         </div>
+
+        {activeTab === "files" ? (
+          <div className="tp-sidebar-toolbar">
+            <button
+              type="button"
+              className="tp-sidebar-mini-btn"
+              data-testid="new-file-button"
+              onClick={() => {
+                setConfirmDeletePath(null);
+                setNewFileFormOpen((open) => !open);
+              }}
+              title="Create new .tex or .bib file"
+            >
+              + File
+            </button>
+            <button
+              type="button"
+              className="tp-sidebar-mini-btn"
+              data-testid="upload-asset-button"
+              onClick={() => assetUploadInputRef.current?.click()}
+              title="Upload figure (.png, .jpg, .pdf, .eps, .svg) or source file"
+            >
+              + Upload
+            </button>
+            <input
+              ref={assetUploadInputRef}
+              type="file"
+              multiple
+              accept=".png,.jpg,.jpeg,.pdf,.eps,.svg,.tex,.bib,.sty,.cls"
+              style={{ display: "none" }}
+              data-testid="upload-asset-input"
+              onChange={(event) => {
+                const picked = event.target.files ? Array.from(event.target.files) : [];
+                if (picked.length > 0) {
+                  onUploadFiles(picked);
+                }
+                event.target.value = "";
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
-      <div className="tp-sidebar-content">
+      {activeTab === "files" && newFileFormOpen ? (
+        <form
+          className="tp-new-file-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmed = newFileInput.trim();
+            if (!trimmed) return;
+            onCreateFile(trimmed);
+            setNewFileInput("");
+            setNewFileFormOpen(false);
+          }}
+        >
+          <input
+            type="text"
+            className="tp-folder-input"
+            data-testid="new-file-input"
+            value={newFileInput}
+            onChange={(event) => setNewFileInput(event.target.value)}
+            placeholder="chapters/conclusion.tex"
+            aria-label="New project file path"
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="tp-sidebar-mini-btn active"
+            data-testid="create-file-submit"
+          >
+            Add
+          </button>
+        </form>
+      ) : null}
+
+      {fileActionError ? (
+        <div className="tp-file-error" role="alert">
+          {fileActionError}
+        </div>
+      ) : null}
+
+      <div
+        className={`tp-sidebar-content${dragOverTree && activeTab === "files" ? " is-drag-over" : ""}`}
+        data-testid="sidebar-file-tree"
+        onDragOver={(event) => {
+          if (activeTab !== "files") return;
+          if (Array.from(event.dataTransfer.types).includes("Files")) {
+            event.preventDefault();
+            setDragOverTree(true);
+          }
+        }}
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setDragOverTree(false);
+        }}
+        onDrop={(event) => {
+          if (activeTab !== "files") return;
+          event.preventDefault();
+          setDragOverTree(false);
+          const dropped = Array.from(event.dataTransfer.files);
+          if (dropped.length > 0) {
+            onUploadFiles(dropped);
+          }
+        }}
+      >
         {activeTab === "files" ? (
-          <div>{renderTreeNodes(tree, activeFilePath, onSelectFile)}</div>
+          <>
+            {dragOverTree ? (
+              <div className="tp-drop-hint">Drop figures (.png/.jpg/.pdf) or .tex files</div>
+            ) : null}
+            <div>
+              {renderTreeNodes({
+                nodes: tree,
+                activeFilePath,
+                assetPaths,
+                confirmDeletePath,
+                onSelectFile,
+                onInsertAssetSnippet,
+                onRequestDelete: (path) => setConfirmDeletePath(path),
+                onConfirmDelete: (path) => {
+                  setConfirmDeletePath(null);
+                  onDeleteFile(path);
+                },
+                onCancelDelete: () => setConfirmDeletePath(null),
+              })}
+            </div>
+          </>
         ) : outline.length === 0 ? (
           <div className="tp-pdf-placeholder-desc" style={{ padding: "12px 8px" }}>
             No \section headings detected in {activeFilePath}.

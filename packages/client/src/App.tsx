@@ -1,4 +1,6 @@
 import {
+  buildIncludeGraphicsSnippet,
+  isBinaryAssetPath,
   rankRootCandidates,
   type AssistantProviderConfig,
   type AssistantStatusPayload,
@@ -16,10 +18,12 @@ import {
   type InverseSyncTarget,
   type OutlineHeading,
   type PackageSuggestionAction,
+  type ProjectAssetFile,
   type ProjectFile,
   type RecoverySnapshotPayload,
   type TexCountResultPayload,
   type TexCountSectionBreakdown,
+  type TexEnvironmentHealth,
   type ThemeMode,
 } from "@texpulse/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -263,6 +267,10 @@ export function App() {
   const [files, setFiles] = useState<ProjectFile[]>(() =>
     DEFAULT_PROJECT_FILES.map((file) => ({ ...file })),
   );
+  const [assets, setAssets] = useState<ProjectAssetFile[]>([]);
+  const [texHealth, setTexHealth] = useState<TexEnvironmentHealth | null>(null);
+  const [texBannerDismissed, setTexBannerDismissed] = useState(false);
+  const [fileActionError, setFileActionError] = useState<string | null>(null);
   const [activeFilePath, setActiveFilePath] = useState("main.tex");
   const [dirtyPaths, setDirtyPaths] = useState<Set<string>>(() => new Set());
   const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved" | "recovered">(
@@ -610,18 +618,31 @@ export function App() {
     let cancelled = false;
     const hydrate = async () => {
       try {
-        const res = await fetch("/api/project");
+        const [res, healthRes] = await Promise.all([
+          fetch("/api/project"),
+          fetch("/api/health").catch(() => null),
+        ]);
+        if (healthRes && healthRes.ok) {
+          const healthJson = (await healthRes.json().catch(() => ({}))) as {
+            texEnvironment?: TexEnvironmentHealth;
+          };
+          if (!cancelled && healthJson.texEnvironment) {
+            setTexHealth(healthJson.texEnvironment);
+          }
+        }
         if (!res.ok) return;
         const json = (await res.json()) as {
           ok?: boolean;
           projectRoot?: string;
           projectName?: string;
           files?: ProjectFile[];
+          assets?: ProjectAssetFile[];
           recovery?: RecoverySnapshotPayload | null;
         };
         if (cancelled || !json.ok || !Array.isArray(json.files) || json.files.length === 0) {
           return;
         }
+        setAssets(Array.isArray(json.assets) ? json.assets : []);
 
         if (json.projectRoot) setProjectRoot(json.projectRoot);
         if (json.projectName && json.projectName !== ".texpulse-workspace") {
@@ -1201,11 +1222,13 @@ export function App() {
         const json = (await response.json()) as {
           ok?: boolean;
           files?: ProjectFile[];
+          assets?: ProjectAssetFile[];
         };
         if (!json.ok || !Array.isArray(json.files) || json.files.length === 0) return;
 
         setFiles(json.files);
         filesRef.current = json.files;
+        setAssets(Array.isArray(json.assets) ? json.assets : []);
         setDirtyPaths(new Set());
         saveLocalRecoverySnapshot(null);
         setSaveState("saved");
@@ -1237,6 +1260,7 @@ export function App() {
           projectRoot?: string;
           projectName?: string;
           files?: ProjectFile[];
+          assets?: ProjectAssetFile[];
           error?: string;
         };
         if (!response.ok || !json.ok || !Array.isArray(json.files)) {
@@ -1248,6 +1272,7 @@ export function App() {
         if (json.projectName) setProjectName(json.projectName);
         setFiles(json.files);
         filesRef.current = json.files;
+        setAssets(Array.isArray(json.assets) ? json.assets : []);
         setDirtyPaths(new Set());
         saveLocalRecoverySnapshot(null);
         setSaveState("saved");
@@ -1268,6 +1293,169 @@ export function App() {
     },
     [refreshTexCount],
   );
+
+  const handleCreateProjectFile = useCallback((filePath: string) => {
+    void (async () => {
+      setFileActionError(null);
+      try {
+        const defaultContent = filePath.toLowerCase().endsWith(".tex")
+          ? `\\section{${filePath.replace(/\.tex$/iu, "").split("/").at(-1) ?? "New Section"}}\n\n`
+          : "";
+        const res = await fetch("/api/project/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: filePath, content: defaultContent }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          file?: ProjectFile;
+          files?: ProjectFile[];
+          assets?: ProjectAssetFile[];
+          error?: string;
+        };
+        if (!res.ok || !json.ok || !json.file) {
+          setFileActionError(json.error ?? "Unable to create project file.");
+          return;
+        }
+        if (Array.isArray(json.files)) {
+          setFiles(json.files);
+          filesRef.current = json.files;
+        }
+        if (Array.isArray(json.assets)) {
+          setAssets(json.assets);
+        }
+        setActiveFilePath(json.file.path);
+        setViewMode("code");
+      } catch {
+        setFileActionError("Backend unreachable while creating file.");
+      }
+    })();
+  }, []);
+
+  const handleDeleteProjectFile = useCallback(
+    (filePath: string) => {
+      void (async () => {
+        setFileActionError(null);
+        try {
+          const res = await fetch(
+            `/api/project/file?path=${encodeURIComponent(filePath)}`,
+            { method: "DELETE" },
+          );
+          const json = (await res.json()) as {
+            ok?: boolean;
+            files?: ProjectFile[];
+            assets?: ProjectAssetFile[];
+            error?: string;
+          };
+          if (!res.ok || !json.ok) {
+            setFileActionError(json.error ?? "Unable to delete file.");
+            return;
+          }
+          const nextFiles = Array.isArray(json.files) ? json.files : filesRef.current;
+          setFiles(nextFiles);
+          filesRef.current = nextFiles;
+          if (Array.isArray(json.assets)) {
+            setAssets(json.assets);
+          }
+          setDirtyPaths((prev) => {
+            if (!prev.has(filePath)) return prev;
+            const next = new Set(prev);
+            next.delete(filePath);
+            return next;
+          });
+          if (activeFilePathRef.current === filePath && nextFiles.length > 0) {
+            const best =
+              rankRootCandidates(
+                nextFiles.map((f) => ({ path: f.path, content: f.content })),
+              )[0]?.path ?? nextFiles[0]!.path;
+            setActiveFilePath(best);
+          }
+        } catch {
+          setFileActionError("Backend unreachable while deleting file.");
+        }
+      })();
+    },
+    [],
+  );
+
+  const handleUploadFiles = useCallback((selectedFiles: readonly File[]) => {
+    void (async () => {
+      setFileActionError(null);
+      for (const file of selectedFiles) {
+        const cleanName = file.name.replace(/[\\/:*?"<>|]/gu, "_").trim();
+        if (!cleanName) continue;
+        try {
+          if (isBinaryAssetPath(cleanName)) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const targetPath = `figures/${cleanName}`;
+            const res = await fetch("/api/project/asset", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                path: targetPath,
+                contentBase64: bytesToBase64(bytes),
+              }),
+            });
+            const json = (await res.json()) as {
+              ok?: boolean;
+              files?: ProjectFile[];
+              assets?: ProjectAssetFile[];
+              error?: string;
+            };
+            if (!res.ok || !json.ok) {
+              setFileActionError(json.error ?? `Failed to upload ${cleanName}`);
+              continue;
+            }
+            if (Array.isArray(json.files)) {
+              setFiles(json.files);
+              filesRef.current = json.files;
+            }
+            if (Array.isArray(json.assets)) {
+              setAssets(json.assets);
+            }
+          } else {
+            const textContent = await file.text();
+            const res = await fetch("/api/project/file", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path: cleanName, content: textContent }),
+            });
+            if (!res.ok) {
+              const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+              setFileActionError(errJson.error ?? `Failed to add ${cleanName}`);
+              continue;
+            }
+            const projRes = await fetch("/api/project");
+            if (projRes.ok) {
+              const projJson = (await projRes.json()) as {
+                files?: ProjectFile[];
+                assets?: ProjectAssetFile[];
+              };
+              if (Array.isArray(projJson.files)) {
+                setFiles(projJson.files);
+                filesRef.current = projJson.files;
+              }
+              if (Array.isArray(projJson.assets)) {
+                setAssets(projJson.assets);
+              }
+            }
+          }
+        } catch {
+          setFileActionError(`Upload failed for ${cleanName}`);
+        }
+      }
+    })();
+  }, []);
+
+  const handleInsertAssetSnippet = useCallback((assetPath: string) => {
+    setViewMode("code");
+    const targetPath = activeFilePathRef.current;
+    setInlineInsertion({
+      filePath: targetPath,
+      text: buildIncludeGraphicsSnippet(assetPath),
+      nonce: Date.now(),
+    });
+  }, []);
 
   const runForwardSyncAt = useCallback(
     async (sourcePathRel: string, line: number, column = 1) => {
@@ -1579,12 +1767,18 @@ export function App() {
           <>
             <SidebarPane
               files={files}
+              assets={assets}
               activeFilePath={activeFile.path}
               outline={outline}
               symbolIndex={symbolIndex}
               projectRoot={projectRoot}
               widthPx={sidebarWidth}
+              fileActionError={fileActionError}
               onSelectFile={(path) => setActiveFilePath(path)}
+              onInsertAssetSnippet={handleInsertAssetSnippet}
+              onCreateFile={handleCreateProjectFile}
+              onUploadFiles={handleUploadFiles}
+              onDeleteFile={handleDeleteProjectFile}
               onSelectOutlineHeading={handleJumpToOutlineHeading}
               onExportZip={handleExportZip}
               onImportZip={handleImportZip}
@@ -1620,6 +1814,23 @@ export function App() {
               : undefined
           }
         >
+          {texHealth !== null && !texHealth.healthy && !texBannerDismissed ? (
+            <div className="tp-env-banner" data-testid="tex-env-banner" role="status">
+              <span>
+                <strong>TeX toolchain missing:</strong>{" "}
+                <code>{texHealth.missing.join(", ")}</code> not found on PATH. Install{" "}
+                <strong>MiKTeX</strong> or <strong>TeX Live</strong> to compile PDFs locally.
+              </span>
+              <button
+                type="button"
+                className="tp-icon-btn"
+                data-testid="dismiss-tex-banner-btn"
+                onClick={() => setTexBannerDismissed(true)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
           {viewMode === "code" ? (
             <LatexEditorPane
               filePath={activeFile.path}

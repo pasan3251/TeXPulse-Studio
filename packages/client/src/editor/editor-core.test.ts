@@ -1,5 +1,10 @@
 import { CompletionContext } from "@codemirror/autocomplete";
 import { EditorSelection, EditorState } from "@codemirror/state";
+import {
+  buildIncludeGraphicsSnippet,
+  inferProjectFileKind,
+  isBinaryAssetPath,
+} from "@texpulse/shared";
 import { latexLanguage } from "codemirror-lang-latex";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PROJECT_FILES } from "../data/defaultProject.js";
@@ -323,5 +328,13 @@ describe("CodeMirror 6 editor core extensions", () => {
     });
     expect(focal.scrollLeft).toBeCloseTo(275, 5);
     expect(focal.scrollTop).toBeCloseTo(450, 5);
+
+    expect(isBinaryAssetPath("figures/diagram.png")).toBe(true);
+    expect(isBinaryAssetPath("figures/plot.PDF")).toBe(true);
+    expect(isBinaryAssetPath("main.tex")).toBe(false);
+    expect(inferProjectFileKind("figures/diagram.svg")).toBe("asset");
+    expect(buildIncludeGraphicsSnippet("figures\\diagram.png")).toBe(
+      "\\includegraphics[width=0.8\\textwidth]{figures/diagram.png}",
+    );
   });
 });

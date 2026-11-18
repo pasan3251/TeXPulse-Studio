@@ -336,8 +336,37 @@ internal static class InstallerCore {
         }
     }
 
+    private static void CloseRunningInstallProcesses(string normalizedRoot) {
+        int currentPid = Process.GetCurrentProcess().Id;
+        foreach (string procName in new[] { "TeXPulseStudio", "node" }) {
+            Process[] procs;
+            try {
+                procs = Process.GetProcessesByName(procName);
+            } catch {
+                continue;
+            }
+            foreach (Process proc in procs) {
+                try {
+                    if (proc.Id == currentPid) continue;
+                    string exeFile = proc.MainModule != null ? proc.MainModule.FileName : null;
+                    if (!string.IsNullOrEmpty(exeFile) &&
+                        exeFile.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)) {
+                        proc.Kill();
+                        proc.WaitForExit(3000);
+                    }
+                } catch {
+                    // Ignore inaccessible or already exited processes
+                } finally {
+                    proc.Dispose();
+                }
+            }
+        }
+    }
+
     internal static void Install(string installDir, bool silent) {
         Directory.CreateDirectory(installDir);
+        string normalizedRoot = Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        CloseRunningInstallProcesses(normalizedRoot);
 
         string tempZip = Path.Combine(Path.GetTempPath(), "texpulse-setup-" + Guid.NewGuid().ToString("N") + ".zip");
         try {
@@ -348,7 +377,6 @@ internal static class InstallerCore {
                     res.CopyTo(fs);
                 }
             }
-            string normalizedRoot = Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             using (ZipArchive archive = ZipFile.OpenRead(tempZip)) {
                 foreach (ZipArchiveEntry entry in archive.Entries) {
                     string destPath = Path.GetFullPath(Path.Combine(installDir, entry.FullName));
@@ -429,6 +457,8 @@ internal static class InstallerCore {
     }
 
     internal static void Uninstall(string installDir, bool silent) {
+        string normalizedRoot = Path.GetFullPath(installDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        CloseRunningInstallProcesses(normalizedRoot);
         foreach (string subkey in new[] {
             @"Software\Classes\SystemFileAssociations\.tex\shell\TeXPulseStudio",
             @"Software\Classes\TeXPulseStudio.tex",

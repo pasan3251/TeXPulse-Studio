@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
+import type { Stats } from "node:fs";
 import { link, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "node:path";
-import { inferProjectFileKind, type ProjectFile } from "@texpulse/shared";
+import {
+  inferProjectFileKind,
+  isBinaryAssetPath,
+  type ProjectAssetFile,
+  type ProjectFile,
+} from "@texpulse/shared";
 
 const DEFAULT_IGNORED_DIRECTORIES = new Set([
   ".git",
@@ -14,11 +20,19 @@ const DEFAULT_IGNORED_DIRECTORIES = new Set([
 ]);
 
 const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_BINARY_ASSET_BYTES = 50 * 1024 * 1024;
 
 export class ProjectPathError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProjectPathError";
+  }
+}
+
+export class ProjectAlreadyExistsError extends Error {
+  constructor(projectPath: string) {
+    super(`Project file already exists: ${projectPath}`);
+    this.name = "ProjectAlreadyExistsError";
   }
 }
 
@@ -165,9 +179,9 @@ export class LocalProjectStore {
     return new LocalProjectStore(canonical);
   }
 
-  async listTextFiles(): Promise<ProjectFile[]> {
-    const results: ProjectFile[] = [];
-
+  private async walkFiles(
+    visitor: (portablePath: string, absolute: string, entryStat: Stats) => Promise<void>,
+  ): Promise<void> {
     const visit = async (dir: string): Promise<void> => {
       const entries = await readdir(dir, { withFileTypes: true });
       entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -182,27 +196,70 @@ export class LocalProjectStore {
           await visit(absolute);
           continue;
         }
-        if (!entryStat.isFile() || entryStat.size > MAX_TEXT_FILE_BYTES) {
+        if (!entryStat.isFile()) {
           continue;
         }
         const portablePath = relative(this.rootDirectory, absolute).split(sep).join("/");
-        const kind = inferProjectFileKind(portablePath);
-        if (kind === "other" && !portablePath.toLowerCase().endsWith(".md")) {
-          continue;
-        }
-        const bytes = await readFile(absolute);
-        const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        results.push({
-          path: portablePath,
-          content,
-          kind,
-          lastModified: entryStat.mtimeMs,
-        });
+        await visitor(portablePath, absolute, entryStat);
       }
     };
 
     await visit(this.rootDirectory);
+  }
+
+  async listTextFiles(): Promise<ProjectFile[]> {
+    const results: ProjectFile[] = [];
+    await this.walkFiles(async (portablePath, absolute, entryStat) => {
+      if (entryStat.size > MAX_TEXT_FILE_BYTES) return;
+      const kind = inferProjectFileKind(portablePath);
+      if (kind === "asset" || (kind === "other" && !portablePath.toLowerCase().endsWith(".md"))) {
+        return;
+      }
+      const bytes = await readFile(absolute);
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      results.push({
+        path: portablePath,
+        content,
+        kind,
+        lastModified: entryStat.mtimeMs,
+      });
+    });
     return results;
+  }
+
+  async listAssetFiles(): Promise<ProjectAssetFile[]> {
+    const assets: ProjectAssetFile[] = [];
+    await this.walkFiles(async (portablePath, _absolute, entryStat) => {
+      if (entryStat.size > MAX_BINARY_ASSET_BYTES) return;
+      if (!isBinaryAssetPath(portablePath)) return;
+      assets.push({
+        path: portablePath,
+        kind: "asset",
+        sizeBytes: entryStat.size,
+        lastModified: entryStat.mtimeMs,
+      });
+    });
+    return assets;
+  }
+
+  async createProjectFile(projectPath: string, content = ""): Promise<ProjectFile> {
+    const normalized = normalizeProjectPath(projectPath);
+    if (isBinaryAssetPath(normalized)) {
+      throw new ProjectPathError(`Use asset upload endpoint for binary figure: ${normalized}`);
+    }
+    const target = await resolveProjectPath(this.rootDirectory, normalized, true);
+    const existing = await stat(target).catch(() => null);
+    if (existing !== null) {
+      throw new ProjectAlreadyExistsError(normalized);
+    }
+    await atomicWriteFile(target, content, true);
+    const createdStat = await stat(target);
+    return {
+      path: normalized,
+      content,
+      kind: inferProjectFileKind(normalized),
+      lastModified: createdStat.mtimeMs,
+    };
   }
 
   async writeProjectFile(projectPath: string, content: string): Promise<ProjectFile> {
@@ -222,6 +279,41 @@ export class LocalProjectStore {
     const normalized = normalizeProjectPath(projectPath);
     const target = await resolveProjectPath(this.rootDirectory, normalized, true);
     await atomicWriteBytes(target, bytes, false);
+    return normalized;
+  }
+
+  async writeProjectAsset(projectPath: string, bytes: Uint8Array): Promise<ProjectAssetFile> {
+    const normalized = normalizeProjectPath(projectPath);
+    if (!isBinaryAssetPath(normalized)) {
+      throw new ProjectPathError(
+        `Unsupported figure/asset extension for "${normalized}". Allowed: .png, .jpg, .jpeg, .pdf, .eps, .svg`,
+      );
+    }
+    if (bytes.byteLength > MAX_BINARY_ASSET_BYTES) {
+      throw new ProjectPathError(`Asset exceeds ${String(MAX_BINARY_ASSET_BYTES)} byte limit.`);
+    }
+    await this.writeProjectBinaryFile(normalized, bytes);
+    const target = await resolveProjectPath(this.rootDirectory, normalized, false);
+    const assetStat = await stat(target);
+    return {
+      path: normalized,
+      kind: "asset",
+      sizeBytes: bytes.byteLength,
+      lastModified: assetStat.mtimeMs,
+    };
+  }
+
+  async deleteProjectFile(projectPath: string): Promise<string> {
+    const normalized = normalizeProjectPath(projectPath);
+    if (normalized.split("/").some((segment) => DEFAULT_IGNORED_DIRECTORIES.has(segment.toLowerCase()))) {
+      throw new ProjectPathError(`Cannot delete protected workspace path: ${normalized}`);
+    }
+    const target = await resolveProjectPath(this.rootDirectory, normalized, false);
+    const entryStat = await lstat(target);
+    if (!entryStat.isFile()) {
+      throw new ProjectPathError(`Target is not a regular file: ${normalized}`);
+    }
+    await rm(target);
     return normalized;
   }
 }

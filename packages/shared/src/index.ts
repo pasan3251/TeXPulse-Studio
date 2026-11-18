@@ -16,7 +16,7 @@ export type CompileStatus = "ready" | "compiling" | "error" | "warning";
 export type DiagnosticSeverity = "error" | "warning" | "info";
 export type DiagnosticCategory = "error" | "warning" | "typesetting";
 export type DiagnosticSource = "ast" | "latex-log" | "bib-log";
-export type ProjectFileKind = "tex" | "bib" | "sty" | "cls" | "other";
+export type ProjectFileKind = "tex" | "bib" | "sty" | "cls" | "asset" | "other";
 
 export interface PackageSuggestionAction {
   type: "insert-package";
@@ -138,6 +138,25 @@ export interface ProjectFile {
   content: string;
   kind: ProjectFileKind;
   lastModified: number;
+}
+
+export interface ProjectAssetFile {
+  path: string;
+  kind: "asset";
+  sizeBytes: number;
+  lastModified: number;
+}
+
+export interface TexToolHealth {
+  name: "pdflatex" | "latexmk" | "synctex";
+  available: boolean;
+  path: string | null;
+}
+
+export interface TexEnvironmentHealth {
+  healthy: boolean;
+  missing: readonly ("pdflatex" | "latexmk" | "synctex")[];
+  tools: readonly TexToolHealth[];
 }
 
 export interface ProjectTreeEntryInput {
@@ -330,5 +349,12 @@ export interface IAssistantService {
   generateInlineLatex(input: ContextAnchoredPromptInput): Promise<InlineGenerationResult>;
 }
 
-export { buildProjectTree, rankRootCandidates, inferProjectFileKind } from "./project-helpers.js";
+export {
+  ASSET_FILE_EXTENSIONS,
+  buildIncludeGraphicsSnippet,
+  buildProjectTree,
+  inferProjectFileKind,
+  isBinaryAssetPath,
+  rankRootCandidates,
+} from "./project-helpers.js";
 export { DEFAULT_PROJECT_FILES, DEFAULT_PROJECT_NAME } from "./default-project.js";

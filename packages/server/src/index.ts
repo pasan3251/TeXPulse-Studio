@@ -16,9 +16,11 @@ import {
 } from "@texpulse/shared";
 import { AssistantService } from "./assistant/assistant-service.js";
 import { CompilerRunner } from "./compiler/compiler-runner.js";
+import { probeTexEnvironment } from "./compiler/tex-health.js";
 import { TexCountService } from "./compiler/texcount-service.js";
 import {
   LocalProjectStore,
+  ProjectAlreadyExistsError,
   ProjectPathError,
   normalizeProjectPath,
   resolveProjectPath,
@@ -141,18 +143,22 @@ async function tryServeStaticSpa(
   return true;
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += buf.length;
     if (totalBytes > MAX_JSON_BODY_BYTES) {
-      throw new Error("Request JSON body exceeds maximum size limit.");
+      throw new Error("Request body exceeds maximum size limit.");
     }
     chunks.push(buf);
   }
-  const raw = Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks);
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const raw = (await readRawBody(req)).toString("utf8");
   return raw.trim() === "" ? {} : (JSON.parse(raw) as unknown);
 }
 
@@ -224,19 +230,22 @@ export async function startLocalServer(
 
     try {
       if (req.method === "GET" && requestUrl.pathname === "/api/health") {
+        const texEnvironment = await probeTexEnvironment();
         sendJson(res, 200, {
           ok: true,
           version: "2.0.0",
           phase: 5,
           compilerFlags: LATEXMK_BASE_FLAGS,
           projectRoot: store.rootDirectory,
+          texEnvironment,
         });
         return;
       }
 
       if (req.method === "GET" && requestUrl.pathname === "/api/project") {
-        const [files, recovery] = await Promise.all([
+        const [files, assets, recovery] = await Promise.all([
           store.listTextFiles(),
+          store.listAssetFiles(),
           recoveryService.load(),
         ]);
         sendJson(res, 200, {
@@ -245,6 +254,7 @@ export async function startLocalServer(
           projectName: basename(store.rootDirectory),
           recentDirectories,
           files,
+          assets,
           recovery,
         });
         return;
@@ -271,8 +281,9 @@ export async function startLocalServer(
         recoveryService = new RecoveryService(store.rootDirectory);
         texcountService = new TexCountService(store.rootDirectory);
         recordRecentDirectory(store.rootDirectory);
-        const [files, recovery] = await Promise.all([
+        const [files, assets, recovery] = await Promise.all([
           store.listTextFiles(),
+          store.listAssetFiles(),
           recoveryService.load(),
         ]);
         sendJson(res, 200, {
@@ -281,8 +292,31 @@ export async function startLocalServer(
           projectName: basename(store.rootDirectory),
           recentDirectories,
           files,
+          assets,
           recovery,
         });
+        return;
+      }
+
+      if (req.method === "POST" && requestUrl.pathname === "/api/project/file") {
+        const body = (await readJsonBody(req)) as {
+          path?: unknown;
+          content?: unknown;
+        };
+        if (typeof body.path !== "string" || body.path.trim() === "") {
+          sendJson(res, 400, {
+            ok: false,
+            error: "Expected non-empty file path.",
+          });
+          return;
+        }
+        const initialContent = typeof body.content === "string" ? body.content : "";
+        const file = await store.createProjectFile(body.path.trim(), initialContent);
+        const [files, assets] = await Promise.all([
+          store.listTextFiles(),
+          store.listAssetFiles(),
+        ]);
+        sendJson(res, 201, { ok: true, file, files, assets });
         return;
       }
 
@@ -300,6 +334,76 @@ export async function startLocalServer(
         }
         const file = await store.writeProjectFile(body.path, body.content);
         sendJson(res, 200, { ok: true, file });
+        return;
+      }
+
+      if (req.method === "DELETE" && requestUrl.pathname === "/api/project/file") {
+        let targetPath = requestUrl.searchParams.get("path")?.trim() ?? "";
+        if (!targetPath) {
+          const body = (await readJsonBody(req)) as { path?: unknown };
+          if (typeof body.path === "string") {
+            targetPath = body.path.trim();
+          }
+        }
+        if (!targetPath) {
+          sendJson(res, 400, { ok: false, error: "Expected path parameter for deletion." });
+          return;
+        }
+        const deletedPath = await store.deleteProjectFile(targetPath);
+        const [files, assets] = await Promise.all([
+          store.listTextFiles(),
+          store.listAssetFiles(),
+        ]);
+        sendJson(res, 200, { ok: true, deletedPath, files, assets });
+        return;
+      }
+
+      if (req.method === "POST" && requestUrl.pathname === "/api/project/asset") {
+        const queryPath = requestUrl.searchParams.get("path")?.trim();
+        let targetPath = "";
+        let bytes: Buffer;
+        if (queryPath && !String(req.headers["content-type"] ?? "").includes("application/json")) {
+          targetPath = queryPath;
+          bytes = await readRawBody(req);
+        } else {
+          const body = (await readJsonBody(req)) as {
+            path?: unknown;
+            filename?: unknown;
+            contentBase64?: unknown;
+            base64?: unknown;
+          };
+          targetPath =
+            typeof body.path === "string" && body.path.trim() !== ""
+              ? body.path.trim()
+              : typeof body.filename === "string" && body.filename.trim() !== ""
+                ? body.filename.trim()
+                : "";
+          const rawB64 =
+            typeof body.contentBase64 === "string"
+              ? body.contentBase64
+              : typeof body.base64 === "string"
+                ? body.base64
+                : "";
+          if (!targetPath || !rawB64.trim()) {
+            sendJson(res, 400, {
+              ok: false,
+              error: "Expected asset path and contentBase64 payload.",
+            });
+            return;
+          }
+          const cleanB64 = rawB64.replace(/^data:[^,]+,/u, "").trim();
+          bytes = Buffer.from(cleanB64, "base64");
+        }
+        if (!targetPath || bytes.byteLength === 0) {
+          sendJson(res, 400, { ok: false, error: "Expected non-empty binary asset upload." });
+          return;
+        }
+        const asset = await store.writeProjectAsset(targetPath, bytes);
+        const [files, assets] = await Promise.all([
+          store.listTextFiles(),
+          store.listAssetFiles(),
+        ]);
+        sendJson(res, 201, { ok: true, asset, files, assets });
         return;
       }
 
@@ -393,12 +497,16 @@ export async function startLocalServer(
         const zipBuffer = Buffer.from(cleanBase64, "base64");
         const result = await importProjectZipBuffer(store, zipBuffer);
         await recoveryService.clear();
-        const files = await store.listTextFiles();
+        const [files, assets] = await Promise.all([
+          store.listTextFiles(),
+          store.listAssetFiles(),
+        ]);
         sendJson(res, 200, {
           ok: true,
           importedPaths: result.importedPaths,
           skippedPaths: result.skippedPaths,
           files,
+          assets,
         });
         return;
       }
@@ -644,11 +752,13 @@ export async function startLocalServer(
       sendJson(res, 404, { ok: false, error: "Not found" });
     } catch (error) {
       const status =
-        error instanceof ProjectPathError
-          ? 400
-          : error instanceof SynctexServiceError
-            ? 422
-            : 500;
+        error instanceof ProjectAlreadyExistsError
+          ? 409
+          : error instanceof ProjectPathError
+            ? 400
+            : error instanceof SynctexServiceError
+              ? 422
+              : 500;
       sendJson(res, status, {
         ok: false,
         error: error instanceof Error ? error.message : "Unexpected server error",

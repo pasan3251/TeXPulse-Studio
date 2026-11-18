@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { probeTexEnvironment } from "./compiler/tex-health.js";
 import {
   buildDesktopBrowserArgs,
   buildDesktopLaunchUrl,
@@ -227,6 +228,101 @@ describe("@texpulse/server project store", () => {
       expect(buildDesktopLaunchUrl(4317, undefined)).toBe("http://127.0.0.1:4317/");
     } finally {
       await rm(cliRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("supports file CRUD, binary figure upload (POST /api/project/asset), and TeX health checks", async () => {
+    const fakeBin = await mkdtemp(join(tmpdir(), "texpulse-fake-texbin-"));
+    const projRoot = await mkdtemp(join(tmpdir(), "texpulse-crud-proj-"));
+    let server: Awaited<ReturnType<typeof startLocalServer>> | null = null;
+    try {
+      await writeFile(join(fakeBin, "pdflatex.exe"), "stub", "utf8");
+      const partialEnv = await probeTexEnvironment(
+        { PATH: fakeBin, PATHEXT: ".EXE" },
+        "win32",
+      );
+      expect(partialEnv.healthy).toBe(false);
+      expect(partialEnv.missing).toEqual(["latexmk", "synctex"]);
+
+      await writeFile(join(fakeBin, "latexmk.exe"), "stub", "utf8");
+      await writeFile(join(fakeBin, "synctex.exe"), "stub", "utf8");
+      const fullEnv = await probeTexEnvironment(
+        { PATH: fakeBin, PATHEXT: ".EXE" },
+        "win32",
+      );
+      expect(fullEnv.healthy).toBe(true);
+      expect(fullEnv.missing).toEqual([]);
+
+      server = await startLocalServer(projRoot, 0, { serveClient: false });
+      const port = (server.address() as AddressInfo).port;
+      const base = `http://127.0.0.1:${String(port)}`;
+
+      const healthRes = await fetch(`${base}/api/health`);
+      const healthJson = (await healthRes.json()) as {
+        ok: boolean;
+        texEnvironment?: { healthy: boolean; missing: string[]; tools: unknown[] };
+      };
+      expect(healthJson.ok).toBe(true);
+      expect(Array.isArray(healthJson.texEnvironment?.tools)).toBe(true);
+      expect(healthJson.texEnvironment?.tools).toHaveLength(3);
+
+      const createRes = await fetch(`${base}/api/project/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "chapters/appendix.tex", content: "\\section{Appendix}\n" }),
+      });
+      expect(createRes.status).toBe(201);
+
+      const dupRes = await fetch(`${base}/api/project/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "chapters/appendix.tex", content: "dup" }),
+      });
+      expect(dupRes.status).toBe(409);
+
+      const pngBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+      const uploadRes = await fetch(`${base}/api/project/asset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "figures/chart.png",
+          contentBase64: pngBytes.toString("base64"),
+        }),
+      });
+      expect(uploadRes.status).toBe(201);
+      const uploadJson = (await uploadRes.json()) as {
+        ok: boolean;
+        assets: Array<{ path: string; kind: string; sizeBytes: number }>;
+      };
+      expect(uploadJson.ok).toBe(true);
+      expect(uploadJson.assets.some((a) => a.path === "figures/chart.png" && a.sizeBytes === 8)).toBe(true);
+
+      const badExtRes = await fetch(`${base}/api/project/asset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "figures/evil.exe",
+          contentBase64: pngBytes.toString("base64"),
+        }),
+      });
+      expect(badExtRes.status).toBe(400);
+
+      const delRes = await fetch(
+        `${base}/api/project/file?path=${encodeURIComponent("chapters/appendix.tex")}`,
+        { method: "DELETE" },
+      );
+      expect(delRes.status).toBe(200);
+      const delJson = (await delRes.json()) as {
+        ok: boolean;
+        files: Array<{ path: string }>;
+      };
+      expect(delJson.files.some((f) => f.path === "chapters/appendix.tex")).toBe(false);
+    } finally {
+      if (server) {
+        await new Promise<void>((resolveClose) => server!.close(() => resolveClose()));
+      }
+      await rm(fakeBin, { recursive: true, force: true });
+      await rm(projRoot, { recursive: true, force: true });
     }
   });
 });
