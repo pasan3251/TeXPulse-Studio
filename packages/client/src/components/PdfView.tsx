@@ -19,8 +19,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
 } from "react";
+import {
+  clampPdfZoom,
+  computeFocalScrollPosition,
+  computeNextPinchZoomScale,
+} from "../utils/layout-ergonomics.js";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -33,6 +39,7 @@ export interface PdfViewProps {
   compiling: boolean;
   syncTarget: ForwardSyncTarget | null;
   syncStatusMessage: string | null;
+  style?: CSSProperties | undefined;
   onCompileNow: (forceFullBuild?: boolean) => void;
   onForwardSearch: () => void;
   onInverseSearch: (page: number, x: number, y: number) => void;
@@ -48,7 +55,7 @@ interface PdfPageCanvasProps {
   pageRef: (el: HTMLDivElement | null) => void;
   onError: (msg: string) => void;
   onInverseSearch: (page: number, x: number, y: number) => void;
-  onPageRendered: (page: number) => void;
+  onPageRendered: (page: number, renderedScale: number) => void;
 }
 
 function PdfPageCanvas({
@@ -119,12 +126,12 @@ function PdfPageCanvas({
             ? {}
             : { transform: [outputScale, 0, 0, outputScale, 0, 0] }),
         });
-        return renderTask.promise;
+        return renderTask.promise.then(() => boundedScale);
       })
-      .then(() => {
-        if (!cancelled) {
+      .then((appliedScale) => {
+        if (!cancelled && typeof appliedScale === "number") {
           setRendering(false);
-          onPageRendered(pageNumber);
+          onPageRendered(pageNumber, appliedScale);
         }
       })
       .catch((err: unknown) => {
@@ -230,6 +237,7 @@ export function PdfView({
   compiling,
   syncTarget,
   syncStatusMessage,
+  style,
   onCompileNow,
   onForwardSearch,
   onInverseSearch,
@@ -238,13 +246,23 @@ export function PdfView({
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
   const savedScrollRef = useRef({ left: 0, top: 0 });
   const renderedPagesRef = useRef(new Set<number>());
+  const page1ScaleRef = useRef(1);
+  const zoomCommitTimerRef = useRef<number | null>(null);
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomMode, setZoomMode] = useState<ZoomMode>("fit-width");
   const [customScale, setCustomScale] = useState(1);
+  const [gestureScale, setGestureScale] = useState<number | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 420, height: 600 });
   const [pdfError, setPdfError] = useState<string | null>(null);
+
+  const zoomModeRef = useRef(zoomMode);
+  zoomModeRef.current = zoomMode;
+  const customScaleRef = useRef(customScale);
+  customScaleRef.current = customScale;
+  const gestureScaleRef = useRef(gestureScale);
+  gestureScaleRef.current = gestureScale;
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -308,8 +326,79 @@ export function PdfView({
     }
   }, [syncTarget]);
 
+  // Native { passive: false } wheel listener for smooth trackpad pinch-zoom & Ctrl+Wheel
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport === null) return;
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const activeCustom =
+        gestureScaleRef.current ??
+        (zoomModeRef.current === "custom"
+          ? customScaleRef.current
+          : Math.max(1, Number(page1ScaleRef.current.toFixed(2))));
+
+      const previousVisualScale =
+        gestureScaleRef.current ??
+        (zoomModeRef.current === "custom" ? customScaleRef.current : page1ScaleRef.current);
+
+      const nextScale = computeNextPinchZoomScale(activeCustom, event.deltaY);
+      const rect = viewport.getBoundingClientRect();
+      const cursorOffsetX = Math.max(0, event.clientX - rect.left);
+      const cursorOffsetY = Math.max(0, event.clientY - rect.top);
+      const nextScroll = computeFocalScrollPosition({
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+        cursorOffsetX,
+        cursorOffsetY,
+        previousScale: previousVisualScale,
+        nextScale,
+      });
+
+      gestureScaleRef.current = nextScale;
+      zoomModeRef.current = "custom";
+      setZoomMode("custom");
+      setGestureScale(nextScale);
+
+      savedScrollRef.current = {
+        left: nextScroll.scrollLeft,
+        top: nextScroll.scrollTop,
+      };
+      viewport.scrollLeft = nextScroll.scrollLeft;
+      viewport.scrollTop = nextScroll.scrollTop;
+
+      if (zoomCommitTimerRef.current !== null) {
+        window.clearTimeout(zoomCommitTimerRef.current);
+      }
+      zoomCommitTimerRef.current = window.setTimeout(() => {
+        zoomCommitTimerRef.current = null;
+        gestureScaleRef.current = null;
+        customScaleRef.current = nextScale;
+        setCustomScale(nextScale);
+        setGestureScale(null);
+      }, 120);
+    };
+
+    viewport.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleNativeWheel);
+      if (zoomCommitTimerRef.current !== null) {
+        window.clearTimeout(zoomCommitTimerRef.current);
+        zoomCommitTimerRef.current = null;
+      }
+    };
+  }, [pdfBytes]);
+
   const handlePageRendered = useCallback(
-    (pageNumber: number) => {
+    (pageNumber: number, renderedScale: number) => {
+      if (pageNumber === 1) {
+        page1ScaleRef.current = renderedScale;
+      }
       renderedPagesRef.current.add(pageNumber);
       if (
         pdf !== null &&
@@ -332,12 +421,20 @@ export function PdfView({
     [pdf],
   );
 
+  const activeScale = gestureScale ?? customScale;
   const zoomLabel =
     zoomMode === "fit-width"
       ? "Fit Width"
       : zoomMode === "fit-page"
         ? "Fit Page"
-        : `${String(Math.round(customScale * 100))}%`;
+        : `${String(Math.round(activeScale * 100))}%`;
+
+  const committedPreviewBase =
+    zoomMode === "custom" ? customScale : page1ScaleRef.current;
+  const gestureTransformScale =
+    gestureScale !== null && committedPreviewBase > 0
+      ? gestureScale / committedPreviewBase
+      : 1;
 
   const updateCurrentPageOnScroll = () => {
     const viewport = viewportRef.current;
@@ -357,7 +454,12 @@ export function PdfView({
 
   if (pdfBytes === null) {
     return (
-      <aside className="tp-pdf-pane" aria-label="PDF preview pane" data-testid="pdf-pane">
+      <aside
+        className="tp-pdf-pane"
+        style={style}
+        aria-label="PDF preview pane"
+        data-testid="pdf-pane"
+      >
         <div className="tp-pdf-controls">
           <span className="tabular-nums">PDF Preview · Ready</span>
           <div className="tp-pdf-controls-group">
@@ -396,7 +498,12 @@ export function PdfView({
   }
 
   return (
-    <aside className="tp-pdf-pane" aria-label="PDF preview pane" data-testid="pdf-pane">
+    <aside
+      className="tp-pdf-pane"
+      style={style}
+      aria-label="PDF preview pane"
+      data-testid="pdf-pane"
+    >
       <div className="tp-pdf-controls">
         <div className="tp-pdf-controls-group">
           <span className="tabular-nums" data-testid="pdf-page-counter">
@@ -423,8 +530,11 @@ export function PdfView({
             type="button"
             className="tp-icon-btn"
             onClick={() => {
+              const base = gestureScale ?? customScale;
+              const next = clampPdfZoom(base - 0.15);
+              setGestureScale(null);
               setZoomMode("custom");
-              setCustomScale((s) => Math.max(0.4, Number((s - 0.15).toFixed(2))));
+              setCustomScale(next);
             }}
             aria-label="Zoom out"
           >
@@ -433,17 +543,25 @@ export function PdfView({
           <button
             type="button"
             className="tp-icon-btn"
-            onClick={() => setZoomMode("fit-width")}
+            onClick={() => {
+              setGestureScale(null);
+              setZoomMode("fit-width");
+            }}
             title="Fit width"
           >
-            <span className="tabular-nums">{zoomLabel}</span>
+            <span className="tabular-nums" data-testid="pdf-zoom-label">
+              {zoomLabel}
+            </span>
           </button>
           <button
             type="button"
             className="tp-icon-btn"
             onClick={() => {
+              const base = gestureScale ?? customScale;
+              const next = clampPdfZoom(base + 0.15);
+              setGestureScale(null);
               setZoomMode("custom");
-              setCustomScale((s) => Math.min(3, Number((s + 0.15).toFixed(2))));
+              setCustomScale(next);
             }}
             aria-label="Zoom in"
           >
@@ -490,7 +608,17 @@ export function PdfView({
             <p className="tp-pdf-placeholder-desc">{pdfError}</p>
           </div>
         ) : (
-          <div className="tp-pdf-pages">
+          <div
+            className="tp-pdf-pages"
+            style={
+              gestureScale !== null
+                ? {
+                    transform: `scale(${String(gestureTransformScale)})`,
+                    transformOrigin: "top center",
+                  }
+                : undefined
+            }
+          >
             {pageNumbers.map((pageNumber) => (
               <PdfPageCanvas
                 key={pageNumber}

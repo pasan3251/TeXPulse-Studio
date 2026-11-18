@@ -13,6 +13,7 @@ interface SidebarPaneProps {
   outline: readonly OutlineHeading[];
   symbolIndex: ProjectSymbolIndex;
   projectRoot: string;
+  widthPx?: number | undefined;
   onSelectFile: (filePath: string) => void;
   onSelectOutlineHeading: (heading: OutlineHeading) => void;
   onExportZip: () => void;
@@ -69,6 +70,7 @@ export function SidebarPane({
   outline,
   symbolIndex,
   projectRoot,
+  widthPx = 240,
   onSelectFile,
   onSelectOutlineHeading,
   onExportZip,
@@ -92,7 +94,12 @@ export function SidebarPane({
   );
 
   return (
-    <aside className="tp-sidebar" aria-label="Project explorer and outline" data-testid="sidebar-pane">
+    <aside
+      className="tp-sidebar"
+      aria-label="Project explorer and outline"
+      data-testid="sidebar-pane"
+      style={{ width: `${String(widthPx)}px`, flexBasis: `${String(widthPx)}px` }}
+    >
       <div className="tp-sidebar-header">
         <div className="tp-sidebar-tabs" role="tablist" aria-label="Sidebar mode">
           <button

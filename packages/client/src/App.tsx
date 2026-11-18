@@ -47,6 +47,16 @@ import { resolveLatexDefinitionAtOffset } from "./editor/go-to-definition.js";
 import { DocumentContextProvider } from "./services/DocumentContext.js";
 import { buildProjectSymbolIndex } from "./services/WorkspaceIndexer.js";
 import {
+  DEFAULT_SIDEBAR_WIDTH,
+  DEFAULT_SPLIT_RATIO,
+  clampSidebarWidth,
+  computeSplitRatioFromPointer,
+  loadPersistedSidebarWidth,
+  loadPersistedSplitRatio,
+  savePersistedSidebarWidth,
+  savePersistedSplitRatio,
+} from "./utils/layout-ergonomics.js";
+import {
   applyLineReplacement,
   buildSurroundingSnippet,
   computeSelectionMetrics,
@@ -209,6 +219,17 @@ export function App() {
   const [drawerTab, setDrawerTab] = useState<DiagnosticCategory>("error");
   const [viewMode, setViewMode] = useState<EditorViewMode>("code");
 
+  const [splitRatio, setSplitRatio] = useState<number>(loadPersistedSplitRatio);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(loadPersistedSidebarWidth);
+  const [activeSash, setActiveSash] = useState<"sidebar" | "editor-pdf" | null>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const sidebarOpenRef = useRef(sidebarOpen);
+  sidebarOpenRef.current = sidebarOpen;
+  const splitRatioRef = useRef(splitRatio);
+  splitRatioRef.current = splitRatio;
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [projectRoot, setProjectRoot] = useState(".texpulse-workspace");
   const [files, setFiles] = useState<ProjectFile[]>(() =>
@@ -326,6 +347,98 @@ export function App() {
       // Ignore storage quota errors
     }
   }, [theme]);
+
+  const sashCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      sashCleanupRef.current?.();
+      document.body.classList.remove("tp-is-resizing");
+    };
+  }, []);
+
+  // Keyboard toggle for Sidebar: Mod-Shift-E anywhere, or Mod-B outside text inputs/CodeMirror
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod) return;
+      const lower = event.key.toLowerCase();
+      if (event.shiftKey && lower === "e") {
+        event.preventDefault();
+        setSidebarOpen((open) => !open);
+        return;
+      }
+      if (!event.shiftKey && !event.altKey && lower === "b") {
+        const target = event.target as HTMLElement | null;
+        const insideEditable =
+          target !== null &&
+          target.closest(".cm-editor, input, textarea, select") !== null;
+        if (!insideEditable) {
+          event.preventDefault();
+          setSidebarOpen((open) => !open);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const startSashDrag = useCallback(
+    (kind: "sidebar" | "editor-pdf", startClientX: number) => {
+      sashCleanupRef.current?.();
+      const startSidebarW = sidebarWidthRef.current;
+      setActiveSash(kind);
+      document.body.classList.add("tp-is-resizing");
+
+      const handleMove = (moveClientX: number) => {
+        if (kind === "sidebar") {
+          const nextWidth = clampSidebarWidth(startSidebarW + (moveClientX - startClientX));
+          sidebarWidthRef.current = nextWidth;
+          setSidebarWidth(nextWidth);
+          return;
+        }
+        const workspace = workspaceRef.current;
+        if (workspace === null) return;
+        const rect = workspace.getBoundingClientRect();
+        const sidebarOffset = sidebarOpenRef.current ? sidebarWidthRef.current : 0;
+        const splitAreaLeft = rect.left + sidebarOffset;
+        const splitAreaWidth = Math.max(1, rect.width - sidebarOffset);
+        const nextRatio = computeSplitRatioFromPointer(
+          moveClientX,
+          splitAreaLeft,
+          splitAreaWidth,
+        );
+        splitRatioRef.current = nextRatio;
+        setSplitRatio(nextRatio);
+      };
+
+      const onMouseMove = (e: MouseEvent) => handleMove(e.clientX);
+      const onPointerMove = (e: PointerEvent) => handleMove(e.clientX);
+      const finish = () => {
+        document.body.classList.remove("tp-is-resizing");
+        setActiveSash(null);
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("mouseup", finish);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+        sashCleanupRef.current = null;
+        if (kind === "sidebar") {
+          savePersistedSidebarWidth(sidebarWidthRef.current);
+        } else {
+          savePersistedSplitRatio(splitRatioRef.current);
+        }
+      };
+
+      sashCleanupRef.current = finish;
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("mouseup", finish);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    },
+    [],
+  );
 
   useEffect(() => {
     (
@@ -1292,12 +1405,38 @@ export function App() {
         <div className="tp-header-left">
           <button
             type="button"
-            className={`tp-icon-btn${sidebarOpen ? " active" : ""}`}
+            className={`tp-sidebar-toggle-btn${sidebarOpen ? " active" : ""}`}
+            data-testid="sidebar-toggle-button"
             onClick={() => setSidebarOpen((open) => !open)}
-            title="Toggle sidebar"
-            aria-label="Toggle sidebar"
+            title="Toggle Sidebar (Ctrl+B)"
+            aria-label="Toggle Sidebar"
+            aria-expanded={sidebarOpen}
           >
-            Sidebar
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <rect
+                x="2"
+                y="3"
+                width="12"
+                height="10"
+                rx="1.5"
+                stroke="currentColor"
+                strokeWidth="1.35"
+              />
+              <line
+                x1="6"
+                y1="3"
+                x2="6"
+                y2="13"
+                stroke="currentColor"
+                strokeWidth="1.35"
+              />
+            </svg>
           </button>
           <div className="tp-breadcrumb">
             <span className="tp-project-title">{projectName}</span>
@@ -1402,23 +1541,52 @@ export function App() {
       </header>
 
       {/* Apple HIG 3-Pane Split Workspace */}
-      <main className="tp-workspace">
+      <main className="tp-workspace" ref={workspaceRef} data-testid="workspace-root">
         {sidebarOpen ? (
-          <SidebarPane
-            files={files}
-            activeFilePath={activeFile.path}
-            outline={outline}
-            symbolIndex={symbolIndex}
-            projectRoot={projectRoot}
-            onSelectFile={(path) => setActiveFilePath(path)}
-            onSelectOutlineHeading={handleJumpToOutlineHeading}
-            onExportZip={handleExportZip}
-            onImportZip={handleImportZip}
-            onOpenFolder={handleOpenFolder}
-          />
+          <>
+            <SidebarPane
+              files={files}
+              activeFilePath={activeFile.path}
+              outline={outline}
+              symbolIndex={symbolIndex}
+              projectRoot={projectRoot}
+              widthPx={sidebarWidth}
+              onSelectFile={(path) => setActiveFilePath(path)}
+              onSelectOutlineHeading={handleJumpToOutlineHeading}
+              onExportZip={handleExportZip}
+              onImportZip={handleImportZip}
+              onOpenFolder={handleOpenFolder}
+            />
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+              data-testid="sidebar-split-sash"
+              className={`tp-split-sash${activeSash === "sidebar" ? " is-dragging" : ""}`}
+              onMouseDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                startSashDrag("sidebar", event.clientX);
+              }}
+              onDoubleClick={() => {
+                sidebarWidthRef.current = DEFAULT_SIDEBAR_WIDTH;
+                setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+                savePersistedSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+              }}
+            />
+          </>
         ) : null}
 
-        <section className="tp-center-pane" aria-label="Editor workspace">
+        <section
+          className="tp-center-pane"
+          aria-label="Editor workspace"
+          data-testid="editor-center-pane"
+          style={
+            pdfPaneOpen
+              ? { flex: `${String(splitRatio)} 1 0px` }
+              : undefined
+          }
+        >
           {viewMode === "code" ? (
             <LatexEditorPane
               filePath={activeFile.path}
@@ -1472,17 +1640,37 @@ export function App() {
         </section>
 
         {pdfPaneOpen ? (
-          <PdfView
-            pdfBytes={pdfBytes}
-            buildId={lastBuild?.buildId ?? null}
-            lastBuild={lastBuild}
-            compiling={compiling}
-            syncTarget={syncTarget}
-            syncStatusMessage={syncStatusMessage}
-            onCompileNow={(forceFull) => void triggerCompile(forceFull === true)}
-            onForwardSearch={() => void handleForwardSearch()}
-            onInverseSearch={(page, x, y) => void handleInverseSearch(page, x, y)}
-          />
+          <>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize editor and PDF panes"
+              data-testid="editor-pdf-sash"
+              className={`tp-split-sash${activeSash === "editor-pdf" ? " is-dragging" : ""}`}
+              onMouseDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                startSashDrag("editor-pdf", event.clientX);
+              }}
+              onDoubleClick={() => {
+                splitRatioRef.current = DEFAULT_SPLIT_RATIO;
+                setSplitRatio(DEFAULT_SPLIT_RATIO);
+                savePersistedSplitRatio(DEFAULT_SPLIT_RATIO);
+              }}
+            />
+            <PdfView
+              pdfBytes={pdfBytes}
+              buildId={lastBuild?.buildId ?? null}
+              lastBuild={lastBuild}
+              compiling={compiling}
+              syncTarget={syncTarget}
+              syncStatusMessage={syncStatusMessage}
+              style={{ flex: `${String(1 - splitRatio)} 1 0px`, width: "auto" }}
+              onCompileNow={(forceFull) => void triggerCompile(forceFull === true)}
+              onForwardSearch={() => void handleForwardSearch()}
+              onInverseSearch={(page, x, y) => void handleInverseSearch(page, x, y)}
+            />
+          </>
         ) : null}
       </main>
 

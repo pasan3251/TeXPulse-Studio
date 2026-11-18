@@ -2,14 +2,18 @@
 
 :root,
 [data-theme="light"] {
+  color-scheme: light;
   --tp-bg-chrome: #f5f5f7;
   --tp-bg-canvas: #ffffff;
   --tp-bg-elevated: #ffffff;
   --tp-bg-hover: rgba(0, 0, 0, 0.045);
   --tp-bg-selected: rgba(0, 122, 255, 0.12);
 
+  --tp-border: #e5e5ea;
   --tp-border-hairline: #e5e5ea;
   --tp-border-control: #d1d1d6;
+  --tp-scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --tp-scrollbar-thumb-hover: rgba(0, 0, 0, 0.42);
 
   --tp-text-primary: #1d1d1f;
   --tp-text-secondary: #6e6e73;
@@ -35,14 +39,18 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --tp-bg-chrome: #18181b;
   --tp-bg-canvas: #1e1e20;
   --tp-bg-elevated: #242428;
   --tp-bg-hover: rgba(255, 255, 255, 0.055);
   --tp-bg-selected: rgba(10, 132, 255, 0.18);
 
+  --tp-border: #2c2c2e;
   --tp-border-hairline: #2c2c2e;
   --tp-border-control: #3a3a3c;
+  --tp-scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --tp-scrollbar-thumb-hover: rgba(255, 255, 255, 0.38);
 
   --tp-text-primary: #f5f5f7;
   --tp-text-secondary: #a1a1a6;
@@ -101,6 +109,71 @@ input,
 select {
   font: inherit;
   color: inherit;
+}
+
+/* Antigravity-Style Minimal Buttonless Scrollbars */
+*::-webkit-scrollbar,
+.cm-scroller::-webkit-scrollbar,
+.tp-pdf-viewport::-webkit-scrollbar,
+.tp-sidebar-content::-webkit-scrollbar,
+.tp-drawer-list::-webkit-scrollbar,
+.tp-diagnostics-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-button,
+.cm-scroller::-webkit-scrollbar-button,
+.tp-pdf-viewport::-webkit-scrollbar-button,
+.tp-sidebar-content::-webkit-scrollbar-button,
+.tp-drawer-list::-webkit-scrollbar-button,
+.tp-diagnostics-list::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-track,
+.cm-scroller::-webkit-scrollbar-track,
+.tp-pdf-viewport::-webkit-scrollbar-track,
+.tp-sidebar-content::-webkit-scrollbar-track,
+.tp-drawer-list::-webkit-scrollbar-track,
+.tp-diagnostics-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-corner,
+.cm-scroller::-webkit-scrollbar-corner,
+.tp-pdf-viewport::-webkit-scrollbar-corner,
+.tp-sidebar-content::-webkit-scrollbar-corner,
+.tp-drawer-list::-webkit-scrollbar-corner,
+.tp-diagnostics-list::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb,
+.cm-scroller::-webkit-scrollbar-thumb,
+.tp-pdf-viewport::-webkit-scrollbar-thumb,
+.tp-sidebar-content::-webkit-scrollbar-thumb,
+.tp-drawer-list::-webkit-scrollbar-thumb,
+.tp-diagnostics-list::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: var(--tp-scrollbar-thumb);
+}
+
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active,
+.cm-scroller::-webkit-scrollbar-thumb:hover,
+.cm-scroller::-webkit-scrollbar-thumb:active,
+.tp-pdf-viewport::-webkit-scrollbar-thumb:hover,
+.tp-pdf-viewport::-webkit-scrollbar-thumb:active,
+.tp-sidebar-content::-webkit-scrollbar-thumb:hover,
+.tp-sidebar-content::-webkit-scrollbar-thumb:active,
+.tp-drawer-list::-webkit-scrollbar-thumb:hover,
+.tp-drawer-list::-webkit-scrollbar-thumb:active,
+.tp-diagnostics-list::-webkit-scrollbar-thumb:hover,
+.tp-diagnostics-list::-webkit-scrollbar-thumb:active {
+  background-color: var(--tp-scrollbar-thumb-hover);
 }
 
 .tabular-nums {
@@ -186,11 +259,33 @@ select {
 }
 
 .tp-icon-btn:focus-visible,
+.tp-sidebar-toggle-btn:focus-visible,
 .tp-primary-btn:focus-visible,
 .tp-segmented-btn:focus-visible,
 .tp-tree-btn:focus-visible {
   outline: 2px solid var(--tp-accent);
   outline-offset: 1px;
+}
+
+.tp-sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--tp-text-secondary);
+  flex: 0 0 28px;
+  cursor: pointer;
+}
+
+.tp-sidebar-toggle-btn:hover,
+.tp-sidebar-toggle-btn.active {
+  background-color: rgba(128, 128, 128, 0.12);
+  color: var(--tp-text-primary);
 }
 
 .tp-breadcrumb {
@@ -370,12 +465,53 @@ select {
   display: flex;
   flex-direction: column;
   width: 240px;
-  min-width: 200px;
-  max-width: 300px;
-  flex: 0 0 240px;
+  min-width: 180px;
+  max-width: 380px;
+  flex: 0 0 auto;
   background-color: var(--tp-bg-chrome);
-  border-right: 1px solid var(--tp-border-hairline);
   min-height: 0;
+}
+
+/* Interactive 1px Hairline Split-Pane Resizer Sash (8px hit-target) */
+.tp-split-sash {
+  position: relative;
+  z-index: 20;
+  width: 8px;
+  flex: 0 0 8px;
+  margin: 0 -3.5px;
+  cursor: col-resize;
+  background: transparent;
+  user-select: none;
+  touch-action: none;
+}
+
+.tp-split-sash::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3.5px;
+  width: 1px;
+  background: var(--tp-border);
+  transition: background-color 120ms ease 0ms;
+}
+
+.tp-split-sash:hover::after {
+  background: var(--tp-accent);
+  transition-delay: 100ms;
+}
+
+.tp-split-sash.is-dragging::after {
+  background: var(--tp-accent);
+  width: 2px;
+  left: 3px;
+  transition-delay: 0ms;
+}
+
+body.tp-is-resizing,
+body.tp-is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .tp-sidebar-header {
@@ -547,7 +683,7 @@ select {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
-  min-width: 320px;
+  min-width: 140px;
   min-height: 0;
   background-color: var(--tp-bg-canvas);
   position: relative;
@@ -933,10 +1069,9 @@ select {
   display: flex;
   flex-direction: column;
   width: 44%;
-  min-width: 300px;
-  max-width: 58%;
+  min-width: 140px;
+  max-width: none;
   min-height: 0;
-  border-left: 1px solid var(--tp-border-hairline);
   background-color: var(--tp-bg-chrome);
 }
 

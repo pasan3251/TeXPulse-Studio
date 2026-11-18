@@ -12,6 +12,21 @@ import {
   insertPackageIntoPreamble,
 } from "./diagnostics-merge.js";
 import {
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  SPLIT_RATIO_STORAGE_KEY,
+  clampPdfZoom,
+  clampSidebarWidth,
+  clampSplitRatio,
+  computeFocalScrollPosition,
+  computeNextPinchZoomScale,
+  computePinchWheelZoomFactor,
+  computeSplitRatioFromPointer,
+  loadPersistedSidebarWidth,
+  loadPersistedSplitRatio,
+  savePersistedSidebarWidth,
+  savePersistedSplitRatio,
+} from "../utils/layout-ergonomics.js";
+import {
   applyLineReplacement,
   buildSurroundingSnippet,
   computeSelectionMetrics,
@@ -265,5 +280,48 @@ describe("CodeMirror 6 editor core extensions", () => {
       line: 1,
       column: 1,
     });
+  });
+
+  it("clamps split ratios and sidebar widths, persists ergonomics settings, and computes pinch-zoom focal scroll", () => {
+    expect(clampSplitRatio(0.05)).toBe(0.22);
+    expect(clampSplitRatio(0.95)).toBe(0.78);
+    expect(clampSplitRatio(0.5)).toBe(0.5);
+    expect(computeSplitRatioFromPointer(800, 200, 1000)).toBe(0.6);
+    expect(computeSplitRatioFromPointer(50, 200, 1000)).toBe(0.22);
+
+    expect(clampSidebarWidth(100)).toBe(180);
+    expect(clampSidebarWidth(500)).toBe(380);
+    expect(clampSidebarWidth(265.4)).toBe(265);
+
+    const backing = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => backing.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        backing.set(key, value);
+      },
+    };
+    savePersistedSplitRatio(0.64, storage);
+    savePersistedSidebarWidth(290, storage);
+    expect(backing.get(SPLIT_RATIO_STORAGE_KEY)).toBe("0.64");
+    expect(backing.get(SIDEBAR_WIDTH_STORAGE_KEY)).toBe("290");
+    expect(loadPersistedSplitRatio(storage)).toBe(0.64);
+    expect(loadPersistedSidebarWidth(storage)).toBe(290);
+
+    expect(clampPdfZoom(0.1)).toBe(0.5);
+    expect(clampPdfZoom(5.0)).toBe(3.0);
+    expect(computePinchWheelZoomFactor(-50)).toBeCloseTo(Math.exp(0.225), 5);
+    const zoomedIn = computeNextPinchZoomScale(1.0, -50);
+    expect(Math.round(zoomedIn * 100)).toBe(125);
+
+    const focal = computeFocalScrollPosition({
+      scrollLeft: 100,
+      scrollTop: 200,
+      cursorOffsetX: 250,
+      cursorOffsetY: 300,
+      previousScale: 1,
+      nextScale: 1.5,
+    });
+    expect(focal.scrollLeft).toBeCloseTo(275, 5);
+    expect(focal.scrollTop).toBeCloseTo(450, 5);
   });
 });
