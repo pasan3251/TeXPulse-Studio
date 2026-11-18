@@ -5,6 +5,10 @@ output/
 playwright-report/
 test-results/
 .texpulse/
+.texpulse-cache/
+.texpulse-workspace/
+packages/*/dist/
+*.tsbuildinfo
 *.log
 .DS_Store
 Thumbs.db
