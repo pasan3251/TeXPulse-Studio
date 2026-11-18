@@ -128,6 +128,34 @@ function savePersistedSettings(next: EditorSettingsConfig): void {
   }
 }
 
+function getRequestedOpenFileFromUrl(): string | null {
+  try {
+    const raw = new URLSearchParams(window.location.search).get("openFile");
+    const trimmed = raw?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function findMatchingOpenFile(
+  files: readonly ProjectFile[],
+  requested: string | null,
+): string | null {
+  if (!requested) return null;
+  const normReq = requested.replace(/\\/gu, "/");
+  const lowerReq = normReq.toLowerCase();
+  const exact = files.find((f) => f.path === normReq);
+  if (exact) return exact.path;
+  const ci = files.find((f) => f.path.toLowerCase() === lowerReq);
+  if (ci) return ci.path;
+  const base = normReq.split("/").at(-1)?.toLowerCase() ?? lowerReq;
+  const byBase = files.find(
+    (f) => (f.path.split("/").at(-1)?.toLowerCase() ?? "") === base,
+  );
+  return byBase?.path ?? null;
+}
+
 function loadPersistedTheme(): ThemeMode {
   try {
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -629,11 +657,16 @@ export function App() {
         const ranked = rankRootCandidates(
           hydratedFiles.map((f) => ({ path: f.path, content: f.content })),
         );
+        const requestedMatch = findMatchingOpenFile(
+          hydratedFiles,
+          getRequestedOpenFileFromUrl(),
+        );
         const preferredActive =
-          chosenRec?.activeFilePath &&
+          requestedMatch ??
+          (chosenRec?.activeFilePath &&
           hydratedFiles.some((f) => f.path === chosenRec.activeFilePath)
             ? chosenRec.activeFilePath
-            : ranked[0]?.path ?? hydratedFiles[0]!.path;
+            : ranked[0]?.path ?? hydratedFiles[0]!.path);
         setActiveFilePath(preferredActive);
 
         if (recoveredDirty.size > 0) {

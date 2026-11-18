@@ -22,7 +22,11 @@ async function buildPortableDesktopBundle(): Promise<void> {
   const windowsLauncher = [
     "@echo off",
     "setlocal",
-    'node "%~dp0..\\..\\packages\\server\\dist\\desktop-launcher.js" %*',
+    'if "%~1"=="" (',
+    '  node "%~dp0..\\..\\packages\\server\\dist\\desktop-launcher.js"',
+    ") else (",
+    '  node "%~dp0..\\..\\packages\\server\\dist\\desktop-launcher.js" "%~1" %2 %3 %4 %5',
+    ")",
     "",
   ].join("\r\n");
 

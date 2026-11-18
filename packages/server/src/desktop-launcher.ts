@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startLocalServer } from "./index.js";
 
@@ -107,12 +107,63 @@ function parseCliPort(argv: readonly string[]): number {
   return 0;
 }
 
+export interface ResolvedDesktopOpenTarget {
+  workspaceDir: string | undefined;
+  openFile: string | undefined;
+}
+
+export async function resolveDesktopCliTarget(
+  argv: readonly string[],
+  envProjectDir = process.env.TEXPULSE_PROJECT_DIR,
+): Promise<ResolvedDesktopOpenTarget> {
+  let rawTarget: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    if (arg.startsWith("--open=")) {
+      rawTarget = arg.slice("--open=".length);
+      break;
+    }
+    if (arg === "--open" && i + 1 < argv.length) {
+      rawTarget = argv[i + 1];
+      i++;
+      break;
+    }
+    if (!arg.startsWith("-") && rawTarget === undefined && arg.trim().length > 0) {
+      rawTarget = arg;
+    }
+  }
+
+  const cleaned = rawTarget?.trim().replace(/^"+|"+$/gu, "") ?? "";
+  if (!cleaned) {
+    return {
+      workspaceDir: envProjectDir?.trim() ? resolve(envProjectDir.trim()) : undefined,
+      openFile: undefined,
+    };
+  }
+
+  const fullPath = resolve(cleaned);
+  const pathStat = await stat(fullPath).catch(() => null);
+  if (pathStat?.isDirectory()) {
+    return { workspaceDir: fullPath, openFile: undefined };
+  }
+  if (pathStat?.isFile() || /\.(?:tex|bib|sty|cls)$/iu.test(fullPath)) {
+    return { workspaceDir: dirname(fullPath), openFile: basename(fullPath) };
+  }
+  return { workspaceDir: fullPath, openFile: undefined };
+}
+
+export function buildDesktopLaunchUrl(boundPort: number, openFile?: string): string {
+  const baseUrl = `http://127.0.0.1:${String(boundPort)}/`;
+  if (!openFile?.trim()) return baseUrl;
+  return `${baseUrl}?openFile=${encodeURIComponent(openFile.trim())}`;
+}
+
 async function runDesktopLauncher(): Promise<void> {
   const argv = process.argv.slice(2);
   const smokeTest = argv.includes("--smoke-test");
   const headlessOnly = argv.includes("--headless");
   const requestedPort = parseCliPort(argv);
-  const projectDir = process.env.TEXPULSE_PROJECT_DIR;
+  const { workspaceDir, openFile } = await resolveDesktopCliTarget(argv);
 
   if (!existsSync(resolve(DEFAULT_CLIENT_DIST, "index.html"))) {
     throw new Error(
@@ -138,7 +189,7 @@ async function runDesktopLauncher(): Promise<void> {
     }
   };
 
-  server = await startLocalServer(projectDir, requestedPort, {
+  server = await startLocalServer(workspaceDir, requestedPort, {
     serveClient: true,
     clientDistDir: DEFAULT_CLIENT_DIST,
     onDesktopShutdown: () => {
@@ -148,7 +199,7 @@ async function runDesktopLauncher(): Promise<void> {
 
   const addr = server.address() as AddressInfo | null;
   const boundPort = addr?.port ?? requestedPort;
-  const appUrl = `http://127.0.0.1:${String(boundPort)}/`;
+  const appUrl = buildDesktopLaunchUrl(boundPort, openFile);
   const browserCandidate = findDesktopBrowserExecutable();
   const profileDir = getDesktopProfileDir();
 
@@ -179,6 +230,8 @@ async function runDesktopLauncher(): Promise<void> {
           desktopShell: browserCandidate?.kind ?? "system-browser-fallback",
           executable: browserCandidate?.executable ?? null,
           profileDir,
+          workspaceDir: workspaceDir ?? null,
+          openFile: openFile ?? null,
         }),
       );
     } finally {

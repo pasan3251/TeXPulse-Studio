@@ -15,7 +15,9 @@
     "dev:server": "pnpm --filter @texpulse/server run dev",
     "start": "node packages/server/dist/index.js --serve-client",
     "desktop:start": "node packages/server/dist/desktop-launcher.js",
-    "desktop:package": "node packages/server/dist/desktop-package.js"
+    "desktop:package": "node packages/server/dist/desktop-package.js",
+    "desktop:install-win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows-integration.ps1",
+    "desktop:uninstall-win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows-integration.ps1 -Uninstall"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

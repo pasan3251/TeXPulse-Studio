@@ -6,7 +6,9 @@ import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildDesktopBrowserArgs,
+  buildDesktopLaunchUrl,
   getDesktopProfileDir,
+  resolveDesktopCliTarget,
   shouldKeepServerAliveOnBrowserExit,
 } from "./desktop-launcher.js";
 import { startLocalServer } from "./index.js";
@@ -192,6 +194,39 @@ describe("@texpulse/server project store", () => {
         await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
       }
       await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves CLI directory and .tex file arguments into workspaceDir and openFile URL params", async () => {
+    const cliRoot = await mkdtemp(join(tmpdir(), "texpulse-cli-target-"));
+    const texFilePath = join(cliRoot, "thesis.tex");
+    try {
+      await writeFile(texFilePath, "\\documentclass{article}\n\\begin{document}\nHi\n\\end{document}\n", "utf8");
+
+      const dirTarget = await resolveDesktopCliTarget(["--smoke-test", cliRoot], undefined);
+      expect(dirTarget).toEqual({
+        workspaceDir: cliRoot,
+        openFile: undefined,
+      });
+
+      const fileTarget = await resolveDesktopCliTarget([texFilePath], undefined);
+      expect(fileTarget).toEqual({
+        workspaceDir: cliRoot,
+        openFile: "thesis.tex",
+      });
+
+      const openFlagTarget = await resolveDesktopCliTarget(["--open", texFilePath], undefined);
+      expect(openFlagTarget).toEqual({
+        workspaceDir: cliRoot,
+        openFile: "thesis.tex",
+      });
+
+      expect(buildDesktopLaunchUrl(4317, fileTarget.openFile)).toBe(
+        "http://127.0.0.1:4317/?openFile=thesis.tex",
+      );
+      expect(buildDesktopLaunchUrl(4317, undefined)).toBe("http://127.0.0.1:4317/");
+    } finally {
+      await rm(cliRoot, { recursive: true, force: true });
     }
   });
 });

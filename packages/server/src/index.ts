@@ -56,6 +56,7 @@ const STATIC_MIME_TYPES: Readonly<Record<string, string>> = {
 export interface StartLocalServerOptions {
   serveClient?: boolean | undefined;
   clientDistDir?: string | undefined;
+  workspaceDir?: string | undefined;
   onDesktopShutdown?: (() => void) | undefined;
 }
 
@@ -176,8 +177,9 @@ export async function startLocalServer(
   port = DEFAULT_PORT,
   options: StartLocalServerOptions = {},
 ) {
+  const effectiveProjectDir = options.workspaceDir ?? projectDirectory;
   const { mkdir } = await import("node:fs/promises");
-  await mkdir(projectDirectory, { recursive: true });
+  await mkdir(effectiveProjectDir, { recursive: true });
 
   const clientDistDir = resolve(
     options.clientDistDir ?? process.env.TEXPULSE_CLIENT_DIST ?? DEFAULT_CLIENT_DIST,
@@ -189,7 +191,7 @@ export async function startLocalServer(
       process.env.TEXPULSE_SERVE_CLIENT === "1" ||
       existsSync(resolve(clientDistDir, "index.html")));
 
-  let store = await LocalProjectStore.open(projectDirectory);
+  let store = await LocalProjectStore.open(effectiveProjectDir);
   await ensureSeededWorkspace(store);
   let compilerRunner = new CompilerRunner(store.rootDirectory);
   let recoveryService = new RecoveryService(store.rootDirectory);
