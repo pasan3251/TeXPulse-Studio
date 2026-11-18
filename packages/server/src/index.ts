@@ -27,9 +27,12 @@ import { RecoveryService } from "./recovery-service.js";
 import { SynctexService, SynctexServiceError } from "./synctex/synctex-service.js";
 import { exportProjectZipBuffer, importProjectZipBuffer } from "./zip-service.js";
 
+declare const __filename: string | undefined;
+
 const DEFAULT_PORT = 4317;
 const MAX_JSON_BODY_BYTES = 70 * 1024 * 1024;
-const THIS_FILE = fileURLToPath(import.meta.url);
+const THIS_FILE =
+  typeof __filename === "string" ? __filename : fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(THIS_FILE), "../../..");
 const DEFAULT_WORKSPACE = resolve(REPO_ROOT, ".texpulse-workspace");
 const DEFAULT_CLIENT_DIST = resolve(REPO_ROOT, "packages/client/dist");
@@ -664,7 +667,12 @@ export async function startLocalServer(
   return server;
 }
 
-if (process.argv[1] !== undefined && resolve(THIS_FILE) === resolve(process.argv[1])) {
+if (
+  process.argv[1] !== undefined &&
+  resolve(THIS_FILE) === resolve(process.argv[1]) &&
+  !basename(THIS_FILE).includes("desktop-launcher") &&
+  !basename(THIS_FILE).includes("server.cjs")
+) {
   const port = Number(process.env.TEXPULSE_PORT ?? DEFAULT_PORT);
   const projectDir = process.env.TEXPULSE_PROJECT_DIR;
   const serveClient =

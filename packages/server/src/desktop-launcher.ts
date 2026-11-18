@@ -7,9 +7,15 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startLocalServer } from "./index.js";
 
-const THIS_FILE = fileURLToPath(import.meta.url);
+declare const __filename: string | undefined;
+
+const THIS_FILE =
+  typeof __filename === "string" ? __filename : fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(THIS_FILE), "../../..");
-const DEFAULT_CLIENT_DIST = resolve(REPO_ROOT, "packages/client/dist");
+const BUNDLED_CLIENT_DIST = resolve(dirname(THIS_FILE), "client");
+const DEFAULT_CLIENT_DIST = existsSync(resolve(BUNDLED_CLIENT_DIST, "index.html"))
+  ? BUNDLED_CLIENT_DIST
+  : resolve(REPO_ROOT, "packages/client/dist");
 
 export const PREMATURE_BROKER_EXIT_MS = 3000;
 
@@ -135,8 +141,14 @@ export async function resolveDesktopCliTarget(
 
   const cleaned = rawTarget?.trim().replace(/^"+|"+$/gu, "") ?? "";
   if (!cleaned) {
+    if (envProjectDir?.trim()) {
+      return { workspaceDir: resolve(envProjectDir.trim()), openFile: undefined };
+    }
+    const defaultBundledWorkspace = existsSync(resolve(BUNDLED_CLIENT_DIST, "index.html"))
+      ? join(homedir(), ".texpulse", "workspace")
+      : undefined;
     return {
-      workspaceDir: envProjectDir?.trim() ? resolve(envProjectDir.trim()) : undefined,
+      workspaceDir: defaultBundledWorkspace,
       openFile: undefined,
     };
   }

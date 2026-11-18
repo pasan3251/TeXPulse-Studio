@@ -10,6 +10,8 @@ $DesktopDist = Join-Path $RepoRoot "dist\desktop"
 $CmdPath = Join-Path $DesktopDist "Launch-TeXPulse-Studio.cmd"
 $IconPath = Join-Path $DesktopDist "TeXPulse-Studio.ico"
 $VbsPath = Join-Path $DesktopDist "Launch-TeXPulse-Silent.vbs"
+$UnpackedExe = Join-Path $RepoRoot "dist\win-unpacked\TeXPulseStudio.exe"
+$InstalledExe = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "Programs\TeXPulseStudio\TeXPulseStudio.exe"
 $WscriptExe = Join-Path $env:SystemRoot "System32\wscript.exe"
 
 $DesktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "TeXPulse Studio 2.0.lnk"
@@ -186,6 +188,8 @@ End If
 "@
 [System.IO.File]::WriteAllText($VbsPath, $vbsContent, [System.Text.Encoding]::ASCII)
 
+$NativeExe = if (Test-Path -LiteralPath $InstalledExe) { $InstalledExe } elseif (Test-Path -LiteralPath $UnpackedExe) { $UnpackedExe } else { $null }
+
 # 3. Desktop & Start Menu shortcuts
 $WshShell = New-Object -ComObject WScript.Shell
 foreach ($shortcutPath in @($DesktopShortcut, $StartMenuShortcut)) {
@@ -194,17 +198,28 @@ foreach ($shortcutPath in @($DesktopShortcut, $StartMenuShortcut)) {
     New-Item -ItemType Directory -Path $shortcutDir -Force | Out-Null
   }
   $shortcut = $WshShell.CreateShortcut($shortcutPath)
-  $shortcut.TargetPath = $WscriptExe
-  $shortcut.Arguments = """$VbsPath"""
-  $shortcut.WorkingDirectory = $RepoRoot
+  if ($NativeExe) {
+    $shortcut.TargetPath = $NativeExe
+    $shortcut.Arguments = ""
+    $shortcut.WorkingDirectory = Split-Path -Parent $NativeExe
+  } else {
+    $shortcut.TargetPath = $WscriptExe
+    $shortcut.Arguments = """$VbsPath"""
+    $shortcut.WorkingDirectory = $RepoRoot
+  }
   $shortcut.IconLocation = "$IconPath,0"
   $shortcut.Description = "TeXPulse Studio 2.0 Local LaTeX IDE"
   $shortcut.Save()
 }
 
 # 4. Per-User HKCU Explorer context menus & .tex file associations
-$CmdWithFileArg = """$WscriptExe"" ""$VbsPath"" ""%1"""
-$CmdWithBgArg = """$WscriptExe"" ""$VbsPath"" ""%V"""
+if ($NativeExe) {
+  $CmdWithFileArg = """$NativeExe"" ""%1"""
+  $CmdWithBgArg = """$NativeExe"" ""%V"""
+} else {
+  $CmdWithFileArg = """$WscriptExe"" ""$VbsPath"" ""%1"""
+  $CmdWithBgArg = """$WscriptExe"" ""$VbsPath"" ""%V"""
+}
 
 Set-RegistryStringValue -Path $RegTexShell -Name "(Default)" -Value "Open with TeXPulse Studio 2.0"
 Set-RegistryStringValue -Path $RegTexShell -Name "Icon" -Value "$IconPath,0"
