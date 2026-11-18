@@ -56,6 +56,7 @@ const STATIC_MIME_TYPES: Readonly<Record<string, string>> = {
 export interface StartLocalServerOptions {
   serveClient?: boolean | undefined;
   clientDistDir?: string | undefined;
+  onDesktopShutdown?: (() => void) | undefined;
 }
 
 async function tryServeStaticSpa(
@@ -610,6 +611,18 @@ export async function startLocalServer(
         return;
       }
 
+      if (req.method === "POST" && requestUrl.pathname === "/api/desktop/shutdown") {
+        await compilerRunner.cancelActiveBuild();
+        sendJson(res, 200, { ok: true, shuttingDown: true });
+        setImmediate(() => {
+          server.close(() => {
+            options.onDesktopShutdown?.();
+          });
+          server.closeAllConnections?.();
+        });
+        return;
+      }
+
       if (
         serveClient &&
         (await tryServeStaticSpa(
@@ -636,6 +649,10 @@ export async function startLocalServer(
         error: error instanceof Error ? error.message : "Unexpected server error",
       });
     }
+  });
+
+  server.on("close", () => {
+    void compilerRunner.cancelActiveBuild();
   });
 
   await new Promise<void>((resolvePromise) => {

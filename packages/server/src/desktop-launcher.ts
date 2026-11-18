@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { startLocalServer } from "./index.js";
 
@@ -11,9 +11,34 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(THIS_FILE), "../../..");
 const DEFAULT_CLIENT_DIST = resolve(REPO_ROOT, "packages/client/dist");
 
+export const PREMATURE_BROKER_EXIT_MS = 3000;
+
 export interface DesktopBrowserCandidate {
   executable: string;
   kind: "msedge" | "chrome" | "chromium";
+}
+
+export function getDesktopProfileDir(home = homedir()): string {
+  return join(home, ".texpulse", "desktop-profile");
+}
+
+export function buildDesktopBrowserArgs(serverUrl: string, profileDir: string): string[] {
+  return [
+    `--app=${serverUrl}`,
+    `--user-data-dir=${profileDir}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-mode",
+    "--disable-extensions",
+    "--window-size=1440,900",
+  ];
+}
+
+export function shouldKeepServerAliveOnBrowserExit(
+  elapsedMs: number,
+  exitCode: number | null,
+): boolean {
+  return elapsedMs < PREMATURE_BROKER_EXIT_MS && exitCode === 0;
 }
 
 /**
@@ -95,19 +120,9 @@ async function runDesktopLauncher(): Promise<void> {
     );
   }
 
-  const server = await startLocalServer(projectDir, requestedPort, {
-    serveClient: true,
-    clientDistDir: DEFAULT_CLIENT_DIST,
-  });
-
-  const addr = server.address() as AddressInfo | null;
-  const boundPort = addr?.port ?? requestedPort;
-  const appUrl = `http://127.0.0.1:${String(boundPort)}/`;
-  const browserCandidate = findDesktopBrowserExecutable();
-
-  let profileDir: string | null = null;
   let browserChild: ChildProcess | null = null;
   let cleanedUp = false;
+  let server: Awaited<ReturnType<typeof startLocalServer>> | null = null;
 
   const cleanup = async (): Promise<void> => {
     if (cleanedUp) return;
@@ -115,11 +130,27 @@ async function runDesktopLauncher(): Promise<void> {
     if (browserChild && !browserChild.killed) {
       browserChild.kill();
     }
-    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-    if (profileDir) {
-      await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+    if (server && server.listening) {
+      await new Promise<void>((resolveClose) => {
+        server!.close(() => resolveClose());
+        server!.closeAllConnections?.();
+      });
     }
   };
+
+  server = await startLocalServer(projectDir, requestedPort, {
+    serveClient: true,
+    clientDistDir: DEFAULT_CLIENT_DIST,
+    onDesktopShutdown: () => {
+      void cleanup().then(() => process.exit(0));
+    },
+  });
+
+  const addr = server.address() as AddressInfo | null;
+  const boundPort = addr?.port ?? requestedPort;
+  const appUrl = `http://127.0.0.1:${String(boundPort)}/`;
+  const browserCandidate = findDesktopBrowserExecutable();
+  const profileDir = getDesktopProfileDir();
 
   if (smokeTest) {
     try {
@@ -147,6 +178,7 @@ async function runDesktopLauncher(): Promise<void> {
           apiHealthOk: healthJson.ok,
           desktopShell: browserCandidate?.kind ?? "system-browser-fallback",
           executable: browserCandidate?.executable ?? null,
+          profileDir,
         }),
       );
     } finally {
@@ -165,20 +197,22 @@ async function runDesktopLauncher(): Promise<void> {
   console.log(`TeXPulse Studio 2.0 desktop server ready at ${appUrl}`);
 
   if (!headlessOnly && browserCandidate !== null) {
-    profileDir = await mkdtemp(join(tmpdir(), "texpulse-desktop-profile-"));
+    await mkdir(profileDir, { recursive: true });
+    const spawnedAt = Date.now();
     browserChild = spawn(
       browserCandidate.executable,
-      [
-        `--app=${appUrl}`,
-        `--user-data-dir=${profileDir}`,
-        "--new-window",
-        "--window-size=1440,900",
-        "--no-first-run",
-      ],
+      buildDesktopBrowserArgs(appUrl, profileDir),
       { stdio: "ignore" },
     );
 
-    browserChild.on("close", () => {
+    browserChild.on("close", (code) => {
+      const elapsedMs = Date.now() - spawnedAt;
+      if (shouldKeepServerAliveOnBrowserExit(elapsedMs, code)) {
+        console.log(
+          `Browser process exited in ${String(elapsedMs)}ms (code 0); window attached to an existing browser broker. Keeping server alive at ${appUrl} until SIGINT/SIGTERM or POST /api/desktop/shutdown.`,
+        );
+        return;
+      }
       void cleanup().then(() => process.exit(0));
     });
     browserChild.on("error", () => {

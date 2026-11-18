@@ -2,8 +2,13 @@ import { request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  buildDesktopBrowserArgs,
+  getDesktopProfileDir,
+  shouldKeepServerAliveOnBrowserExit,
+} from "./desktop-launcher.js";
 import { startLocalServer } from "./index.js";
 import { LocalProjectStore, normalizeProjectPath } from "./project-store.js";
 import { RecoveryService } from "./recovery-service.js";
@@ -136,6 +141,57 @@ describe("@texpulse/server project store", () => {
       }
       await rm(projectRoot, { recursive: true, force: true });
       await rm(clientDist, { recursive: true, force: true });
+    }
+  });
+
+  it("hardens desktop profile isolation, broker handoff guard, and POST /api/desktop/shutdown", async () => {
+    const expectedSuffix = join(".texpulse", "desktop-profile");
+    expect(getDesktopProfileDir("/Users/test").endsWith(expectedSuffix)).toBe(true);
+    expect(getDesktopProfileDir("/Users/test").includes(`${sep}.texpulse${sep}`)).toBe(true);
+
+    expect(buildDesktopBrowserArgs("http://127.0.0.1:4317/", "/tmp/profile")).toEqual([
+      "--app=http://127.0.0.1:4317/",
+      "--user-data-dir=/tmp/profile",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-mode",
+      "--disable-extensions",
+      "--window-size=1440,900",
+    ]);
+
+    expect(shouldKeepServerAliveOnBrowserExit(450, 0)).toBe(true);
+    expect(shouldKeepServerAliveOnBrowserExit(3000, 0)).toBe(false);
+    expect(shouldKeepServerAliveOnBrowserExit(450, 1)).toBe(false);
+
+    const projectRoot = await mkdtemp(join(tmpdir(), "texpulse-shutdown-proj-"));
+    let shutdownCallbackCalled = false;
+    let shutdownPromiseResolve!: () => void;
+    const shutdownPromise = new Promise<void>((resolvePromise) => {
+      shutdownPromiseResolve = resolvePromise;
+    });
+
+    const server = await startLocalServer(projectRoot, 0, {
+      serveClient: false,
+      onDesktopShutdown: () => {
+        shutdownCallbackCalled = true;
+        shutdownPromiseResolve();
+      },
+    });
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const res = await fetch(`http://127.0.0.1:${String(port)}/api/desktop/shutdown`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; shuttingDown: boolean };
+      expect(body).toEqual({ ok: true, shuttingDown: true });
+      await shutdownPromise;
+      expect(shutdownCallbackCalled).toBe(true);
+    } finally {
+      if (server.listening) {
+        await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      }
+      await rm(projectRoot, { recursive: true, force: true });
     }
   });
 });
